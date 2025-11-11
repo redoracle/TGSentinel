@@ -1,0 +1,33 @@
+telegram:
+  session: "data/tgsentinel.session" # persisted in ./data
+  # api_id / api_hash are read from environment
+
+alerts:
+  mode: "dm" # dm | channel | both
+  target_channel: "" # only used if mode != dm
+  digest:
+    hourly: true
+    daily: true
+    top_n: 10
+
+channels:
+  - id: -100123456789
+    name: "Algorand Dev"
+    vip_senders: [11111, 22222]
+    keywords: ["release", "security", "CVE", "go-algorand", "governance"]
+    reaction_threshold: 8
+    reply_threshold: 10
+    rate_limit_per_hour: 5
+
+  - id: -100987654321
+    name: "Security Feeds"
+    keywords: ["CVE-", "advisory", "critical", "zero-day"]
+    reaction_threshold: 3
+    reply_threshold: 5
+    rate_limit_per_hour: 10
+
+interests:
+  - "algorand core development"
+  - "blockchain security advisories"
+  - "release notes and deprecations"
+  - "wallet security and keys"

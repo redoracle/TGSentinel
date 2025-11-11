@@ -1,0 +1,30 @@
+# Environment and secrets
+.env
+*.env*
+
+# Python build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Logs and runtime data
+*.log
+*.sqlite3
+*.db
+/data/
+
+# Cache directories
+.cache/
+.mypy_cache/
+.pytest_cache/
+
+# OS junk
+.DS_Store
+Thumbs.db

@@ -1,0 +1,25 @@
+services:
+  redis:
+    image: redis:7
+    restart: always
+    ports: ["6379:6379"]
+    command: ["redis-server", "--save", "60", "1000", "--appendonly", "yes"]
+    volumes:
+      - ./data/redis:/data
+
+  sentinel:
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
+    image: tgsentinel/app:latest
+    restart: always
+    env_file: [.env]
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data
+    depends_on:
+      - redis
+
+  # Optional: expose Prometheus metrics via textfile collector or a tiny HTTP
+  # metrics endpoint. For simplicity, metrics are logged; integrate with your
+  # existing Prometheus stack if desired.
