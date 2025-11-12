@@ -1,8 +1,10 @@
 """Unit tests for metrics module."""
 
-import pytest
 import time
-from tgsentinel.metrics import inc, dump, _counters
+
+import pytest
+
+from tgsentinel.metrics import _counters, dump, inc
 
 
 class TestMetricsInc:

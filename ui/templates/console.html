@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block title %}Console · TG Sentinel{% endblock %}
+
+{% block content %}
+<section class="row g-4 mb-4">
+    <div class="col-12 col-xl-7">
+        <article class="card h-100" aria-labelledby="log-tail-heading">
+            <div class="card-header">
+                <h1 class="card-title mb-0" id="log-tail-heading">Real-time Log Tail</h1>
+            </div>
+            <div class="card-body">
+                <div class="logs-console" id="log-console" role="log" aria-label="Real-time log console" aria-live="polite">
+                    <div class="log-entry log-info"><span class="log-time">--:--</span> <span class="log-message">Console ready. Recent events will appear here.</span></div>
+                </div>
+            </div>
+        </article>
+    </div>
+    <div class="col-12 col-xl-5">
+        <article class="card h-100" aria-labelledby="command-center-heading">
+            <div class="card-header">
+                <h2 class="card-title mb-0" id="command-center-heading">Command Center</h2>
+            </div>
+            <div class="card-body d-grid gap-3">
+                <label class="form-label" for="console-command">Command bar</label>
+                <input class="form-control" id="console-command" type="text" placeholder="/restart">
+                <button class="btn btn-outline-primary" type="button" id="btn-run-command">Execute</button>
+                <div class="d-grid gap-2">
+                    <button class="btn btn-outline-primary btn-sm btn-action" type="button" data-command="/flush redis">Flush Redis</button>
+                    <button class="btn btn-outline-primary btn-sm btn-action" type="button" data-command="/purge db">Purge Database</button>
+                    <button class="btn btn-outline-primary btn-sm btn-action" type="button" data-command="/reload config">Reload Config</button>
+                </div>
+            </div>
+        </article>
+    </div>
+</section>
+
+<section class="row g-4">
+    <div class="col-12 col-xl-6">
+        <article class="card h-100" aria-labelledby="maintenance-heading">
+            <div class="card-header">
+                <h2 class="card-title mb-0" id="maintenance-heading">Maintenance Actions</h2>
+            </div>
+            <div class="card-body d-grid gap-2">
+                <button class="btn btn-outline-primary" type="button" data-command="vacuum">Vacuum database</button>
+                <button class="btn btn-outline-primary" type="button" data-command="rotate">Rotate logs</button>
+                <button class="btn btn-outline-primary" type="button" data-command="backup">Backup session</button>
+            </div>
+        </article>
+    </div>
+    <div class="col-12 col-xl-6">
+        <article class="card h-100" aria-labelledby="diagnostics-heading">
+            <div class="card-header">
+                <h2 class="card-title mb-0" id="diagnostics-heading">Diagnostics Export</h2>
+            </div>
+            <div class="card-body d-grid gap-3">
+                <p class="text-muted mb-0">Download anonymised telemetry snapshot for support.</p>
+                <button class="btn btn-outline-primary" type="button" id="btn-export-diagnostics">Export diagnostics</button>
+            </div>
+        </article>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    const commandEndpoint = "{{ url_for('api_console_command') }}";
+    const diagnosticsEndpoint = "{{ url_for('api_export_diagnostics') }}";
+
+    function appendConsoleLog(message, level = "info") {
+        const consoleEl = document.getElementById("log-console");
+        if (!consoleEl) {
+            return;
+        }
+        const entry = document.createElement("div");
+        entry.className = `log-entry log-${level}`;
+        const timeSpan = document.createElement("span");
+        timeSpan.className = "log-time";
+        timeSpan.textContent = new Date().toLocaleTimeString();
+
+        const messageSpan = document.createElement("span");
+        messageSpan.className = "log-message";
+        messageSpan.textContent = message != null ? String(message) : "";
+
+        entry.appendChild(timeSpan);
+        entry.appendChild(document.createTextNode(" "));
+        entry.appendChild(messageSpan);
+        consoleEl.appendChild(entry);
+        consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+
+    async function sendCommand(command) {
+        const trimmed = command.trim();
+        if (!trimmed) {
+            showToast("Enter a command", "warning");
+            return;
+        }
+        appendConsoleLog(trimmed, "info");
+        try {
+            const response = await fetch(commandEndpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ command: trimmed }),
+            });
+            if (!response.ok) {
+                throw new Error("Command failed");
+            }
+            const payload = await response.json();
+            appendConsoleLog(`Command accepted: ${payload.command}`, "success");
+        } catch (error) {
+            console.error(error);
+            appendConsoleLog("Command failed", "error");
+            showToast("Command execution failed", "error");
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        const input = document.getElementById("console-command");
+        document.getElementById("btn-run-command")?.addEventListener("click", () => sendCommand(input.value));
+        input?.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                sendCommand(input.value);
+            }
+        });
+        document.querySelectorAll(".btn-action").forEach((button) => {
+            button.addEventListener("click", () => {
+                const command = button.getAttribute("data-command");
+                sendCommand(command);
+            });
+        });
+        document.getElementById("btn-export-diagnostics")?.addEventListener("click", async () => {
+            appendConsoleLog("Generating diagnostics archive...", "info");
+            try {
+                const response = await fetch(diagnosticsEndpoint);
+                if (!response.ok) {
+                    throw new Error("Export failed");
+                }
+                
+                // Download the file
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `tgsentinel_diagnostics_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                appendConsoleLog("Diagnostics exported successfully", "success");
+                showToast("Diagnostics exported", "success");
+            } catch (error) {
+                console.error(error);
+                appendConsoleLog("Diagnostics export failed", "error");
+                showToast("Export failed. Check console for details.", "error");
+            }
+        });
+        document.querySelectorAll("[data-command]").forEach((button) => {
+            button.addEventListener("click", () => {
+                const command = button.getAttribute("data-command");
+                appendConsoleLog(`Action requested: ${command}`, "warning");
+            });
+        });
+    });
+    
+    // Socket.IO log streaming
+    document.addEventListener("DOMContentLoaded", () => {
+        if (typeof io !== "undefined") {
+            const socket = io();
+            
+            socket.on("connect", () => {
+                console.log("[Console] Socket.IO connected");
+                appendConsoleLog("Connected to real-time log stream", "success");
+                socket.emit("subscribe_logs");
+            });
+            
+            socket.on("log_message", (data) => {
+                if (data && data.message) {
+                    const level = data.level || "info";
+                    appendConsoleLog(data.message, level);
+                }
+            });
+            
+            socket.on("disconnect", () => {
+                console.log("[Console] Socket.IO disconnected");
+                appendConsoleLog("Disconnected from log stream", "warning");
+            });
+            
+            socket.on("connect_error", (error) => {
+                console.error("[Console] Socket.IO connection error:", error);
+                appendConsoleLog("Connection error - retrying...", "error");
+            });
+        } else {
+            appendConsoleLog("Socket.IO not available - real-time logs disabled", "warning");
+        }
+    });
+</script>
+{% endblock %}

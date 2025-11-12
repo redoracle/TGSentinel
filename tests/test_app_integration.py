@@ -2,13 +2,13 @@ import asyncio
 from contextlib import suppress
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy import text
-from unittest.mock import patch
 
-from tgsentinel.config import AppCfg, AlertsCfg, DigestCfg, ChannelRule
 from tgsentinel.client import start_ingestion
+from tgsentinel.config import AlertsCfg, AppCfg, ChannelRule, DigestCfg
 from tgsentinel.store import init_db
 from tgsentinel.worker import process_loop
 
@@ -91,6 +91,9 @@ def build_config() -> AppCfg:
 
 @pytest.mark.asyncio
 async def test_full_ingest_and_process_pipeline(monkeypatch):
+    # Disable embeddings to avoid empty list encoding issue
+    monkeypatch.setenv("EMBEDDINGS_MODEL", "")
+
     cfg = build_config()
     engine = init_db(cfg.db_uri)
 

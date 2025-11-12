@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>{% block title %}TG Sentinel{% endblock %}</title>
+	<meta name="description" content="Intelligent Telegram Activity Sentinel">
+
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+	<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
+	<script src="https://cdn.socket.io/4.5.4/socket.io.min.js" integrity="sha384-/KNQL8Nu5gCHLqwqfQjA689Hhoqgi2S84SNUxC3roTe4EhJ9AfLkp8QiQcU8AMzI" crossorigin="anonymous" defer></script>
+
+	<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+	{% block extra_head %}{% endblock %}
+</head>
+<body>
+	<nav class="navbar navbar-expand-lg sticky-top" aria-label="Primary navigation">
+		<div class="container-fluid">
+			<a class="navbar-brand" href="{{ url_for('dashboard_view') }}">
+				<img src="{{ url_for('static', filename='images/logo.png') }}" alt="TG Sentinel" class="navbar-logo" height="56" width="56">
+				<span class="ms-2">TG Sentinel</span>
+			</a>
+			<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#primaryNav" aria-controls="primaryNav" aria-expanded="false" aria-label="Toggle navigation">
+				<span class="navbar-toggler-icon"></span>
+			</button>
+			<div class="collapse navbar-collapse" id="primaryNav">
+				<ul class="navbar-nav me-auto mb-2 mb-lg-0">
+					<li class="nav-item">
+						<a class="nav-link {% if request.endpoint == 'dashboard_view' %}active{% endif %}" href="{{ url_for('dashboard_view') }}">Dashboard</a>
+					</li>
+					<li class="nav-item">
+						<a class="nav-link {% if request.endpoint == 'alerts_view' %}active{% endif %}" href="{{ url_for('alerts_view') }}">Alerts</a>
+					</li>
+					<li class="nav-item">
+						<a class="nav-link {% if request.endpoint == 'config_view' %}active{% endif %}" href="{{ url_for('config_view') }}">Configuration</a>
+					</li>
+					<li class="nav-item">
+						<a class="nav-link {% if request.endpoint == 'analytics_view' %}active{% endif %}" href="{{ url_for('analytics_view') }}">Analytics</a>
+					</li>
+					<li class="nav-item">
+						<a class="nav-link {% if request.endpoint == 'profiles_view' %}active{% endif %}" href="{{ url_for('profiles_view') }}">Profiles</a>
+					</li>
+					<li class="nav-item">
+						<a class="nav-link {% if request.endpoint == 'developer_view' %}active{% endif %}" href="{{ url_for('developer_view') }}">Developer</a>
+					</li>
+					<li class="nav-item">
+						<a class="nav-link {% if request.endpoint == 'console_view' %}active{% endif %}" href="{{ url_for('console_view') }}">Console</a>
+					</li>
+				</ul>
+				<div class="d-flex align-items-center gap-2">
+					<span id="connection-indicator" class="badge status-offline" role="status" aria-live="polite">Offline</span>
+					<span class="text-muted small" id="connected-chats-label"></span>
+				</div>
+			</div>
+		</div>
+	</nav>
+
+	<header class="container-fluid py-3">
+		<div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
+			<div class="d-flex align-items-center gap-3">
+				<img id="user-avatar" src="{{ url_for('static', filename='images/logo.png') }}" alt="User avatar" class="rounded-circle shadow-sm" width="64" height="64">
+				<div>
+					<p class="mb-1 fw-semibold" id="user-name">Analyst</p>
+					<p class="mb-0 text-muted small" id="session-path-label">Session path: loading...</p>
+					<p class="mb-0 text-muted small" id="phone-mask">Phone: pending</p>
+				</div>
+			</div>
+			<div class="d-flex flex-wrap align-items-center gap-2">
+				<button class="btn btn-outline-primary btn-sm" type="button" id="btn-relogin">Re-login / Switch Account</button>
+				<button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-session">Refresh Session Info</button>
+			</div>
+		</div>
+	</header>
+
+	<main class="container-fluid py-4">
+		{% block content %}{% endblock %}
+	</main>
+
+	<div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3" aria-live="polite" aria-atomic="true"></div>
+
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+	<script>
+		const toastContainer = document.getElementById("toast-container");
+
+		function showToast(message, variant = "info") {
+			if (!toastContainer) {
+				return;
+			}
+			const id = `toast-${Date.now()}`;
+			const classes = {
+				success: "bg-success",
+				error: "bg-danger",
+				warning: "bg-warning text-dark",
+				info: "bg-info",
+			};
+			const cls = classes[variant] || classes.info;
+			const template = `
+				<div id="${id}" class="toast ${cls} text-white" role="alert" aria-live="assertive" aria-atomic="true">
+					<div class="toast-header ${cls} text-white">
+						<strong class="me-auto">TG Sentinel</strong>
+						<button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+					</div>
+					<div class="toast-body"></div>
+				</div>`;
+			toastContainer.insertAdjacentHTML("beforeend", template);
+			const toastEl = document.getElementById(id);
+			if (!toastEl) {
+				return;
+			}
+			const body = toastEl.querySelector(".toast-body");
+			if (body) {
+				body.textContent = String(message ?? "");
+			}
+			const toast = new bootstrap.Toast(toastEl, { delay: 4500 });
+			toast.show();
+			toastEl.addEventListener("hidden.bs.toast", () => toastEl.remove());
+		}
+
+		window.showToast = showToast;
+
+		function updateConnectionIndicator(payload) {
+			const indicator = document.getElementById("connection-indicator");
+			if (!indicator) {
+				return;
+			}
+			const { connected } = payload;
+			indicator.classList.remove("status-online", "status-offline");
+			indicator.classList.add(connected ? "status-online" : "status-offline");
+			indicator.textContent = connected ? "Online" : "Offline";
+			indicator.setAttribute("aria-label", connected ? "Connection status: online" : "Connection status: offline");
+		}
+
+		function populateSessionInfo(data) {
+			const nameEl = document.getElementById("user-name");
+			const avatarEl = document.getElementById("user-avatar");
+			const sessionPathEl = document.getElementById("session-path-label");
+			const phoneEl = document.getElementById("phone-mask");
+			const chatsEl = document.getElementById("connected-chats-label");
+
+			if (nameEl && data.username) {
+				nameEl.textContent = data.username;
+			}
+			if (avatarEl && data.avatar) {
+				avatarEl.src = data.avatar;
+			}
+			if (sessionPathEl && data.session_path) {
+				sessionPathEl.textContent = `Session path: ${data.session_path}`;
+			}
+			if (phoneEl && data.phone_masked) {
+				phoneEl.textContent = `Phone: ${data.phone_masked}`;
+			}
+			if (chatsEl) {
+				const list = (data.connected_chats || []).slice(0, 3).join(", ");
+				chatsEl.textContent = list ? `Watching: ${list}` : "";
+			}
+			updateConnectionIndicator({ connected: Boolean(data.connected) });
+		}
+
+		async function refreshSessionInfo() {
+			try {
+				const response = await fetch("{{ url_for('api_session_info') }}");
+				if (!response.ok) {
+					throw new Error(`HTTP ${response.status}`);
+				}
+				const payload = await response.json();
+				populateSessionInfo(payload);
+			} catch (error) {
+				console.error("Session info fetch failed", error);
+				showToast("Unable to refresh session information", "error");
+			}
+		}
+
+		document.addEventListener("DOMContentLoaded", () => {
+			refreshSessionInfo();
+
+		const reloginBtn = document.getElementById("btn-relogin");
+		if (reloginBtn) {
+			reloginBtn.addEventListener("click", async () => {
+				showToast("Re-authentication request sent to backend logs", "info");
+				try {
+					const response = await fetch("{{ url_for('api_console_command') }}", {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ command: "reauth" }),
+					});
+					if (!response.ok) {
+						throw new Error(`HTTP error: ${response.status}`);
+					}
+					// Optionally confirm success with the response payload
+					const payload = await response.json();
+					console.log("Reauth command accepted:", payload);
+				} catch (error) {
+					console.error("Re-authentication request failed:", error);
+					showToast("Re-authentication request failed. Check console for details.", "error");
+				}
+			});
+		}			const refreshBtn = document.getElementById("btn-refresh-session");
+			if (refreshBtn) {
+				refreshBtn.addEventListener("click", refreshSessionInfo);
+			}
+
+			const socketFactory = window.io || null;
+			let socket;
+			
+			if (!socketFactory) {
+				// Socket.IO library failed to load - create no-op fallback
+				console.warn(
+					"[TG Sentinel] Socket.IO library not available. Real-time updates disabled.\n" +
+					"Possible causes:\n" +
+					"  - Socket.IO script failed to load (check network/CDN)\n" +
+					"  - flask-socketio not installed on server\n" +
+					"  - Content Security Policy blocking external scripts\n" +
+					"Dashboard will continue to function with manual refresh only."
+				);
+				
+				// Create a no-op socket API for graceful degradation
+				socket = {
+					on: (event, callback) => {
+						console.debug(`[TG Sentinel] Socket event '${event}' registered but no-op (Socket.IO unavailable)`);
+					},
+					emit: (event, data) => {
+						console.debug(`[TG Sentinel] Socket emit '${event}' ignored (Socket.IO unavailable)`);
+					},
+					connected: false
+				};
+				
+				// Show user-facing notification
+				showToast("Real-time updates unavailable. Dashboard will require manual refresh.", "warning");
+			} else {
+				socket = socketFactory();
+			}
+			
+			let reconnectToastShown = false;
+
+			socket.on("connect", () => {
+				updateConnectionIndicator({ connected: true });
+				if (reconnectToastShown) {
+					showToast("Dashboard link re-established", "success");
+				}
+				reconnectToastShown = true;
+			});
+
+			socket.on("disconnect", () => {
+				updateConnectionIndicator({ connected: false });
+				showToast("Real-time updates paused", "warning");
+			});
+
+			socket.on("status", (payload) => updateConnectionIndicator(payload));
+			socket.on("error", (payload) => {
+				const message = payload && payload.message ? payload.message : "Unknown socket error";
+				showToast(message, "error");
+			});
+
+			socket.on("dashboard:update", () => {
+				const event = new CustomEvent("tgsentinel:dashboard-update");
+				document.dispatchEvent(event);
+			});
+		});
+	</script>
+
+	{% block extra_scripts %}{% endblock %}
+</body>
+</html>

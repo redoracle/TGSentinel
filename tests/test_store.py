@@ -2,7 +2,8 @@
 
 import pytest
 from sqlalchemy import text
-from tgsentinel.store import init_db, upsert_message, mark_alerted
+
+from tgsentinel.store import init_db, mark_alerted, upsert_message
 
 
 class TestInitDb:

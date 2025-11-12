@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+{% block title %}Developer · TG Sentinel{% endblock %}
+
+{% block content %}
+<section class="row g-4 mb-4">
+    <div class="col-12 col-xl-6">
+        <article class="card h-100" aria-labelledby="integration-heading">
+            <div class="card-header">
+                <h1 class="card-title mb-0" id="integration-heading">Integration Settings</h1>
+            </div>
+            <div class="card-body d-grid gap-3">
+                <div>
+                    <label class="form-label" for="prometheus-port">Prometheus port</label>
+                    <input class="form-control" id="prometheus-port" type="number" value="9100" min="1" max="65535">
+                </div>
+                <div>
+                    <label class="form-label" for="api-key">API key</label>
+                    <div class="input-group">
+                        <input class="form-control" id="api-key" type="text" value="" placeholder="Generate secure key" autocomplete="off" readonly>
+                        <button class="btn btn-outline-primary" type="button" id="btn-generate-key">Generate</button>
+                        <button class="btn btn-outline-secondary" type="button" id="btn-copy-key" aria-label="Copy generated API key" disabled>Copy</button>
+                    </div>
+                    <small class="text-muted">Keys are only shown once—copy immediately after generation.</small>
+                </div>
+                <div class="d-flex gap-3">
+                    <button class="btn btn-outline-primary" type="button" id="btn-open-docs">Open local API docs</button>
+                    <button class="btn btn-outline-primary" type="button" id="btn-save-developer">Save</button>
+                </div>
+            </div>
+        </article>
+    </div>
+    <div class="col-12 col-xl-6">
+        <article class="card h-100" aria-labelledby="webhook-table-heading">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h2 class="card-title mb-0" id="webhook-table-heading">Webhooks</h2>
+                <span class="text-muted small" id="webhook-coming-soon" role="note" aria-live="polite">Webhook creation flow coming soon</span>
+            </div>
+            <div class="card-body table-responsive">
+                <table class="table align-middle mb-0" id="webhook-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Service</th>
+                            <th scope="col">URL</th>
+                            <th scope="col">Secret</th>
+                            <th scope="col">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Pushover</td>
+                            <td>https://api.pushover.net/...</td>
+                            <td>••••••</td>
+                            <td>
+                                <div class="btn-group" role="group" aria-label="Webhook actions">
+                                    <button class="btn btn-outline-primary btn-sm" type="button" data-action="test">Test</button>
+                                    <button class="btn btn-outline-primary btn-sm" type="button" data-action="delete">Delete</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Discord</td>
+                            <td>https://discordapp.com/api/webhooks/...</td>
+                            <td>••••</td>
+                            <td>
+                                <div class="btn-group" role="group" aria-label="Webhook actions">
+                                    <button class="btn btn-outline-primary btn-sm" type="button" data-action="test">Test</button>
+                                    <button class="btn btn-outline-primary btn-sm" type="button" data-action="delete">Delete</button>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </article>
+    </div>
+</section>
+
+<section class="card" aria-labelledby="developer-console-heading">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h2 class="card-title mb-0" id="developer-console-heading">Integration Console</h2>
+        <button class="btn btn-outline-primary btn-sm" type="button" id="btn-webhook-test">Send sample alert</button>
+    </div>
+    <div class="card-body">
+        <div class="logs-viewer" id="developer-log" aria-live="polite">
+            <pre class="mb-0">Awaiting integration events...</pre>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    function appendDeveloperLog(message) {
+        const log = document.getElementById("developer-log");
+        if (!log) {
+            return;
+        }
+        const entry = document.createElement("div");
+        entry.className = "log-entry";
+        const time = document.createElement("span");
+        time.className = "log-time";
+        time.textContent = new Date().toLocaleTimeString();
+
+        const spacer = document.createTextNode(" ");
+
+        const logMessage = document.createElement("span");
+        logMessage.className = "log-message";
+        logMessage.textContent = String(message ?? "");
+
+        entry.appendChild(time);
+        entry.appendChild(spacer);
+        entry.appendChild(logMessage);
+        log.appendChild(entry);
+        log.scrollTop = log.scrollHeight;
+    }
+
+    function randomKey() {
+        // Require Web Crypto API for secure key generation
+        if (!window.crypto || !window.crypto.getRandomValues) {
+            const errorMsg = "Secure random number generation unavailable. " +
+                           "Web Crypto API is required for API key generation. " +
+                           "Please use a modern browser (Chrome 11+, Firefox 21+, Safari 6.1+, Edge 12+).";
+            console.error("[Security] " + errorMsg);
+            showToast(errorMsg, "error");
+            throw new Error("Web Crypto API unavailable - cannot generate secure API keys");
+        }
+        
+        // Generate cryptographically secure random key
+        const array = window.crypto.getRandomValues(new Uint8Array(32));
+        return Array.from(array, (byte) => byte.toString(16).padStart(2, "0")).join("");
+    }
+
+    let pendingApiKey = null;
+    const API_KEY_MASK = "•".repeat(16);
+
+    function clearPendingApiKey() {
+        pendingApiKey = null;
+        const input = document.getElementById("api-key");
+        const copyBtn = document.getElementById("btn-copy-key");
+        if (input) {
+            input.value = "";
+        }
+        if (copyBtn) {
+            copyBtn.disabled = true;
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        const apiKeyInput = document.getElementById("api-key");
+        const copyButton = document.getElementById("btn-copy-key");
+
+        document.getElementById("btn-generate-key")?.addEventListener("click", () => {
+            try {
+                pendingApiKey = randomKey();
+                if (apiKeyInput) {
+                    apiKeyInput.value = API_KEY_MASK;
+                }
+                if (copyButton) {
+                    copyButton.disabled = false;
+                }
+                appendDeveloperLog("Generated new API key");
+            } catch (error) {
+                console.error("Failed to generate API key:", error);
+                appendDeveloperLog("ERROR: " + error.message);
+                if (apiKeyInput) {
+                    apiKeyInput.value = "";
+                }
+                if (copyButton) {
+                    copyButton.disabled = true;
+                }
+            }
+        });
+        document.getElementById("btn-open-docs")?.addEventListener("click", () => {
+            window.open("/docs", "_blank");
+        });
+        copyButton?.addEventListener("click", async () => {
+            if (!pendingApiKey) {
+                showToast("Generate an API key first", "warning");
+                return;
+            }
+            let secret = pendingApiKey;
+            clearPendingApiKey();
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(secret);
+                } else {
+                    const helper = document.createElement("textarea");
+                    helper.value = secret;
+                    helper.setAttribute("readonly", "");
+                    helper.style.position = "absolute";
+                    helper.style.left = "-9999px";
+                    document.body.appendChild(helper);
+                    helper.select();
+                    helper.setSelectionRange(0, helper.value.length);
+                    document.execCommand("copy");
+                    helper.remove();
+                }
+                showToast("API key copied to clipboard", "success");
+            } catch (error) {
+                console.error("Failed to copy API key", error);
+                showToast("Unable to copy API key. Generate a new one.", "error");
+            } finally {
+                secret = "";
+            }
+        });
+        document.getElementById("btn-save-developer")?.addEventListener("click", () => showToast("Developer settings saved", "success"));
+        document.getElementById("btn-webhook-test")?.addEventListener("click", () => {
+            appendDeveloperLog("Webhook test dispatched");
+            showToast("Webhook test queued", "success");
+        });
+        document.querySelectorAll("#webhook-table button[data-action='test']").forEach((button) => {
+            button.addEventListener("click", () => {
+                appendDeveloperLog("Webhook test event sent");
+                showToast("Webhook tested", "info");
+            });
+        });
+        document.querySelectorAll("#webhook-table button[data-action='delete']").forEach((button) => {
+            button.addEventListener("click", () => {
+                const confirmed = window.confirm("Remove this webhook? This action cannot be undone.");
+                if (!confirmed) {
+                    return;
+                }
+                appendDeveloperLog("Webhook removed");
+                showToast("Webhook deleted", "warning");
+            });
+        });
+    });
+</script>
+{% endblock %}

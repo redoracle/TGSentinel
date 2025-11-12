@@ -20,6 +20,25 @@ services:
     depends_on:
       - redis
 
+  ui:
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
+    image: tgsentinel/app:latest
+    command: python /app/ui/app.py
+    restart: always
+    ports:
+      - "5001:5000"
+    env_file: [.env]
+    environment:
+      - UI_PORT=5000
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+    depends_on:
+      - redis
+      - sentinel
+
   # Optional: expose Prometheus metrics via textfile collector or a tiny HTTP
   # metrics endpoint. For simplicity, metrics are logged; integrate with your
   # existing Prometheus stack if desired.

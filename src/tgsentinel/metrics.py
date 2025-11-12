@@ -1,4 +1,5 @@
-import logging, time
+import logging
+import time
 from collections import Counter
 
 log = logging.getLogger(__name__)

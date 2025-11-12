@@ -1,14 +1,18 @@
 import asyncio
-import json, logging
-from typing import Any, List, Tuple, Dict, cast
+import json
+import logging
+from pathlib import Path
+from typing import Any, Dict, List, Tuple, cast
+
 from redis import Redis
 from telethon import TelegramClient
-from .config import AppCfg, ChannelRule
+
+from .config import AppCfg, ChannelRule, load_config
 from .heuristics import run_heuristics
-from .semantic import load_interests, score_text
-from .store import upsert_message, mark_alerted
-from .notifier import notify_dm, notify_channel
 from .metrics import inc
+from .notifier import notify_channel, notify_dm
+from .semantic import load_interests, score_text
+from .store import mark_alerted, upsert_message
 
 log = logging.getLogger(__name__)
 
@@ -104,7 +108,37 @@ async def process_loop(cfg: AppCfg, client: TelegramClient, engine):
     rules = load_rules(cfg)
     load_interests(cfg.interests)
 
+    reload_marker = Path("/app/data/.reload_config")
+    last_cfg_check = 0
+    cfg_check_interval = 5  # Check every 5 seconds
+
     while True:
+        # Check for config reload marker periodically
+        current_time = asyncio.get_event_loop().time()
+        if current_time - last_cfg_check > cfg_check_interval:
+            last_cfg_check = current_time
+            if reload_marker.exists():
+                try:
+                    log.info("Config reload requested, reloading configuration...")
+                    new_cfg = load_config()
+                    cfg = new_cfg
+                    rules = load_rules(cfg)
+                    load_interests(cfg.interests)
+                    reload_marker.unlink()
+                    log.info(
+                        "Configuration reloaded successfully with %d channels",
+                        len(cfg.channels),
+                    )
+                    for ch in cfg.channels:
+                        log.info("  • %s (id: %d)", ch.name, ch.id)
+                except Exception as reload_exc:
+                    log.error("Failed to reload configuration: %s", reload_exc)
+                    # Remove marker even on failure to prevent infinite retry
+                    try:
+                        reload_marker.unlink()
+                    except Exception:
+                        pass
+
         resp = cast(
             StreamResponse,
             r.xreadgroup(group, consumer, streams={stream: ">"}, count=50, block=5000),

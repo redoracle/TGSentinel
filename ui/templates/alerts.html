@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+{% block title %}Alerts · TG Sentinel{% endblock %}
+
+{% block content %}
+<section class="row g-4 mb-4">
+    <div class="col-12">
+        <article class="card" aria-labelledby="alerts-table-heading">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <div>
+                    <h1 class="card-title mb-0" id="alerts-table-heading">Alerts Feed</h1>
+                    <small class="text-muted">Sortable table of triggered notifications</small>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-primary btn-sm" type="button" id="btn-export-alerts">Export CSV</button>
+                    <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-alerts">Refresh</button>
+                </div>
+            </div>
+            <div class="card-body table-responsive">
+                <table class="table align-middle mb-0" id="alerts-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Channel</th>
+                            <th scope="col">Sender</th>
+                            <th scope="col">Excerpt</th>
+                            <th scope="col">Score</th>
+                            <th scope="col">Trigger</th>
+                            <th scope="col">Destination</th>
+                            <th scope="col">Timestamp</th>
+                            <th scope="col" class="text-center">Feedback</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {%- for alert in alerts %}
+                        <tr>
+                            <td data-label="Channel">{{ alert.chat_name }}</td>
+                            <td data-label="Sender">{{ alert.sender or 'Unknown' }}</td>
+                            <td data-label="Excerpt" class="text-truncate">{{ alert.excerpt }}</td>
+                            <td data-label="Score"><span class="badge badge-danger">{{ '%.2f'|format(alert.score) }}</span></td>
+                            <td data-label="Trigger">{{ alert.trigger or 'N/A' }}</td>
+                            <td data-label="Destination">{{ alert.sent_to }}</td>
+                            <td data-label="Timestamp">{{ alert.created_at }}</td>
+                            <td class="text-center" data-label="Feedback">
+                                <div class="btn-group" role="group" aria-label="Feedback controls">
+                                    <button class="btn btn-outline-primary btn-sm btn-feedback" data-score="up" data-alert-id="{{ loop.index0 }}" type="button" aria-label="Give positive feedback for alert {{ loop.index0 }}">👍</button>
+                                    <button class="btn btn-outline-primary btn-sm btn-feedback" data-score="down" data-alert-id="{{ loop.index0 }}" type="button" aria-label="Give negative feedback for alert {{ loop.index0 }}">👎</button>
+                                </div>
+                            </td>
+                        </tr>
+                        {%- else %}
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-4">No alerts recorded yet. System will populate this table as triggers fire.</td>
+                        </tr>
+                        {%- endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </article>
+    </div>
+</section>
+
+<section class="row g-4">
+    <div class="col-12 col-xl-7">
+        <article class="card" aria-labelledby="digest-timeline-heading">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="card-title mb-0" id="digest-timeline-heading">Digest Timeline</h2>
+                    <small class="text-muted">Aggregated alert batches</small>
+                </div>
+                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-download-digest">Download JSON</button>
+            </div>
+            <div class="card-body">
+                <div class="timeline" id="digest-timeline" role="list">
+                    {%- for digest in digests %}
+                    <div class="card mb-3" role="listitem">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h3 class="h5 mb-0">{{ digest.date }}</h3>
+                                <span class="badge badge-info">{{ digest.items }} messages</span>
+                            </div>
+                            <p class="mb-0 text-muted">Average score: {{ digest.avg_score }}</p>
+                        </div>
+                    </div>
+                    {%- else %}
+                    <p class="text-muted">No digest batches yet.</p>
+                    {%- endfor %}
+                </div>
+            </div>
+        </article>
+    </div>
+    <div class="col-12 col-xl-5">
+        <article class="card h-100" aria-labelledby="quick-actions-heading">
+            <div class="card-header">
+                <h2 class="card-title mb-0" id="quick-actions-heading">Quick Actions</h2>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-3">
+                    <button class="btn btn-outline-primary btn-action" type="button" data-action="mute">Mute Selected Channel</button>
+                    <button class="btn btn-outline-primary btn-action" type="button" data-action="lower-threshold">Lower Importance Threshold</button>
+                    <button class="btn btn-outline-primary btn-action" type="button" data-action="whitelist">Whitelist Sender</button>
+                </div>
+                <div class="mt-4">
+                    <label class="form-label" for="threshold-slider">Adjust score threshold</label>
+                    <input type="range" class="form-range" id="threshold-slider" min="0" max="1" step="0.05" value="0.5">
+                    <p class="text-muted small mb-0">Current: <span id="threshold-value">0.50</span></p>
+                </div>
+            </div>
+        </article>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    const alertsEndpoint = "{{ url_for('api_recent_alerts') }}";
+    const digestsEndpoint = "{{ url_for('api_alert_digests') }}";
+
+    function escapeHtml(value) {
+        if (value === null || value === undefined) {
+            return "";
+        }
+        return String(value)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }
+
+    async function refreshAlerts() {
+        try {
+            const response = await fetch(`${alertsEndpoint}?limit=250`);
+            if (!response.ok) {
+                throw new Error("Alerts fetch failed");
+            }
+            const payload = await response.json();
+            renderAlertsTable(payload.alerts || []);
+        } catch (error) {
+            console.error(error);
+            showToast("Unable to refresh alerts", "error");
+        }
+    }
+
+    function renderAlertsTable(alerts) {
+        const tbody = document.querySelector("#alerts-table tbody");
+        if (!tbody) {
+            return;
+        }
+        if (!alerts.length) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No alerts available.</td></tr>';
+            return;
+        }
+        const rows = alerts.map((alert, index) => `
+            <tr>
+                <td data-label="Channel">${escapeHtml(alert.chat_name)}</td>
+                <td data-label="Sender">${escapeHtml(alert.sender || "Unknown")}</td>
+                <td data-label="Excerpt" class="text-truncate">${escapeHtml(alert.excerpt)}</td>
+                <td data-label="Score"><span class="badge badge-danger">${escapeHtml(Number(alert.score || 0).toFixed(2))}</span></td>
+                <td data-label="Trigger">${escapeHtml(alert.trigger || "N/A")}</td>
+                <td data-label="Destination">${escapeHtml(alert.sent_to || "dm")}</td>
+                <td data-label="Timestamp">${escapeHtml(alert.created_at || "N/A")}</td>
+                <td class="text-center" data-label="Feedback">
+                    <div class="btn-group" role="group" aria-label="Feedback controls">
+                        <button class="btn btn-outline-primary btn-sm btn-feedback" data-score="up" data-alert-id="${escapeHtml(alert.id)}" type="button" aria-label="Give positive feedback for alert from ${escapeHtml(alert.sender || 'Unknown')}">👍</button>
+                        <button class="btn btn-outline-primary btn-sm btn-feedback" data-score="down" data-alert-id="${escapeHtml(alert.id)}" type="button" aria-label="Give negative feedback for alert from ${escapeHtml(alert.sender || 'Unknown')}">👎</button>
+                    </div>
+                </td>
+            </tr>`).join("");
+        tbody.innerHTML = rows;
+    }
+
+    async function refreshDigests() {
+        try {
+            const response = await fetch(digestsEndpoint);
+            if (!response.ok) {
+                throw new Error("Digests fetch failed");
+            }
+            const payload = await response.json();
+            renderDigests(payload.digests || []);
+        } catch (error) {
+            console.error(error);
+            showToast("Unable to refresh digests", "error");
+        }
+    }
+
+    function renderDigests(digests) {
+        const timeline = document.getElementById("digest-timeline");
+        if (!timeline) {
+            return;
+        }
+        if (!digests.length) {
+            timeline.innerHTML = '<p class="text-muted">No digest batches yet.</p>';
+            return;
+        }
+        timeline.innerHTML = digests.map((digest) => `
+            <div class="card mb-3" role="listitem">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h3 class="h5 mb-0">${escapeHtml(digest.date)}</h3>
+                        <span class="badge badge-info">${escapeHtml(digest.items)}</span>
+                    </div>
+                    <p class="mb-0 text-muted">Average score: ${escapeHtml(digest.avg_score)}</p>
+                </div>
+            </div>`).join("");
+    }
+
+    function bindInteractions() {
+        document.querySelectorAll(".btn-feedback").forEach((button) => {
+            button.addEventListener("click", () => {
+                const direction = button.getAttribute("data-score") === "up" ? "success" : "warning";
+                showToast("Feedback recorded", direction);
+            });
+        });
+        document.getElementById("btn-refresh-alerts")?.addEventListener("click", refreshAlerts);
+        document.getElementById("btn-download-digest")?.addEventListener("click", refreshDigests);
+        document.getElementById("btn-export-alerts")?.addEventListener("click", () => showToast("CSV export queued", "info"));
+        document.getElementById("threshold-slider")?.addEventListener("input", (event) => {
+            document.getElementById("threshold-value").textContent = Number(event.target.value).toFixed(2);
+        });
+        document.querySelectorAll(".btn-action").forEach((button) => {
+            button.addEventListener("click", () => {
+                const action = button.getAttribute("data-action");
+                showToast(`${action} action queued`, "info");
+            });
+        });
+    }
+
+    // Interval management to prevent duplicate timers
+    let alertsIntervalId = null;
+    let digestsIntervalId = null;
+
+    function startIntervals() {
+        // Clear any existing intervals before starting new ones
+        stopIntervals();
+        alertsIntervalId = setInterval(refreshAlerts, 120000);
+        digestsIntervalId = setInterval(refreshDigests, 300000);
+    }
+
+    function stopIntervals() {
+        if (alertsIntervalId !== null) {
+            clearInterval(alertsIntervalId);
+            alertsIntervalId = null;
+        }
+        if (digestsIntervalId !== null) {
+            clearInterval(digestsIntervalId);
+            digestsIntervalId = null;
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        refreshAlerts();
+        refreshDigests();
+        bindInteractions();
+        startIntervals();
+    });
+
+    // Clean up intervals on page unload
+    window.addEventListener("beforeunload", stopIntervals);
+
+    // Pause intervals when page is hidden, resume when visible
+    document.addEventListener("visibilitychange", () => {
+        if (document.hidden) {
+            stopIntervals();
+        } else {
+            startIntervals();
+        }
+    });
+</script>
+{% endblock %}

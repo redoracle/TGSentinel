@@ -1,7 +1,12 @@
-import os, logging, asyncio, json
-from telethon import TelegramClient, events
-from .config import AppCfg
+import asyncio
+import json
+import logging
+import os
+
 from redis import Redis
+from telethon import TelegramClient, events
+
+from .config import AppCfg
 
 log = logging.getLogger(__name__)
 

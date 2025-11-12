@@ -1,0 +1,918 @@
+{% extends "base.html" %}
+{% block title %}Configuration · TG Sentinel{% endblock %}
+
+{% block content %}
+<form id="config-form" class="d-grid gap-4" novalidate>
+    <section class="card" aria-labelledby="telegram-config-heading">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <div>
+                <h1 class="card-title mb-0" id="telegram-config-heading">Telegram Account</h1>
+                <small class="text-muted">Manage MTProto authentication</small>
+            </div>
+            <button class="btn btn-outline-primary btn-sm" type="button" id="btn-reauth">Reauthenticate</button>
+        </div>
+        <div class="card-body">
+            <div class="row g-4">
+                <div class="col-12 col-md-6">
+                    <label class="form-label" for="phone-number">Phone number</label>
+                    <input class="form-control" id="phone-number" name="phone_number" type="tel" placeholder="+1 555 123 4567" required>
+                    <small class="form-text">Your phone will be masked in the UI after authentication.</small>
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label" for="session-path">Session path</label>
+                    <input class="form-control" id="session-path" name="session" type="text" value="{{ session_path }}" readonly>
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label" for="api-id">API ID</label>
+                    <input class="form-control" id="api-id" name="api_id" type="number" placeholder="123456">
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label" for="api-hash">API Hash</label>
+                    <input class="form-control" id="api-hash" name="api_hash" type="password" placeholder="0123abcd..." autocomplete="off">
+                </div>
+                <div class="col-12">
+                    <label class="form-label" for="connected-chats">Connected chats</label>
+                    <textarea class="form-control" id="connected-chats" rows="3" readonly>{% for channel in channels %}{{ channel.name }}
+{% endfor %}</textarea>
+                    <small class="form-text">Read-only view of channels configured in tgsentinel.yml.</small>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="card" aria-labelledby="alerts-settings-heading">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h2 class="card-title mb-0" id="alerts-settings-heading">Alerts & Notifications</h2>
+            <button class="btn btn-primary btn-sm" type="button" id="btn-save-alerts">
+                <span aria-hidden="true">✓</span> Apply Changes
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="row g-4">
+                <div class="col-12 col-md-4">
+                    <label class="form-label" for="alert-mode">Alert mode</label>
+                    <select class="form-select" id="alert-mode" name="mode">
+                        <option value="dm">Direct message</option>
+                        <option value="channel">Channel</option>
+                        <option value="both">Both</option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label" for="alert-channel">Alert channel</label>
+                    <input class="form-control" id="alert-channel" name="target_channel" type="text" placeholder="@sentinel_bot">
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label" for="digest-frequency">Digest frequency</label>
+                    <select class="form-select" id="digest-frequency" name="digest">
+                        <option value="none">None</option>
+                        <option value="hourly" selected>Hourly</option>
+                        <option value="daily">Daily</option>
+                        <option value="both">Both</option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label" for="digest-top">Digest top N</label>
+                    <input class="form-control" id="digest-top" name="digest_top" type="number" min="1" max="100" value="10">
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label" for="dedupe-window">Deduplication window (minutes)</label>
+                    <input class="form-control" id="dedupe-window" name="dedupe_window" type="number" min="0" value="15">
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label" for="rate-limit">Rate limit per channel (per hour)</label>
+                    <input class="form-control" id="rate-limit" name="rate_limit_per_channel" type="number" min="0" value="20">
+                </div>
+                <div class="col-12">
+                    <label class="form-label" for="alert-template">Alert template</label>
+                    <textarea class="form-control" id="alert-template" name="template" rows="4" placeholder="[{chat}] {sender}: {excerpt}"></textarea>
+                    <small class="form-text">Use placeholders {chat}, {sender}, {excerpt}.</small>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="card" aria-labelledby="scoring-settings-heading">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h2 class="card-title mb-0" id="scoring-settings-heading">Importance & Scoring</h2>
+            <button class="btn btn-primary btn-sm" type="button" id="btn-save-scoring">
+                <span aria-hidden="true">✓</span> Apply Changes
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="row g-4">
+                <div class="col-12 col-md-4">
+                    <label class="form-label" for="embedding-model">
+                        Embedding model
+                        <i class="bi bi-info-circle-fill ms-1 info-tooltip-icon" data-bs-toggle="tooltip" data-bs-placement="top" 
+                           data-bs-title="The AI model used to convert text into numerical vectors for semantic similarity matching. MiniLM is fast and efficient, BGE is more accurate."></i>
+                    </label>
+                    <select class="form-select" id="embedding-model" name="embedding_model">
+                        <option value="all-MiniLM-L6-v2">all-MiniLM-L6-v2</option>
+                        <option value="bge-small-en">bge-small-en</option>
+                        <option value="custom">Custom</option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label" for="similarity-threshold">
+                        Similarity threshold
+                        <i class="bi bi-info-circle-fill ms-1 info-tooltip-icon" data-bs-toggle="tooltip" data-bs-placement="top" 
+                           data-bs-title="Minimum similarity score (0-1) for messages to match your interests. Lower = more messages, higher = only very relevant messages."></i>
+                    </label>
+                    <input class="form-range" id="similarity-threshold" name="similarity_threshold" type="range" min="0" max="1" step="0.01" value="{{ summary.avg_importance | default(0.42) }}">
+                    <p class="text-muted small mb-0">Current: <span id="similarity-value">{{ summary.avg_importance | default(0.42) }}</span></p>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label" for="decay-window">
+                        Decay window (hours)
+                        <i class="bi bi-info-circle-fill ms-1 info-tooltip-icon" data-bs-toggle="tooltip" data-bs-placement="top" 
+                           data-bs-title="Time window for message importance to decay. Messages lose relevance over time to prevent alert fatigue on old topics."></i>
+                    </label>
+                    <input class="form-control" id="decay-window" name="decay_window" type="number" min="1" value="24">
+                </div>
+                <div class="col-12">
+                    <label class="form-label" for="interest-profiles">
+                        Interest profiles
+                        <i class="bi bi-info-circle-fill ms-1 info-tooltip-icon" data-bs-toggle="tooltip" data-bs-placement="top" 
+                           data-bs-title="Keywords or topics you're interested in. The semantic matcher uses these to identify relevant messages (e.g., 'security, vulnerability, zero-day')."></i>
+                    </label>
+                    <input class="form-control" id="interest-profiles" type="text" value="{{ interests | join(', ') }}" placeholder="comma,separated,topics">
+                    <small class="form-text">These inform the semantic matcher.</small>
+                </div>
+                <div class="col-12">
+                    <label class="form-label" for="heuristic-weighting">
+                        Heuristic weighting
+                        <i class="bi bi-info-circle-fill ms-1 info-tooltip-icon" data-bs-toggle="tooltip" data-bs-placement="top" 
+                           data-bs-title="Weight (0-1) for each detection heuristic. Higher weights make that signal more important in the final score. Adjust based on what matters most to you."></i>
+                    </label>
+                    <div class="row g-3" id="heuristic-weighting">
+                        {%- for item in heuristic_options %}
+                        <div class="col-12 col-md-4">
+                            <label class="form-label" for="weight-{{ loop.index0 }}">{{ item }}</label>
+                            <input class="form-range" id="weight-{{ loop.index0 }}" name="weight_{{ loop.index0 }}" type="range" min="0" max="1" step="0.05" value="0.5">
+                        </div>
+                        {%- endfor %}
+                    </div>
+                </div>
+                <div class="col-12 col-md-4">
+                    <div class="form-check form-switch mt-4">
+                        <input class="form-check-input" id="feedback-learning" name="feedback_learning" type="checkbox" checked>
+                        <label class="form-check-label" for="feedback-learning">
+                            Feedback learning
+                            <i class="bi bi-info-circle-fill ms-1 info-tooltip-icon" data-bs-toggle="tooltip" data-bs-placement="top" 
+                               data-bs-title="When enabled, the system learns from your feedback (👍/👎) to improve future alert accuracy."></i>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="card" aria-labelledby="channel-management-heading">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h2 class="card-title mb-0" id="channel-management-heading">Channels Management</h2>
+            <div class="d-flex gap-2">
+                <button class="btn btn-primary btn-sm" type="button" id="btn-add-channels" data-bs-toggle="modal" data-bs-target="#addChannelsModal">
+                    <span aria-hidden="true">+</span> ADD
+                </button>
+                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-test-rules">Test rules</button>
+                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-reset-stats">Reset stats</button>
+                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-export-yaml">Export YAML</button>
+            </div>
+        </div>
+        <div class="card-body table-responsive">
+            <table class="table align-middle mb-0" id="channels-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Chat ID</th>
+                        <th scope="col">Name</th>
+                        <th scope="col">VIP Senders</th>
+                        <th scope="col">Keywords</th>
+                        <th scope="col">Reaction threshold</th>
+                        <th scope="col">Reply threshold</th>
+                        <th scope="col">Rate limit/hr</th>
+                        <th scope="col">Enabled</th>
+                        <th scope="col">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {%- for channel in channels %}
+                    <tr>
+                        <td>
+                            <button type="button" class="btn btn-sm {% if channel.chat_id < 0 %}btn-info{% else %}btn-primary{% endif %} copy-chat-id" 
+                                    data-chat-id="{{ channel.chat_id }}" 
+                                    title="Copy {{ channel.chat_id }}">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-clipboard" viewBox="0 0 16 16">
+                                    <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/>
+                                    <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/>
+                                </svg>
+                            </button>
+                        </td>
+                        <td>{{ channel.name }}</td>
+                        <td>{{ channel.vip_senders | join(', ') }}</td>
+                        <td>{{ channel.keywords | join(', ') }}</td>
+                        <td>{{ channel.reaction_threshold }}</td>
+                        <td>{{ channel.reply_threshold }}</td>
+                        <td>{{ channel.rate_limit }}</td>
+                        <td>
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input" name="channel_enabled_{{ loop.index0 }}" type="checkbox" id="channel-enabled-{{ loop.index0 }}" checked>
+                                <label class="form-check-label visually-hidden" for="channel-enabled-{{ loop.index0 }}">Toggle {{ channel.name }}</label>
+                            </div>
+                        </td>
+                        <td>
+                            <button type="button" class="btn btn-sm btn-outline-danger delete-channel" 
+                                    data-chat-id="{{ channel.chat_id }}" 
+                                    data-chat-name="{{ channel.name }}"
+                                    title="Delete Channel">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
+                                    <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                                    <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+                                </svg>
+                            </button>
+                        </td>
+                    </tr>
+                    {%- else %}
+                    <tr>
+                        <td colspan="9" class="text-center text-muted">No channels configured yet.</td>
+                    </tr>
+                    {%- endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="card" aria-labelledby="system-settings-heading">
+        <div class="card-header">
+            <h2 class="card-title mb-0" id="system-settings-heading">System Settings</h2>
+        </div>
+        <div class="card-body">
+            <div class="row g-4">
+                <div class="col-12 col-md-4">
+                    <label class="form-label" for="redis-host">Redis host</label>
+                    <input class="form-control" id="redis-host" name="redis_host" type="text" placeholder="localhost">
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label" for="redis-port">Redis port</label>
+                    <input class="form-control" id="redis-port" name="redis_port" type="number" min="0" max="65535" placeholder="6379">
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label" for="database-uri">Database URI</label>
+                    <input class="form-control" id="database-uri" name="database_uri" type="text" placeholder="sqlite:///data/sentinel.db">
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label" for="retention-days">Retention (days)</label>
+                    <input class="form-control" id="retention-days" name="retention_days" type="number" min="1" value="30">
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label" for="metrics-endpoint">Metrics endpoint</label>
+                    <input class="form-control" id="metrics-endpoint" name="metrics_endpoint" type="text" placeholder="http://localhost:9100/metrics">
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label" for="logging-level">Logging level</label>
+                    <select class="form-select" id="logging-level" name="logging_level">
+                        <option value="info">Info</option>
+                        <option value="debug">Debug</option>
+                        <option value="warn">Warn</option>
+                        <option value="error">Error</option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-4">
+                    <div class="form-check form-switch mt-4">
+                        <input class="form-check-input" id="auto-restart" name="auto_restart" type="checkbox">
+                        <label class="form-check-label" for="auto-restart">Auto-restart on fail</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="d-flex justify-content-end gap-3">
+        <button class="btn btn-reset" type="reset">Reset changes</button>
+        <button class="btn btn-primary" type="submit" id="btn-save-config">Save configuration</button>
+    </div>
+</form>
+
+<!-- Add Channels Modal -->
+<div class="modal fade" id="addChannelsModal" tabindex="-1" aria-labelledby="addChannelsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addChannelsModalLabel">Add Channels to Configuration</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="channels-loading" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading channels...</span>
+                    </div>
+                    <p class="mt-2 text-muted">Fetching your Telegram channels...</p>
+                </div>
+                <div id="channels-error" class="alert alert-danger d-none" role="alert"></div>
+                <div id="channels-list" class="d-none">
+                    <p class="text-muted mb-3">Select channels to add to your configuration:</p>
+                    <div class="list-group" id="channels-checkboxes">
+                        <!-- Channels will be populated here -->
+                    </div>
+                    <p class="text-muted small mt-3">Selected channels will be added with default settings (reaction threshold: 5, reply threshold: 3).</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="btn-add-selected-channels" disabled>Add Selected</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    const form = document.getElementById("config-form");
+    const saveEndpoint = "{{ url_for('api_config_save') }}";
+
+    function collectPayload() {
+        const payload = {};
+        
+        // Collect all text/number inputs from FormData as baseline
+        const formData = new FormData(form);
+        formData.forEach((value, key) => {
+            payload[key] = value;
+        });
+        
+        // Explicitly read and convert heuristic weight sliders to Numbers
+        for (let i = 0; i < 5; i++) {
+            const weightInput = document.getElementById(`weight-${i}`);
+            if (weightInput) {
+                payload[`weight_${i}`] = Number(weightInput.value);
+            }
+        }
+        
+        // Explicitly read all checkboxes and convert to Boolean
+        form.querySelectorAll("input[type='checkbox'][name]").forEach((checkbox) => {
+            if (checkbox instanceof HTMLInputElement) {
+                payload[checkbox.name] = checkbox.checked;
+            }
+        });
+        
+        // Parse interests as array
+        payload.interests = (document.getElementById("interest-profiles").value || "")
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean);
+        
+        // Ensure similarity_threshold is Number
+        const similarityInput = document.getElementById("similarity-threshold");
+        if (similarityInput) {
+            payload.similarity_threshold = Number(similarityInput.value || 0.42);
+        }
+        
+        // Convert numeric fields to Number
+        const numericFields = ['decay_window', 'redis_port', 'log_retention_days'];
+        numericFields.forEach((field) => {
+            if (payload[field] !== undefined) {
+                payload[field] = Number(payload[field]);
+            }
+        });
+        
+        return payload;
+    }
+
+    let isSubmitting = false;
+
+    async function submitConfig(event) {
+        event.preventDefault();
+        
+        // Guard against double submits
+        if (isSubmitting) {
+            console.warn("Configuration save already in progress, ignoring duplicate submit");
+            return;
+        }
+        
+        const submitButton = document.getElementById("btn-save-config");
+        const originalButtonText = submitButton ? submitButton.textContent : "";
+        
+        try {
+            // Mark as submitting and disable button
+            isSubmitting = true;
+            
+            if (submitButton) {
+                submitButton.disabled = true;
+                submitButton.setAttribute("aria-busy", "true");
+                submitButton.setAttribute("aria-disabled", "true");
+                submitButton.textContent = "Saving...";
+                submitButton.classList.add("loading");
+            }
+            
+            const payload = collectPayload();
+            const response = await fetch(saveEndpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+            
+            if (!response.ok) {
+                throw new Error("Persist failed");
+            }
+            
+            showToast("Configuration saved", "success");
+            
+            // Restart sentinel container to apply changes
+            try {
+                const restartResponse = await fetch("{{ url_for('api_restart_sentinel') }}", {
+                    method: "POST",
+                });
+                
+                if (restartResponse.ok) {
+                    showToast("Sentinel container is restarting to apply changes...", "info");
+                } else {
+                    showToast("Configuration saved but sentinel restart failed. Manual restart recommended.", "warning");
+                }
+            } catch (restartError) {
+                console.error("Restart error:", restartError);
+                showToast("Configuration saved but sentinel restart failed. Manual restart recommended.", "warning");
+            }
+        } catch (error) {
+            console.error(error);
+            showToast("Could not save configuration", "error");
+        } finally {
+            // Always restore button state
+            isSubmitting = false;
+            
+            if (submitButton) {
+                submitButton.disabled = false;
+                submitButton.removeAttribute("aria-busy");
+                submitButton.removeAttribute("aria-disabled");
+                submitButton.textContent = originalButtonText;
+                submitButton.classList.remove("loading");
+            }
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        // Load current configuration
+        loadCurrentConfig();
+        
+        document.getElementById("similarity-threshold")?.addEventListener("input", (event) => {
+            document.getElementById("similarity-value").textContent = Number(event.target.value).toFixed(2);
+        });
+        document.getElementById("btn-reauth")?.addEventListener("click", () => {
+            showToast("Reauthentication initiated. Monitor logs for instructions.", "info");
+        });
+        document.getElementById("btn-test-rules")?.addEventListener("click", () => showToast("Rule test queued", "info"));
+        document.getElementById("btn-reset-stats")?.addEventListener("click", () => showToast("Channel statistics reset", "warning"));
+        document.getElementById("btn-export-yaml")?.addEventListener("click", () => showToast("Exporting YAML", "info"));
+        form?.addEventListener("submit", submitConfig);
+        
+        // Initialize Bootstrap tooltips
+        const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+        const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+        
+        // Handle Save Scoring button
+        document.getElementById("btn-save-scoring")?.addEventListener("click", async () => {
+            const button = document.getElementById("btn-save-scoring");
+            const originalText = button.innerHTML;
+            
+            try {
+                button.disabled = true;
+                button.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Applying...';
+                
+                const payload = collectPayload();
+                const response = await fetch(saveEndpoint, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
+                
+                if (!response.ok) {
+                    throw new Error("Save failed");
+                }
+                
+                showToast("Settings saved successfully", "success");
+                
+                // Restart sentinel container
+                try {
+                    const restartResponse = await fetch("{{ url_for('api_restart_sentinel') }}", {
+                        method: "POST",
+                    });
+                    
+                    if (restartResponse.ok) {
+                        showToast("Sentinel container is restarting...", "info");
+                    } else {
+                        showToast("Settings saved but sentinel restart failed. Restart manually.", "warning");
+                    }
+                } catch (restartError) {
+                    console.error("Restart error:", restartError);
+                    showToast("Settings saved but sentinel restart failed. Restart manually.", "warning");
+                }
+                
+            } catch (error) {
+                console.error(error);
+                showToast("Failed to save settings", "error");
+            } finally {
+                button.disabled = false;
+                button.innerHTML = originalText;
+            }
+        });
+        
+        // Handle Save Alerts button
+        document.getElementById("btn-save-alerts")?.addEventListener("click", async () => {
+            const button = document.getElementById("btn-save-alerts");
+            const originalText = button.innerHTML;
+            
+            try {
+                button.disabled = true;
+                button.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Applying...';
+                
+                const payload = collectPayload();
+                const response = await fetch(saveEndpoint, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
+                
+                if (!response.ok) {
+                    throw new Error("Save failed");
+                }
+                
+                showToast("Settings saved successfully", "success");
+                
+                // Restart sentinel container
+                try {
+                    const restartResponse = await fetch("{{ url_for('api_restart_sentinel') }}", {
+                        method: "POST",
+                    });
+                    
+                    if (restartResponse.ok) {
+                        showToast("Sentinel container is restarting...", "info");
+                    } else {
+                        showToast("Settings saved but sentinel restart failed. Restart manually.", "warning");
+                    }
+                } catch (restartError) {
+                    console.error("Restart error:", restartError);
+                    showToast("Settings saved but sentinel restart failed. Restart manually.", "warning");
+                }
+                
+            } catch (error) {
+                console.error(error);
+                showToast("Failed to save settings", "error");
+            } finally {
+                button.disabled = false;
+                button.innerHTML = originalText;
+            }
+        });
+    });
+    
+    async function loadCurrentConfig() {
+        try {
+            const response = await fetch("{{ url_for('api_config_current') }}");
+            if (!response.ok) {
+                throw new Error("Failed to load configuration");
+            }
+            
+            const config = await response.json();
+            
+            // Populate Telegram Account fields
+            if (config.telegram) {
+                const apiIdInput = document.getElementById("api-id");
+                const apiHashInput = document.getElementById("api-hash");
+                const phoneInput = document.getElementById("phone-number");
+                
+                if (apiIdInput && config.telegram.api_id) {
+                    apiIdInput.value = config.telegram.api_id;
+                }
+                if (apiHashInput && config.telegram.api_hash) {
+                    apiHashInput.value = config.telegram.api_hash;
+                }
+                if (phoneInput && config.telegram.phone_number) {
+                    phoneInput.value = config.telegram.phone_number;
+                }
+            }
+            
+            // Populate Alerts & Notifications fields
+            if (config.alerts) {
+                const alertModeSelect = document.getElementById("alert-mode");
+                const alertChannelInput = document.getElementById("alert-channel");
+                
+                if (alertModeSelect && config.alerts.mode) {
+                    alertModeSelect.value = config.alerts.mode;
+                }
+                if (alertChannelInput && config.alerts.target_channel) {
+                    alertChannelInput.value = config.alerts.target_channel;
+                }
+            }
+            
+            // Populate Digest fields
+            if (config.digest) {
+                const digestTopInput = document.getElementById("digest-top");
+                
+                if (digestTopInput && config.digest.top_n) {
+                    digestTopInput.value = config.digest.top_n;
+                }
+                
+                // Set digest frequency based on hourly/daily flags
+                const digestFrequencySelect = document.getElementById("digest-frequency");
+                if (digestFrequencySelect) {
+                    // Default to hourly if config.digest doesn't exist or both are false
+                    if (!config.digest) {
+                        digestFrequencySelect.value = "hourly";
+                    } else if (config.digest.hourly && config.digest.daily) {
+                        digestFrequencySelect.value = "both";
+                    } else if (config.digest.hourly) {
+                        digestFrequencySelect.value = "hourly";
+                    } else if (config.digest.daily) {
+                        digestFrequencySelect.value = "daily";
+                    } else {
+                        // Default to hourly instead of none
+                        digestFrequencySelect.value = "hourly";
+                    }
+                }
+            }
+            
+            // Populate Redis fields
+            if (config.redis) {
+                const redisHostInput = document.getElementById("redis-host");
+                const redisPortInput = document.getElementById("redis-port");
+                
+                if (redisHostInput && config.redis.host) {
+                    redisHostInput.value = config.redis.host;
+                }
+                if (redisPortInput && config.redis.port) {
+                    redisPortInput.value = config.redis.port;
+                }
+            }
+            
+            // Populate Semantic fields
+            if (config.semantic) {
+                const embeddingsModelInput = document.getElementById("embeddings-model");
+                const similarityThresholdInput = document.getElementById("similarity-threshold");
+                const similarityValueSpan = document.getElementById("similarity-value");
+                
+                if (embeddingsModelInput && config.semantic.embeddings_model) {
+                    embeddingsModelInput.value = config.semantic.embeddings_model;
+                }
+                if (similarityThresholdInput && config.semantic.similarity_threshold !== undefined) {
+                    similarityThresholdInput.value = config.semantic.similarity_threshold;
+                    if (similarityValueSpan) {
+                        similarityValueSpan.textContent = config.semantic.similarity_threshold.toFixed(2);
+                    }
+                }
+            }
+            
+            // Populate Database URI
+            if (config.database_uri) {
+                const databaseUriInput = document.getElementById("database-uri");
+                if (databaseUriInput) {
+                    databaseUriInput.value = config.database_uri;
+                }
+            }
+            
+        } catch (error) {
+            console.error("Failed to load configuration:", error);
+            showToast("Could not load current configuration", "error");
+        }
+    }
+    
+    // Handle Add Channels Modal
+    let availableChats = [];
+    
+    document.addEventListener("DOMContentLoaded", () => {
+        const addChannelsModal = document.getElementById("addChannelsModal");
+        
+        if (addChannelsModal) {
+            addChannelsModal.addEventListener("show.bs.modal", async () => {
+                // Reset modal state
+                document.getElementById("channels-loading").classList.remove("d-none");
+                document.getElementById("channels-error").classList.add("d-none");
+                document.getElementById("channels-list").classList.add("d-none");
+                document.getElementById("btn-add-selected-channels").disabled = true;
+                
+                try {
+                    const response = await fetch("{{ url_for('api_telegram_chats') }}");
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}));
+                        throw new Error(errorData.message || "Failed to fetch channels");
+                    }
+                    
+                    const data = await response.json();
+                    availableChats = data.chats || [];
+                    
+                    if (availableChats.length === 0) {
+                        throw new Error("No channels found. Make sure you have joined some channels or groups.");
+                    }
+                    
+                    // Populate checkboxes
+                    renderChannelCheckboxes(availableChats);
+                    
+                    document.getElementById("channels-loading").classList.add("d-none");
+                    document.getElementById("channels-list").classList.remove("d-none");
+                    
+                } catch (error) {
+                    console.error("Failed to load channels:", error);
+                    document.getElementById("channels-loading").classList.add("d-none");
+                    const errorDiv = document.getElementById("channels-error");
+                    errorDiv.textContent = error.message || "Could not load channels from Telegram";
+                    errorDiv.classList.remove("d-none");
+                }
+            });
+        }
+        
+        // Handle checkbox changes
+        document.getElementById("channels-checkboxes")?.addEventListener("change", () => {
+            const checkedBoxes = document.querySelectorAll("#channels-checkboxes input[type='checkbox']:checked");
+            document.getElementById("btn-add-selected-channels").disabled = checkedBoxes.length === 0;
+        });
+        
+        // Handle add selected channels
+        document.getElementById("btn-add-selected-channels")?.addEventListener("click", async () => {
+            const checkedBoxes = document.querySelectorAll("#channels-checkboxes input[type='checkbox']:checked");
+            const selectedChannels = Array.from(checkedBoxes).map(checkbox => {
+                const chatId = parseInt(checkbox.value, 10);
+                const chat = availableChats.find(c => c.id === chatId);
+                return chat ? { id: chat.id, name: chat.name } : null;
+            }).filter(Boolean);
+            
+            if (selectedChannels.length === 0) {
+                showToast("No channels selected", "warning");
+                return;
+            }
+            
+            try {
+                const response = await fetch("{{ url_for('api_config_channels_add') }}", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ channels: selectedChannels }),
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.message || "Failed to add channels");
+                }
+                
+                const result = await response.json();
+                showToast(`Successfully added ${result.added} channel(s) to configuration`, "success");
+                
+                // Close modal
+                const modal = bootstrap.Modal.getInstance(document.getElementById("addChannelsModal"));
+                if (modal) {
+                    modal.hide();
+                }
+                
+                // Reload page to show new channels
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
+                
+            } catch (error) {
+                console.error("Failed to add channels:", error);
+                showToast(error.message || "Could not add channels", "error");
+            }
+        });
+    });
+    
+    function renderChannelCheckboxes(chats) {
+        const container = document.getElementById("channels-checkboxes");
+        if (!container) return;
+        
+        container.innerHTML = "";
+        
+        // Sort by name
+        const sortedChats = [...chats].sort((a, b) => a.name.localeCompare(b.name));
+        
+        sortedChats.forEach(chat => {
+            const div = document.createElement("div");
+            div.className = "list-group-item";
+            
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.className = "form-check-input me-2";
+            checkbox.id = `chat-${chat.id}`;
+            checkbox.value = chat.id;
+            
+            const label = document.createElement("label");
+            label.className = "form-check-label d-flex justify-content-between align-items-center w-100";
+            label.htmlFor = `chat-${chat.id}`;
+            label.style.cursor = "pointer";
+            
+            const nameSpan = document.createElement("span");
+            nameSpan.textContent = chat.name;
+            
+            const badgeSpan = document.createElement("span");
+            badgeSpan.className = `badge bg-${chat.type === 'channel' ? 'primary' : chat.type === 'supergroup' ? 'info' : 'secondary'}`;
+            badgeSpan.textContent = chat.type;
+            
+            label.appendChild(nameSpan);
+            label.appendChild(badgeSpan);
+            
+            div.appendChild(checkbox);
+            div.appendChild(label);
+            container.appendChild(div);
+        });
+    }
+    
+    // Handle copy chat ID to clipboard
+    document.addEventListener("DOMContentLoaded", () => {
+        document.body.addEventListener("click", (e) => {
+            const copyButton = e.target.closest(".copy-chat-id");
+            if (copyButton) {
+                const chatId = copyButton.dataset.chatId;
+                
+                // Use modern clipboard API
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(chatId)
+                        .then(() => {
+                            // Visual feedback
+                            const originalHTML = copyButton.innerHTML;
+                            copyButton.innerHTML = `
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-check" viewBox="0 0 16 16">
+                                    <path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425z"/>
+                                </svg>
+                            `;
+                            
+                            setTimeout(() => {
+                                copyButton.innerHTML = originalHTML;
+                            }, 2000);
+                            
+                            showToast(`Chat ID ${chatId} copied to clipboard`, "success");
+                        })
+                        .catch((err) => {
+                            console.error("Failed to copy:", err);
+                            showToast("Failed to copy to clipboard", "error");
+                        });
+                } else {
+                    // Fallback for older browsers
+                    const textArea = document.createElement("textarea");
+                    textArea.value = chatId;
+                    textArea.style.position = "fixed";
+                    textArea.style.left = "-999999px";
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    
+                    try {
+                        document.execCommand("copy");
+                        showToast(`Chat ID ${chatId} copied to clipboard`, "success");
+                    } catch (err) {
+                        console.error("Fallback copy failed:", err);
+                        showToast("Failed to copy to clipboard", "error");
+                    }
+                    
+                    document.body.removeChild(textArea);
+                }
+            }
+        });
+    });
+    
+    // Handle delete channel
+    document.addEventListener("DOMContentLoaded", () => {
+        document.body.addEventListener("click", (e) => {
+            const deleteButton = e.target.closest(".delete-channel");
+            if (deleteButton) {
+                const chatId = deleteButton.dataset.chatId;
+                const chatName = deleteButton.dataset.chatName;
+                
+                // Confirm deletion
+                if (confirm(`Are you sure you want to delete "${chatName}" (ID: ${chatId})?\n\nThis will remove the channel from monitoring and reload the sentinel container.`)) {
+                    // Disable button during deletion
+                    deleteButton.disabled = true;
+                    deleteButton.innerHTML = `
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    `;
+                    
+                    fetch(`/api/config/channels/${chatId}`, {
+                        method: "DELETE",
+                    })
+                        .then(response => {
+                            if (!response.ok) {
+                                return response.json().then(data => {
+                                    throw new Error(data.message || "Failed to delete channel");
+                                });
+                            }
+                            return response.json();
+                        })
+                        .then(data => {
+                            showToast(`Channel "${chatName}" deleted successfully`, "success");
+                            
+                            // Reload page to show updated channels
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 1500);
+                        })
+                        .catch(error => {
+                            console.error("Failed to delete channel:", error);
+                            showToast(error.message || "Could not delete channel", "error");
+                            
+                            // Re-enable button
+                            deleteButton.disabled = false;
+                            deleteButton.innerHTML = `
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
+                                    <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                                    <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+                                </svg>
+                            `;
+                        });
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}

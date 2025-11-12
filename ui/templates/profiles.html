@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+{% block title %}Profiles · TG Sentinel{% endblock %}
+
+{% block content %}
+<section class="row g-4 mb-4">
+    <div class="col-12 col-xl-6">
+        <article class="card h-100" aria-labelledby="profile-editor-heading">
+            <div class="card-header">
+                <h1 class="card-title mb-0" id="profile-editor-heading">Interest Profile Editor</h1>
+            </div>
+            <div class="card-body">
+                <form id="profile-form" class="d-grid gap-3" novalidate>
+                    <div>
+                        <label class="form-label" for="topic-name">Topic name</label>
+                        <input class="form-control" id="topic-name" name="topic" type="text" placeholder="Algorand core dev" required>
+                    </div>
+                    <div>
+                        <label class="form-label" for="positive-samples">Positive examples</label>
+                        <textarea class="form-control" id="positive-samples" name="positive" rows="6" placeholder="Paste messages that should alert" required></textarea>
+                        <small class="form-text">One example per line.</small>
+                    </div>
+                    <div>
+                        <label class="form-label" for="negative-samples">Negative examples</label>
+                        <textarea class="form-control" id="negative-samples" name="negative" rows="6" placeholder="Paste noise or low-signal content"></textarea>
+                    </div>
+                    <div class="d-flex gap-3">
+                        <button class="btn btn-outline-primary" type="button" id="btn-train-profile">Train local model</button>
+                        <button class="btn btn-outline-primary" type="button" id="btn-reset-profile">Clear form</button>
+                    </div>
+                </form>
+            </div>
+        </article>
+    </div>
+    <div class="col-12 col-xl-6">
+        <article class="card h-100" aria-labelledby="profile-tester-heading">
+            <div class="card-header">
+                <h2 class="card-title mb-0" id="profile-tester-heading">Similarity Tester</h2>
+            </div>
+            <div class="card-body d-grid gap-3">
+                <div>
+                    <label class="form-label" for="test-phrase">Test phrase</label>
+                    <input class="form-control" id="test-phrase" type="text" placeholder="Potential exploit in governance contract">
+                </div>
+                <div>
+                    <label class="form-label" for="profile-select">Compare against</label>
+                    <select class="form-select" id="profile-select">
+                        {%- for interest in interests %}
+                        <option value="{{ interest }}">{{ interest }}</option>
+                        {%- else %}
+                        <option value="default">Default profile</option>
+                        {%- endfor %}
+                    </select>
+                </div>
+                <div class="d-flex gap-3 align-items-center">
+                    <button class="btn btn-outline-primary" type="button" id="btn-run-test">Run similarity test</button>
+                    <p class="mb-0" id="test-result" aria-live="polite">Score: --</p>
+                </div>
+                <div class="logs-viewer" aria-live="polite" id="profile-log">
+                    <pre class="mb-0 text-muted">Use the editor to build focused interest profiles that drive semantic scoring.</pre>
+                </div>
+                <div class="d-flex gap-3">
+                    <button class="btn btn-outline-primary btn-sm" type="button" id="btn-import-profiles">Import interests.yml</button>
+                    <button class="btn btn-outline-primary btn-sm" type="button" id="btn-export-profiles">Export interests.yml</button>
+                </div>
+            </div>
+        </article>
+    </div>
+</section>
+
+<section class="card" aria-labelledby="existing-profiles-heading">
+    <div class="card-header">
+        <h2 class="card-title mb-0" id="existing-profiles-heading">Existing Profiles</h2>
+    </div>
+    <div class="card-body">
+        <div class="row g-3" id="profile-list">
+            {%- for interest in interests %}
+            <div class="col-12 col-md-6 col-xl-3">
+                <article class="card h-100 glass-effect">
+                    <div class="card-body">
+                        <h3 class="h5">{{ interest }}</h3>
+                        <p class="text-muted mb-0">Tracked interest focus</p>
+                    </div>
+                </article>
+            </div>
+            {%- else %}
+            <p class="text-muted">No custom profiles yet. Create one using the editor above.</p>
+            {%- endfor %}
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    const trainEndpoint = "{{ url_for('api_profiles_train') }}";
+    const testEndpoint = "{{ url_for('api_profiles_test') }}";
+    const exportEndpoint = "{{ url_for('api_export_profiles') }}";
+
+    async function queueTraining() {
+        const topic = document.getElementById("topic-name").value.trim();
+        if (!topic) {
+            showToast("Topic name required", "warning");
+            return;
+        }
+        try {
+            const response = await fetch(trainEndpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ topic }),
+            });
+            if (!response.ok) {
+                const statusText = response.statusText || "Unknown error";
+                console.error("Training request failed", response.status, statusText);
+                showToast(`Unable to queue training: ${statusText}`, "error");
+                return;
+            }
+            const payload = await response.json();
+            const queuedTopic = payload && typeof payload.topic === "string" ? payload.topic : topic;
+            if (!payload || typeof payload.topic !== "string") {
+                console.warn("Training payload missing topic", payload);
+            }
+            appendLog(`Training queued for: ${queuedTopic}`);
+            showToast("Training job queued", "success");
+        } catch (error) {
+            console.error("Training request error", error);
+            const message = error instanceof Error ? error.message : "unexpected error";
+            showToast(`Unable to queue training: ${message}`, "error");
+        }
+    }
+
+    async function runSimilarityTest() {
+        const sample = document.getElementById("test-phrase").value.trim();
+        if (!sample) {
+            showToast("Enter a phrase to test", "warning");
+            return;
+        }
+        
+        // Validate interest profile selection
+        const selectEl = document.getElementById("profile-select");
+        if (!selectEl) {
+            console.error("Profile select element not found");
+            showToast("Profile selector unavailable", "error");
+            return;
+        }
+        
+        const interest = selectEl.value?.trim();
+        if (!interest) {
+            showToast("Select an interest profile", "warning");
+            return;
+        }
+        
+        try {
+            const response = await fetch(testEndpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ sample, interest }),
+            });
+            if (!response.ok) {
+                throw new Error("Test failed");
+            }
+            const payload = await response.json();
+            if (typeof payload !== "object" || payload === null) {
+                console.warn("Unexpected similarity payload", payload);
+                throw new Error("Malformed response");
+            }
+            const score = Number(payload.score);
+            if (!Number.isFinite(score)) {
+                console.warn("Similarity score missing or invalid", payload);
+                throw new Error("Invalid score");
+            }
+            
+            // Detect and warn about out-of-range scores before clamping
+            if (score < 0 || score > 1) {
+                console.warn(
+                    `Similarity score out of range [0,1]: ${score} for sample "${sample}" against interest "${interest}"`
+                );
+            }
+            
+            const clamped = Math.max(0, Math.min(score, 1));
+            const formatted = clamped.toFixed(2);
+            const resultEl = document.getElementById("test-result");
+            if (resultEl) {
+                resultEl.textContent = `Score: ${formatted}`;
+            }
+            appendLog(`Similarity test for "${sample}" → ${formatted}`);
+        } catch (error) {
+            console.error(error);
+            showToast("Unable to compute similarity", "error");
+        }
+    }
+
+    function appendLog(message) {
+        const log = document.getElementById("profile-log");
+        if (!log) {
+            return;
+        }
+        const entry = document.createElement("div");
+        entry.className = "log-entry";
+        const time = document.createElement("span");
+        time.className = "log-time";
+        time.textContent = new Date().toLocaleTimeString();
+
+        const spacer = document.createTextNode(" ");
+
+        const msg = document.createElement("span");
+        msg.className = "log-message";
+        msg.textContent = String(message ?? "");
+
+        entry.appendChild(time);
+        entry.appendChild(spacer);
+        entry.appendChild(msg);
+        log.appendChild(entry);
+        log.scrollTop = log.scrollHeight;
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        document.getElementById("btn-train-profile")?.addEventListener("click", queueTraining);
+        document.getElementById("btn-run-test")?.addEventListener("click", runSimilarityTest);
+        document.getElementById("btn-reset-profile")?.addEventListener("click", () => {
+            document.getElementById("profile-form").reset();
+            appendLog("Profile form reset");
+        });
+        document.getElementById("btn-import-profiles")?.addEventListener("click", () => showToast("Import not yet implemented", "info"));
+        document.getElementById("btn-export-profiles")?.addEventListener("click", async () => {
+            try {
+                appendLog("Exporting interests...");
+                const response = await fetch(exportEndpoint);
+                if (!response.ok) {
+                    throw new Error("Export failed");
+                }
+                
+                // Download the file
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `interests_${new Date().toISOString().replace(/[:.]/g, '-')}.yml`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                appendLog("Interests exported successfully");
+                showToast("Interests exported", "success");
+            } catch (error) {
+                console.error(error);
+                appendLog("Export failed");
+                showToast("Export failed. Check console for details.", "error");
+            }
+        });
+    });
+</script>
+{% endblock %}

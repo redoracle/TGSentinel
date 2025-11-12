@@ -1,8 +1,10 @@
 """Unit tests for semantic module."""
 
-import pytest
 from unittest.mock import MagicMock, patch
-from tgsentinel.semantic import load_interests, score_text, _try_import_model
+
+import pytest
+
+from tgsentinel.semantic import _try_import_model, load_interests, score_text
 
 
 class TestTryImportModel:
@@ -55,6 +57,7 @@ class TestLoadInterests:
     def test_load_interests_with_model(self, mock_model):
         """Test loading interests when model is available."""
         import numpy as np
+
         import tgsentinel.semantic as sem
 
         # Setup mock model
@@ -92,6 +95,7 @@ class TestScoreText:
     def test_score_text_with_model(self, mock_interest_vec, mock_model):
         """Test scoring text when model is available."""
         import numpy as np
+
         import tgsentinel.semantic as sem
 
         # Setup mocks
@@ -148,6 +152,7 @@ class TestScoreText:
     def test_score_text_similarity_range(self, mock_model):
         """Test that similarity scores are in expected range."""
         import numpy as np
+
         import tgsentinel.semantic as sem
 
         # Setup mocks with normalized vectors
@@ -165,6 +170,7 @@ class TestScoreText:
     def test_score_text_orthogonal_vectors(self, mock_model):
         """Test scoring with orthogonal vectors."""
         import numpy as np
+
         import tgsentinel.semantic as sem
 
         # Setup mocks with orthogonal vectors

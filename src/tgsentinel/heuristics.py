@@ -1,4 +1,5 @@
-import re, hashlib
+import hashlib
+import re
 from dataclasses import dataclass
 
 

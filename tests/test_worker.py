@@ -10,9 +10,9 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy import text as sql_text
 
-from tgsentinel.config import AppCfg, AlertsCfg, DigestCfg, ChannelRule
-from tgsentinel.heuristics import HeuristicResult
 import tgsentinel.worker as worker
+from tgsentinel.config import AlertsCfg, AppCfg, ChannelRule, DigestCfg
+from tgsentinel.heuristics import HeuristicResult
 
 
 def _make_cfg(

@@ -1,12 +1,13 @@
 """Test configuration and shared fixtures for TG Sentinel tests."""
 
-import pytest
-import tempfile
 import os
+import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
-from sqlalchemy import create_engine
+
+import pytest
 from redis import Redis
+from sqlalchemy import create_engine
 
 
 @pytest.fixture

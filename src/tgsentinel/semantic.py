@@ -1,5 +1,7 @@
-import logging, os
-from typing import Optional, List
+import logging
+import os
+from typing import List, Optional
+
 import numpy as np
 
 log = logging.getLogger(__name__)

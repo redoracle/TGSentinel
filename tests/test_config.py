@@ -1,13 +1,15 @@
 """Unit tests for config module."""
 
-import pytest
 import os
+
+import pytest
+
 from tgsentinel.config import (
-    load_config,
+    AlertsCfg,
     AppCfg,
     ChannelRule,
-    AlertsCfg,
     DigestCfg,
+    load_config,
 )
 
 
@@ -39,8 +41,14 @@ class TestLoadConfig:
         assert channel.reply_threshold == 3
         assert channel.rate_limit_per_hour == 10
 
-    def test_load_config_alerts(self, temp_config_file, test_env_vars):
+    def test_load_config_alerts(self, temp_config_file, test_env_vars, monkeypatch):
         """Test loading alerts configuration."""
+        # Clear env overrides to test defaults from YAML
+        monkeypatch.delenv("ALERT_MODE", raising=False)
+        monkeypatch.delenv("ALERT_CHANNEL", raising=False)
+        monkeypatch.delenv("HOURLY_DIGEST", raising=False)
+        monkeypatch.delenv("DAILY_DIGEST", raising=False)
+
         cfg = load_config(temp_config_file)
 
         assert cfg.alerts.mode == "dm"
@@ -185,7 +193,9 @@ class TestDigestCfg:
         digest = DigestCfg()
 
         assert digest.hourly is True
-        assert digest.daily is True
+        assert (
+            digest.daily is False
+        )  # Changed default to False (hourly only by default)
         assert digest.top_n == 10
 
     def test_digest_cfg_custom_values(self):

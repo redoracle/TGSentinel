@@ -1,0 +1,387 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · TG Sentinel{% endblock %}
+
+{% block content %}
+<section class="row g-4 mb-4">
+    <div class="col-12 col-md-3">
+        <div class="stat-card h-100" aria-labelledby="metric-ingested">
+            <div class="card-body">
+                <p class="card-text text-uppercase" id="metric-ingested-label">Messages Ingested</p>
+                <h3 class="card-title mb-1" id="metric-ingested">{{ summary.messages_ingested | default(0) }}</h3>
+                <small>Last 24 hours</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-3">
+        <div class="stat-card h-100" aria-labelledby="metric-alerts">
+            <div class="card-body">
+                <p class="card-text text-uppercase" id="metric-alerts-label">Alerts Sent</p>
+                <h3 class="card-title mb-1" id="metric-alerts">{{ summary.alerts_sent | default(0) }}</h3>
+                <small>Last 24 hours</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-3">
+        <div class="stat-card h-100" aria-labelledby="metric-importance">
+            <div class="card-body">
+                <p class="card-text text-uppercase" id="metric-importance-label">Avg Importance</p>
+                <h3 class="card-title mb-1" id="metric-importance">{{ summary.avg_importance | default(0.0) }}</h3>
+                <small>Score range 0-1</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-3">
+        <div class="stat-card h-100" aria-labelledby="metric-feedback">
+            <div class="card-body">
+                <p class="card-text text-uppercase" id="metric-feedback-label">Feedback Accuracy</p>
+                <h3 class="card-title mb-1" id="metric-feedback">{{ summary.feedback_accuracy | default(0.0) }}%</h3>
+                <small>👍 versus 👎 responses</small>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="row g-4 mb-4">
+    <div class="col-12 col-xl-6">
+        <article class="card h-100" aria-labelledby="system-health-heading">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="card-title mb-0" id="system-health-heading">System Health</h2>
+                    <small class="text-muted">Real-time infrastructure pulse</small>
+                </div>
+                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-health">Refresh</button>
+            </div>
+            <div class="card-body">
+                <div class="row g-4">
+                    <div class="col-6">
+                        <div class="glass-effect p-3 rounded" aria-live="polite">
+                            <p class="text-muted mb-1">Redis stream depth</p>
+                            <p class="fs-4 fw-bold mb-0" id="health-redis-depth">{{ health.redis_stream_depth | default(0) }}</p>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="glass-effect p-3 rounded" aria-live="polite">
+                            <p class="text-muted mb-1">Database size</p>
+                            <p class="fs-4 fw-bold mb-0" id="health-db-size">{{ health.database_size_mb | default(0.0) }}&nbsp;MB</p>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="glass-effect p-3 rounded" aria-live="polite">
+                            <p class="text-muted mb-1">CPU usage</p>
+                            <p class="fs-4 fw-bold mb-0" id="health-cpu">{{ health.cpu_percent | default('N/A') }}</p>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="glass-effect p-3 rounded" aria-live="polite">
+                            <p class="text-muted mb-1">Memory usage</p>
+                            <p class="fs-4 fw-bold mb-0" id="health-memory">{{ health.memory_mb | default('N/A') }}</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <p class="text-muted mb-1">Last checkpoint</p>
+                    <p class="mb-0" id="health-checkpoint">{{ health.last_checkpoint | default('None detected') }}</p>
+                </div>
+            </div>
+        </article>
+    </div>
+    <div class="col-12 col-xl-6">
+        <article class="card h-100" aria-labelledby="live-activity-heading">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="card-title mb-0" id="live-activity-heading">Live Activity Feed</h2>
+                    <small class="text-muted">Most recent heuristic hits</small>
+                </div>
+                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-activity">Refresh</button>
+            </div>
+            <div class="card-body">
+                <ul class="list-unstyled mb-0" id="activity-feed" aria-live="polite">
+                    {%- for entry in activity %}
+                    <li class="activity-item mb-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <p class="mb-1 fw-semibold">{{ entry.chat_name }}</p>
+                                <p class="mb-0 text-muted small">{{ entry.sender }} · {{ entry.timestamp }}</p>
+                            </div>
+                            <span class="badge badge-success">{{ entry.importance }}</span>
+                        </div>
+                        <p class="mt-2 mb-1">{{ entry.message }}</p>
+                        <div class="d-flex flex-wrap gap-2">
+                            {% for tag in entry.tags %}
+                            <span class="badge badge-info text-uppercase">{{ tag }}</span>
+                            {%- endfor %}
+                        </div>
+                    </li>
+                    {%- else %}
+                    <li class="text-muted">No activity yet. Waiting for incoming events.</li>
+                    {%- endfor %}
+                </ul>
+            </div>
+        </article>
+    </div>
+</section>
+
+<section class="card" aria-labelledby="alerts-overview-heading">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+            <h2 class="card-title mb-0" id="alerts-overview-heading">Latest Alerts</h2>
+            <small class="text-muted">Digest of the most recent escalations</small>
+        </div>
+        <a class="btn btn-outline-primary btn-sm" href="{{ url_for('alerts_view') }}">View all</a>
+    </div>
+    <div class="card-body table-responsive">
+        <table class="table align-middle mb-0" aria-describedby="alerts-overview-heading">
+            <thead>
+                <tr>
+                    <th scope="col">Channel</th>
+                    <th scope="col">Sender</th>
+                    <th scope="col">Excerpt</th>
+                    <th scope="col">Score</th>
+                    <th scope="col">Trigger</th>
+                    <th scope="col">Sent to</th>
+                    <th scope="col">Timestamp</th>
+                </tr>
+            </thead>
+            <tbody id="recent-alerts-body">
+                {%- for alert in recent_alerts %}
+                <tr>
+                    <td>{{ alert.chat_name }}</td>
+                    <td>{{ alert.sender or 'Unknown' }}</td>
+                    <td>{{ alert.excerpt }}</td>
+                    <td><span class="badge badge-danger">{{ '%.2f'|format(alert.score) }}</span></td>
+                    <td>{{ alert.trigger or 'N/A' }}</td>
+                    <td>{{ alert.sent_to }}</td>
+                    <td>{{ alert.created_at }}</td>
+                </tr>
+                {%- else %}
+                <tr>
+                    <td colspan="7" class="text-center text-muted">No alerts have been sent yet.</td>
+                </tr>
+                {%- endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    const summaryUrl = "{{ url_for('api_dashboard_summary') }}";
+    const healthUrl = "{{ url_for('api_system_health') }}";
+    const activityUrl = "{{ url_for('api_dashboard_activity') }}";
+    const alertsUrl = "{{ url_for('api_recent_alerts') }}";
+
+    async function updateSummary() {
+        try {
+            const response = await fetch(summaryUrl);
+            if (!response.ok) {
+                throw new Error("summary fetch failed");
+            }
+            const data = await response.json();
+            document.getElementById("metric-ingested").textContent = data.messages_ingested ?? 0;
+            document.getElementById("metric-alerts").textContent = data.alerts_sent ?? 0;
+            document.getElementById("metric-importance").textContent = (data.avg_importance ?? 0).toFixed(2);
+            document.getElementById("metric-feedback").textContent = `${(data.feedback_accuracy ?? 0).toFixed(1)}%`;
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    async function updateHealth() {
+        try {
+            const response = await fetch(healthUrl);
+            if (!response.ok) {
+                throw new Error("health fetch failed");
+            }
+            const data = await response.json();
+            document.getElementById("health-redis-depth").textContent = data.redis_stream_depth ?? 0;
+            document.getElementById("health-db-size").textContent = `${data.database_size_mb ?? 0} MB`;
+            document.getElementById("health-cpu").textContent = `${data.cpu_percent ?? "N/A"}${data.cpu_percent != null ? "%" : ""}`;
+            document.getElementById("health-memory").textContent = `${data.memory_mb ?? "N/A"}${data.memory_mb != null ? " MB" : ""}`;
+            document.getElementById("health-checkpoint").textContent = data.last_checkpoint || "None detected";
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    function renderActivity(entries) {
+        const container = document.getElementById("activity-feed");
+        if (!container) {
+            return;
+        }
+        // Clear existing content
+        container.innerHTML = "";
+        
+        if (!entries.length) {
+            const emptyItem = document.createElement("li");
+            emptyItem.className = "text-muted";
+            emptyItem.textContent = "No activity yet. Waiting for incoming events.";
+            container.appendChild(emptyItem);
+            return;
+        }
+        
+        // Build activity items using DOM APIs to prevent XSS
+        entries.forEach((entry) => {
+            const listItem = document.createElement("li");
+            listItem.className = "activity-item mb-3";
+            
+            // Create header div with chat name, sender, timestamp, and importance
+            const headerDiv = document.createElement("div");
+            headerDiv.className = "d-flex justify-content-between align-items-center";
+            
+            const leftDiv = document.createElement("div");
+            
+            const chatNameP = document.createElement("p");
+            chatNameP.className = "mb-1 fw-semibold";
+            chatNameP.textContent = entry.chat_name || "";
+            leftDiv.appendChild(chatNameP);
+            
+            const metaP = document.createElement("p");
+            metaP.className = "mb-0 text-muted small";
+            metaP.textContent = `${entry.sender || ""} · ${entry.timestamp || ""}`;
+            leftDiv.appendChild(metaP);
+            
+            headerDiv.appendChild(leftDiv);
+            
+            const importanceBadge = document.createElement("span");
+            importanceBadge.className = "badge badge-success";
+            importanceBadge.textContent = entry.importance || "";
+            headerDiv.appendChild(importanceBadge);
+            
+            listItem.appendChild(headerDiv);
+            
+            // Message paragraph
+            const messageP = document.createElement("p");
+            messageP.className = "mt-2 mb-1";
+            messageP.textContent = entry.message || "";
+            listItem.appendChild(messageP);
+            
+            // Tags div
+            const tagsDiv = document.createElement("div");
+            tagsDiv.className = "d-flex flex-wrap gap-2";
+            
+            (entry.tags || []).forEach((tag) => {
+                const tagSpan = document.createElement("span");
+                tagSpan.className = "badge badge-info text-uppercase";
+                tagSpan.textContent = tag;
+                tagsDiv.appendChild(tagSpan);
+            });
+            
+            listItem.appendChild(tagsDiv);
+            container.appendChild(listItem);
+        });
+    }
+
+    async function updateActivity() {
+        try {
+            const response = await fetch(`${activityUrl}?limit=10`);
+            if (!response.ok) {
+                throw new Error("activity fetch failed");
+            }
+            const data = await response.json();
+            renderActivity(data.entries || []);
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    function renderAlerts(alerts) {
+        const body = document.getElementById("recent-alerts-body");
+        if (!body) {
+            return;
+        }
+        // Clear existing content
+        body.innerHTML = "";
+        
+        if (!alerts.length) {
+            const emptyRow = document.createElement("tr");
+            const emptyCell = document.createElement("td");
+            emptyCell.setAttribute("colspan", "7");
+            emptyCell.className = "text-center text-muted";
+            emptyCell.textContent = "No alerts available.";
+            emptyRow.appendChild(emptyCell);
+            body.appendChild(emptyRow);
+            return;
+        }
+        
+        // Build rows using DOM APIs to prevent XSS
+        alerts.slice(0, 10).forEach((alert) => {
+            const row = document.createElement("tr");
+            
+            // Chat name
+            const chatNameCell = document.createElement("td");
+            chatNameCell.textContent = alert.chat_name || "";
+            row.appendChild(chatNameCell);
+            
+            // Sender
+            const senderCell = document.createElement("td");
+            senderCell.textContent = alert.sender || "Unknown";
+            row.appendChild(senderCell);
+            
+            // Excerpt
+            const excerptCell = document.createElement("td");
+            excerptCell.textContent = alert.excerpt || "";
+            row.appendChild(excerptCell);
+            
+            // Score badge
+            const scoreCell = document.createElement("td");
+            const badge = document.createElement("span");
+            badge.className = "badge badge-danger";
+            badge.textContent = Number(alert.score || 0).toFixed(2);
+            scoreCell.appendChild(badge);
+            row.appendChild(scoreCell);
+            
+            // Trigger
+            const triggerCell = document.createElement("td");
+            triggerCell.textContent = alert.trigger || "N/A";
+            row.appendChild(triggerCell);
+            
+            // Sent to
+            const sentToCell = document.createElement("td");
+            sentToCell.textContent = alert.sent_to || "dm";
+            row.appendChild(sentToCell);
+            
+            // Created at
+            const createdAtCell = document.createElement("td");
+            createdAtCell.textContent = alert.created_at || "N/A";
+            row.appendChild(createdAtCell);
+            
+            body.appendChild(row);
+        });
+    }
+
+    async function updateAlerts() {
+        try {
+            const response = await fetch(`${alertsUrl}?limit=20`);
+            if (!response.ok) {
+                throw new Error("alerts fetch failed");
+            }
+            const data = await response.json();
+            renderAlerts(data.alerts || []);
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        document.getElementById("btn-refresh-health")?.addEventListener("click", updateHealth);
+        document.getElementById("btn-refresh-activity")?.addEventListener("click", updateActivity);
+
+        updateSummary();
+        updateHealth();
+        updateActivity();
+        updateAlerts();
+
+        setInterval(updateSummary, 60000);
+        setInterval(updateActivity, 45000);
+        setInterval(updateAlerts, 90000);
+
+        document.addEventListener("tgsentinel:dashboard-update", () => {
+            updateSummary();
+            updateHealth();
+            updateActivity();
+            updateAlerts();
+        });
+    });
+</script>
+{% endblock %}

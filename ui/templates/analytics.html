@@ -1,0 +1,395 @@
+{% extends "base.html" %}
+{% block title %}Analytics · TG Sentinel{% endblock %}
+
+{% block content %}
+<section class="row g-4 mb-4">
+    <div class="col-12 col-md-4">
+        <article class="stat-card h-100" aria-labelledby="metric-mpm">
+            <div class="card-body">
+                <p class="card-text text-uppercase">Messages per minute</p>
+                <h3 class="card-title mb-1" id="metric-mpm">0</h3>
+                <small>Rolling 60 minute window</small>
+            </div>
+        </article>
+    </div>
+    <div class="col-12 col-md-4">
+        <article class="stat-card h-100" aria-labelledby="metric-latency">
+            <div class="card-body">
+                <p class="card-text text-uppercase">Semantic latency</p>
+                <h3 class="card-title mb-1" id="metric-latency">0.000s</h3>
+                <small>Median inference time</small>
+            </div>
+        </article>
+    </div>
+    <div class="col-12 col-md-4">
+        <article class="stat-card h-100" aria-labelledby="metric-accuracy">
+            <div class="card-body">
+                <p class="card-text text-uppercase">Feedback accuracy</p>
+                <h3 class="card-title mb-1" id="metric-accuracy">{{ summary.feedback_accuracy | default(0.0) }}%</h3>
+                <small>👍 vs 👎 over 24h</small>
+            </div>
+        </article>
+    </div>
+</section>
+
+<section class="row g-4 mb-4">
+    <div class="col-12 col-xl-7">
+        <article class="card h-100" aria-labelledby="performance-chart-heading">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h2 class="card-title mb-0" id="performance-chart-heading">Performance Metrics</h2>
+                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-performance">Refresh</button>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="performance-chart" aria-label="Performance chart" role="img"></canvas>
+                </div>
+            </div>
+        </article>
+    </div>
+    <div class="col-12 col-xl-5">
+        <article class="card h-100" aria-labelledby="resource-utilisation-heading">
+            <div class="card-header">
+                <h2 class="card-title mb-0" id="resource-utilisation-heading">Resource Utilisation</h2>
+            </div>
+            <div class="card-body">
+                <ul class="list-unstyled mb-0" id="resource-list">
+                    <li class="mb-3">
+                        <p class="text-muted mb-1">CPU usage</p>
+                        <div class="progress resource-progress">
+                            <div class="progress-bar" id="cpu-progress" role="progressbar" aria-label="CPU usage" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">N/A</div>
+                        </div>
+                    </li>
+                    <li class="mb-3">
+                        <p class="text-muted mb-1">Memory (MB)</p>
+                        <div class="progress resource-progress">
+                            <div class="progress-bar bg-success" id="memory-progress" role="progressbar" aria-label="Memory usage" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">N/A</div>
+                        </div>
+                    </li>
+                    <li>
+                        <p class="text-muted mb-1">Redis depth</p>
+                        <p class="mb-0" id="resource-redis">0 entries</p>
+                    </li>
+                </ul>
+            </div>
+        </article>
+    </div>
+</section>
+
+<section class="row g-4 mb-4">
+    <div class="col-12 col-xl-6">
+        <article class="card h-100" aria-labelledby="keyword-heatmap-heading">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h2 class="card-title mb-0" id="keyword-heatmap-heading">Keyword Heatmap</h2>
+                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-keywords">Refresh</button>
+            </div>
+            <div class="card-body">
+                <div class="chart-container compact">
+                    <canvas id="keywords-chart" aria-label="Keyword heatmap" role="img"></canvas>
+                </div>
+            </div>
+        </article>
+    </div>
+    <div class="col-12 col-xl-6">
+        <article class="card h-100" aria-labelledby="channel-impact-heading">
+            <div class="card-header">
+                <h2 class="card-title mb-0" id="channel-impact-heading">Channel Impact</h2>
+            </div>
+            <div class="card-body">
+                <div class="chart-container compact">
+                    <canvas id="channel-chart" aria-label="Channel impact" role="img"></canvas>
+                </div>
+            </div>
+        </article>
+    </div>
+</section>
+
+<section class="card" aria-labelledby="anomaly-monitor-heading">
+    <div class="card-header">
+        <h2 class="card-title mb-0" id="anomaly-monitor-heading">Anomaly Monitor</h2>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table align-middle mb-0" id="anomaly-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Channel</th>
+                        <th scope="col">Signal</th>
+                        <th scope="col">Severity</th>
+                        <th scope="col">Detected</th>
+                        <th scope="col">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td colspan="5" class="text-center text-muted">No anomalies flagged.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    const metricsEndpoint = "{{ url_for('api_analytics_metrics') }}";
+    const keywordsEndpoint = "{{ url_for('api_analytics_keywords') }}";
+
+    let performanceChart;
+    let keywordChart;
+    let channelChart;
+
+    function ensureChart(ctx, config) {
+        if (!ctx) {
+            return null;
+        }
+        if (ctx._chartRef) {
+            ctx._chartRef.destroy();
+        }
+        ctx._chartRef = new Chart(ctx, config);
+        return ctx._chartRef;
+    }
+
+    async function refreshMetrics() {
+        try {
+            const response = await fetch(metricsEndpoint);
+            if (!response.ok) {
+                throw new Error("metrics fetch failed");
+            }
+            const payload = await response.json();
+            document.getElementById("metric-mpm").textContent = payload.messages_per_min ?? 0;
+            document.getElementById("metric-latency").textContent = `${(payload.semantic_latency ?? 0).toFixed(3)}s`;
+
+            const cpu = payload.cpu;
+            const memory = payload.memory;
+            
+            // Update progress bars with proper aria-valuenow for accessibility
+            const cpuProgress = document.getElementById("cpu-progress");
+            const memoryProgress = document.getElementById("memory-progress");
+            
+            if (cpu != null && cpu !== undefined) {
+                const cpuPercent = Math.round(Math.max(0, Math.min(cpu, 100)));
+                cpuProgress.style.width = `${Math.max(cpuPercent, 2)}%`; // Ensure at least 2% width for visibility
+                cpuProgress.setAttribute('aria-valuenow', String(cpuPercent));
+                cpuProgress.textContent = `${cpu.toFixed(1)}%`;
+            } else {
+                cpuProgress.style.width = '0%';
+                cpuProgress.setAttribute('aria-valuenow', '0');
+                cpuProgress.textContent = 'N/A';
+            }
+            
+            if (memory != null && memory !== undefined) {
+                // Format memory display
+                let memoryDisplay;
+                if (memory >= 1024) {
+                    // Show in GB if >= 1024 MB
+                    memoryDisplay = `${(memory / 1024).toFixed(2)} GB`;
+                } else if (memory >= 1) {
+                    // Show in MB with 1 decimal
+                    memoryDisplay = `${memory.toFixed(1)} MB`;
+                } else {
+                    // Show in MB with 2 decimals for very small values
+                    memoryDisplay = `${memory.toFixed(2)} MB`;
+                }
+                
+                // Assuming max 2GB for progress bar calculation
+                const memoryPercent = Math.round(Math.max(0, Math.min((memory / 2048) * 100, 100)));
+                memoryProgress.style.width = `${Math.max(memoryPercent, 2)}%`; // Ensure at least 2% width for visibility
+                memoryProgress.setAttribute('aria-valuenow', String(memoryPercent));
+                memoryProgress.textContent = memoryDisplay;
+            } else {
+                memoryProgress.style.width = '0%';
+                memoryProgress.setAttribute('aria-valuenow', '0');
+                memoryProgress.textContent = 'N/A';
+            }
+            
+            document.getElementById("resource-redis").textContent = `${payload.redis_stream_depth || 0} entries`;
+
+            const ctx = document.getElementById("performance-chart");
+            performanceChart = ensureChart(ctx, {
+                type: "line",
+                data: {
+                    labels: ["-5m", "-4m", "-3m", "-2m", "-1m", "now"],
+                    datasets: [
+                        {
+                            label: "Messages/min",
+                            data: [12, 18, 16, 19, 21, payload.messages_per_min || 0],
+                            borderColor: "#667eea",
+                            fill: false,
+                        },
+                        {
+                            label: "Latency (s)",
+                            data: [0.42, 0.38, 0.35, 0.4, 0.37, payload.semantic_latency || 0],
+                            borderColor: "#f5576c",
+                            fill: false,
+                        },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: true },
+                    },
+                    scales: {
+                        y: { beginAtZero: true },
+                    },
+                },
+            });
+        } catch (error) {
+            console.error(error);
+            showToast("Analytics metrics unavailable", "error");
+        }
+    }
+
+    async function refreshKeywords() {
+        try {
+            const response = await fetch(keywordsEndpoint);
+            if (!response.ok) {
+                throw new Error("keywords fetch failed");
+            }
+            const payload = await response.json();
+            const keywords = payload.keywords || [];
+            const labels = keywords.map((item) => item.keyword);
+            const values = keywords.map((item) => item.count);
+
+            // Generate colors dynamically to match the number of keywords
+            const basePalette = ["#667eea", "#764ba2", "#00f2fe", "#f5576c", "#feca57"];
+            const backgroundColor = values.map((_, index) => {
+                if (index < basePalette.length) {
+                    return basePalette[index];
+                }
+                // Generate additional colors using HSL
+                const hue = (index * 137.5) % 360; // Golden angle for better distribution
+                return `hsla(${hue}, 65%, 60%, 0.8)`;
+            });
+
+            const keywordsCtx = document.getElementById("keywords-chart");
+            keywordChart = ensureChart(keywordsCtx, {
+                type: "bar",
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: "Matches",
+                            data: values,
+                            backgroundColor: "rgba(102, 126, 234, 0.6)",
+                        },
+                    ],
+                },
+                options: {
+                    indexAxis: "y",
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                },
+            });
+
+            const channelCtx = document.getElementById("channel-chart");
+            channelChart = ensureChart(channelCtx, {
+                type: "doughnut",
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: "Keyword share",
+                            data: values,
+                            backgroundColor: backgroundColor,
+                        },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    aspectRatio: 1.5,
+                    layout: {
+                        padding: {
+                            top: 10,
+                            bottom: 10,
+                            left: 10,
+                            right: 10
+                        }
+                    },
+                    plugins: { 
+                        legend: { 
+                            position: "right",
+                            align: "center",
+                            labels: {
+                                boxWidth: 12,
+                                boxHeight: 12,
+                                padding: 8,
+                                color: '#ffffff',
+                                font: {
+                                    size: 11
+                                },
+                                generateLabels: function(chart) {
+                                    const data = chart.data;
+                                    if (data.labels.length && data.datasets.length) {
+                                        return data.labels.map((label, i) => {
+                                            const dataset = data.datasets[0];
+                                            const value = dataset.data[i];
+                                            const total = dataset.data.reduce((a, b) => a + b, 0);
+                                            const percentage = ((value / total) * 100).toFixed(1);
+                                            return {
+                                                text: `${label} (${percentage}%)`,
+                                                fillStyle: dataset.backgroundColor[i],
+                                                hidden: false,
+                                                index: i
+                                            };
+                                        });
+                                    }
+                                    return [];
+                                }
+                            }
+                        }
+                    },
+                },
+            });
+        } catch (error) {
+            console.error(error);
+            showToast("Keyword analytics unavailable", "error");
+        }
+    }
+
+    // Interval management to prevent memory leaks
+    let metricsIntervalId = null;
+    let keywordsIntervalId = null;
+
+    function startIntervals() {
+        // Clear any existing intervals before starting new ones
+        stopIntervals();
+        metricsIntervalId = setInterval(refreshMetrics, 120000);
+        keywordsIntervalId = setInterval(refreshKeywords, 300000);
+    }
+
+    function stopIntervals() {
+        if (metricsIntervalId !== null) {
+            clearInterval(metricsIntervalId);
+            metricsIntervalId = null;
+        }
+        if (keywordsIntervalId !== null) {
+            clearInterval(keywordsIntervalId);
+            keywordsIntervalId = null;
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        document.getElementById("btn-refresh-performance")?.addEventListener("click", refreshMetrics);
+        document.getElementById("btn-refresh-keywords")?.addEventListener("click", refreshKeywords);
+
+        refreshMetrics();
+        refreshKeywords();
+        startIntervals();
+    });
+
+    // Clean up intervals on page unload
+    window.addEventListener("beforeunload", stopIntervals);
+
+    // Pause intervals when page is hidden, resume when visible
+    document.addEventListener("visibilitychange", () => {
+        if (document.hidden) {
+            stopIntervals();
+        } else {
+            startIntervals();
+        }
+    });
+</script>
+{% endblock %}

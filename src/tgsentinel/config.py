@@ -1,6 +1,9 @@
-import os, yaml, logging
+import logging
+import os
 from dataclasses import dataclass, field
-from typing import List, Dict, Any
+from typing import Any, Dict, List
+
+import yaml
 
 log = logging.getLogger(__name__)
 
@@ -19,7 +22,7 @@ class ChannelRule:
 @dataclass
 class DigestCfg:
     hourly: bool = True
-    daily: bool = True
+    daily: bool = False
     top_n: int = 10
 
 

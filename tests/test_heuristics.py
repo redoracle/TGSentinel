@@ -1,7 +1,8 @@
 """Unit tests for heuristics module."""
 
 import pytest
-from tgsentinel.heuristics import run_heuristics, content_hash, HeuristicResult
+
+from tgsentinel.heuristics import HeuristicResult, content_hash, run_heuristics
 
 
 class TestContentHash:

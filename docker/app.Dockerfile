@@ -14,10 +14,19 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY src /app/src
 COPY config /app/config
+COPY ui /app/ui
 COPY README.md /app/README.md
 
 # create data dir for session/db
 RUN mkdir -p /app/data
 ENV PYTHONPATH=/app/src
 
+# Copy entrypoint
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Expose UI port (optional service)
+EXPOSE 5000
+
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["python", "-m", "tgsentinel.main"]

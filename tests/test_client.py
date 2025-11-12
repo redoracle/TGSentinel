@@ -1,10 +1,12 @@
 """Unit tests for client module."""
 
-import pytest
 import json
-from unittest.mock import MagicMock, AsyncMock, patch
-from tgsentinel.client import make_client, start_ingestion, _reaction_count
-from tgsentinel.config import AppCfg, AlertsCfg, DigestCfg
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from tgsentinel.client import _reaction_count, make_client, start_ingestion
+from tgsentinel.config import AlertsCfg, AppCfg, DigestCfg
 
 
 class TestMakeClient:

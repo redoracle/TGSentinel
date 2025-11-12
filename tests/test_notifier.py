@@ -1,8 +1,10 @@
 """Unit tests for notifier module."""
 
-import pytest
 from unittest.mock import AsyncMock
-from tgsentinel.notifier import notify_dm, notify_channel
+
+import pytest
+
+from tgsentinel.notifier import notify_channel, notify_dm
 
 
 class TestNotifyDm:
