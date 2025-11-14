@@ -1,9 +1,10 @@
 """Test configuration and shared fixtures for TG Sentinel tests."""
 
 import os
+import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from redis import Redis
@@ -127,14 +128,77 @@ def sample_telegram_event():
     """Create a sample Telegram event."""
     event = MagicMock()
     event.chat_id = -100123456789
-    event.chat = MagicMock()
-    event.chat.title = "Test Channel"
+
+    # Mock chat
+    chat = MagicMock()
+    chat.title = "Test Channel"
+    event.chat = chat
+
+    # Mock async get_chat() method
+    async def mock_get_chat():
+        return chat
+
+    event.get_chat = mock_get_chat
+
+    # Mock sender with all required attributes (id, first_name, last_name, username)
+    sender = MagicMock()
+    sender.id = 11111
+    sender.first_name = "John"
+    sender.last_name = "Doe"
+    sender.username = "johndoe"
+    event.sender = sender
+
+    # Mock async get_sender() method
+    async def mock_get_sender():
+        return sender
+
+    event.get_sender = mock_get_sender
+
     event.message = MagicMock()
     event.message.id = 12345
-    event.message.sender_id = 11111
+    event.message.sender_id = 11111  # Matches sender.id
     event.message.mentioned = False
     event.message.message = "Test message"
     event.message.replies = MagicMock()
     event.message.replies.replies = 2
     event.message.reactions = None
+    # Add date attribute for timestamp field
+    from datetime import datetime, timezone
+
+    event.message.date = datetime.now(timezone.utc)
     return event
+
+
+@pytest.fixture
+def app():
+    """Create Flask app instance for testing."""
+    ui_path = Path(__file__).parent.parent / "ui"
+    sys.path.insert(0, str(ui_path))
+
+    # Create mock config
+    mock_config = MagicMock()
+    mock_config.channels = []
+    mock_config.db_uri = "sqlite:///:memory:"
+    mock_config.redis = {
+        "host": "localhost",
+        "port": 6379,
+        "db": 15,
+        "stream": "sentinel:messages",
+    }
+    mock_alerts = MagicMock()
+    mock_alerts.mode = "dm"
+    mock_config.alerts = mock_alerts
+
+    with patch("app.load_config", return_value=mock_config):
+        import app as flask_app  # type: ignore[import-not-found]
+
+        flask_app.app.config["TESTING"] = True
+        flask_app.app.config["TGSENTINEL_CONFIG"] = mock_config
+
+        yield flask_app.app
+
+
+@pytest.fixture
+def client(app):
+    """Create Flask test client."""
+    return app.test_client()

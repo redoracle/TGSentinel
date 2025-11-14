@@ -48,8 +48,9 @@
     </div>
     <div class="col-12 col-xl-5">
         <article class="card h-100" aria-labelledby="resource-utilisation-heading">
-            <div class="card-header">
+            <div class="card-header d-flex justify-content-between align-items-center">
                 <h2 class="card-title mb-0" id="resource-utilisation-heading">Resource Utilisation</h2>
+                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-resources">Refresh</button>
             </div>
             <div class="card-body">
                 <ul class="list-unstyled mb-0" id="resource-list">
@@ -66,8 +67,10 @@
                         </div>
                     </li>
                     <li>
-                        <p class="text-muted mb-1">Redis depth</p>
-                        <p class="mb-0" id="resource-redis">0 entries</p>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <p class="text-muted mb-0">Redis depth</p>
+                            <p class="mb-0 fw-semibold" id="resource-redis">0 entries</p>
+                        </div>
                     </li>
                 </ul>
             </div>
@@ -96,7 +99,7 @@
             </div>
             <div class="card-body">
                 <div class="chart-container compact">
-                    <canvas id="channel-chart" aria-label="Channel impact" role="img"></canvas>
+                    <canvas id="channel-chart" class="shadow-soft" aria-label="Channel impact" role="img"></canvas>
                 </div>
             </div>
         </article>
@@ -134,6 +137,7 @@
 <script>
     const metricsEndpoint = "{{ url_for('api_analytics_metrics') }}";
     const keywordsEndpoint = "{{ url_for('api_analytics_keywords') }}";
+    const anomaliesEndpoint = "{{ url_for('api_analytics_anomalies') }}";
 
     let performanceChart;
     let keywordChart;
@@ -150,60 +154,16 @@
         return ctx._chartRef;
     }
 
-    async function refreshMetrics() {
+    async function refreshPerformance() {
         try {
             const response = await fetch(metricsEndpoint);
             if (!response.ok) {
                 throw new Error("metrics fetch failed");
             }
             const payload = await response.json();
+            // Update only performance-related metrics (KPIs + line chart)
             document.getElementById("metric-mpm").textContent = payload.messages_per_min ?? 0;
             document.getElementById("metric-latency").textContent = `${(payload.semantic_latency ?? 0).toFixed(3)}s`;
-
-            const cpu = payload.cpu;
-            const memory = payload.memory;
-            
-            // Update progress bars with proper aria-valuenow for accessibility
-            const cpuProgress = document.getElementById("cpu-progress");
-            const memoryProgress = document.getElementById("memory-progress");
-            
-            if (cpu != null && cpu !== undefined) {
-                const cpuPercent = Math.round(Math.max(0, Math.min(cpu, 100)));
-                cpuProgress.style.width = `${Math.max(cpuPercent, 2)}%`; // Ensure at least 2% width for visibility
-                cpuProgress.setAttribute('aria-valuenow', String(cpuPercent));
-                cpuProgress.textContent = `${cpu.toFixed(1)}%`;
-            } else {
-                cpuProgress.style.width = '0%';
-                cpuProgress.setAttribute('aria-valuenow', '0');
-                cpuProgress.textContent = 'N/A';
-            }
-            
-            if (memory != null && memory !== undefined) {
-                // Format memory display
-                let memoryDisplay;
-                if (memory >= 1024) {
-                    // Show in GB if >= 1024 MB
-                    memoryDisplay = `${(memory / 1024).toFixed(2)} GB`;
-                } else if (memory >= 1) {
-                    // Show in MB with 1 decimal
-                    memoryDisplay = `${memory.toFixed(1)} MB`;
-                } else {
-                    // Show in MB with 2 decimals for very small values
-                    memoryDisplay = `${memory.toFixed(2)} MB`;
-                }
-                
-                // Assuming max 2GB for progress bar calculation
-                const memoryPercent = Math.round(Math.max(0, Math.min((memory / 2048) * 100, 100)));
-                memoryProgress.style.width = `${Math.max(memoryPercent, 2)}%`; // Ensure at least 2% width for visibility
-                memoryProgress.setAttribute('aria-valuenow', String(memoryPercent));
-                memoryProgress.textContent = memoryDisplay;
-            } else {
-                memoryProgress.style.width = '0%';
-                memoryProgress.setAttribute('aria-valuenow', '0');
-                memoryProgress.textContent = 'N/A';
-            }
-            
-            document.getElementById("resource-redis").textContent = `${payload.redis_stream_depth || 0} entries`;
 
             const ctx = document.getElementById("performance-chart");
             performanceChart = ensureChart(ctx, {
@@ -214,7 +174,7 @@
                         {
                             label: "Messages/min",
                             data: [12, 18, 16, 19, 21, payload.messages_per_min || 0],
-                            borderColor: "#667eea",
+                            borderColor: "#7d8bff",
                             fill: false,
                         },
                         {
@@ -231,13 +191,67 @@
                         legend: { display: true },
                     },
                     scales: {
-                        y: { beginAtZero: true },
+                        y: { beginAtZero: true, ticks: { color: "#cfd6ff" }, grid: { color: "rgba(255,255,255,0.08)" } },
+                        x: { ticks: { color: "#b7c0ff" }, grid: { color: "rgba(255,255,255,0.06)" } }
                     },
+                    layout: { padding: { top: 8, bottom: 6 } }
                 },
             });
         } catch (error) {
             console.error(error);
             showToast("Analytics metrics unavailable", "error");
+        }
+    }
+
+    async function refreshResources() {
+        try {
+            const response = await fetch(metricsEndpoint);
+            if (!response.ok) {
+                throw new Error("metrics fetch failed");
+            }
+            const payload = await response.json();
+
+            const cpu = payload.cpu;
+            const memory = payload.memory;
+            
+            // Update progress bars with proper aria-valuenow for accessibility
+            const cpuProgress = document.getElementById("cpu-progress");
+            const memoryProgress = document.getElementById("memory-progress");
+            
+            if (cpu != null && cpu !== undefined) {
+                const cpuPercent = Math.round(Math.max(0, Math.min(cpu, 100)));
+                cpuProgress.style.width = `${Math.max(cpuPercent, 2)}%`;
+                cpuProgress.setAttribute('aria-valuenow', String(cpuPercent));
+                cpuProgress.textContent = `${cpu.toFixed(1)}%`;
+            } else {
+                cpuProgress.style.width = '0%';
+                cpuProgress.setAttribute('aria-valuenow', '0');
+                cpuProgress.textContent = 'N/A';
+            }
+            
+            if (memory != null && memory !== undefined) {
+                let memoryDisplay;
+                if (memory >= 1024) {
+                    memoryDisplay = `${(memory / 1024).toFixed(2)} GB`;
+                } else if (memory >= 1) {
+                    memoryDisplay = `${memory.toFixed(1)} MB`;
+                } else {
+                    memoryDisplay = `${memory.toFixed(2)} MB`;
+                }
+                const memoryPercent = Math.round(Math.max(0, Math.min((memory / 2048) * 100, 100)));
+                memoryProgress.style.width = `${Math.max(memoryPercent, 2)}%`;
+                memoryProgress.setAttribute('aria-valuenow', String(memoryPercent));
+                memoryProgress.textContent = memoryDisplay;
+            } else {
+                memoryProgress.style.width = '0%';
+                memoryProgress.setAttribute('aria-valuenow', '0');
+                memoryProgress.textContent = 'N/A';
+            }
+            
+            document.getElementById("resource-redis").textContent = `${payload.redis_stream_depth || 0} entries`;
+        } catch (error) {
+            console.error(error);
+            showToast("Resource metrics unavailable", "error");
         }
     }
 
@@ -272,7 +286,9 @@
                         {
                             label: "Matches",
                             data: values,
-                            backgroundColor: "rgba(102, 126, 234, 0.6)",
+                            backgroundColor: backgroundColor,
+                            borderColor: "rgba(255,255,255,0.08)",
+                            borderWidth: 1,
                         },
                     ],
                 },
@@ -280,6 +296,14 @@
                     indexAxis: "y",
                     responsive: true,
                     plugins: { legend: { display: false } },
+                    scales: {
+                        y: { ticks: { color: "#d8ddff" }, grid: { color: "rgba(255,255,255,0.05)" } },
+                        x: { ticks: { color: "#c7cfff" }, grid: { color: "rgba(255,255,255,0.08)" } }
+                    },
+                    layout: { padding: { top: 4, bottom: 4 } },
+                    categoryPercentage: 0.7,
+                    barPercentage: 0.8,
+                    maxBarThickness: 22,
                 },
             });
 
@@ -293,17 +317,18 @@
                             label: "Keyword share",
                             data: values,
                             backgroundColor: backgroundColor,
+                            borderColor: "rgba(255,255,255,0.2)",
+                            borderWidth: 1,
                         },
                     ],
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: true,
-                    aspectRatio: 1.5,
+                    maintainAspectRatio: false,
                     layout: {
                         padding: {
-                            top: 10,
-                            bottom: 10,
+                            top: 6,
+                            bottom: 6,
                             left: 10,
                             right: 10
                         }
@@ -315,10 +340,11 @@
                             labels: {
                                 boxWidth: 12,
                                 boxHeight: 12,
-                                padding: 8,
+                                padding: 12,
                                 color: '#ffffff',
                                 font: {
-                                    size: 11
+                                    size: 12,
+                                    weight: '400'
                                 },
                                 generateLabels: function(chart) {
                                     const data = chart.data;
@@ -331,6 +357,9 @@
                                             return {
                                                 text: `${label} (${percentage}%)`,
                                                 fillStyle: dataset.backgroundColor[i],
+                                                // Explicitly force white legend text for all Chart.js versions
+                                                color: '#ffffff',
+                                                fontColor: '#ffffff',
                                                 hidden: false,
                                                 index: i
                                             };
@@ -349,34 +378,86 @@
         }
     }
 
+    async function refreshAnomalies() {
+        try {
+            const response = await fetch(anomaliesEndpoint);
+            if (!response.ok) {
+                throw new Error("anomalies fetch failed");
+            }
+            const payload = await response.json();
+            const anomalies = payload.anomalies || [];
+
+            const tbody = document.querySelector('#anomaly-table tbody');
+            if (!tbody) return;
+            if (!anomalies.length) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No anomalies flagged.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = anomalies.map(a => {
+                const sev = String(a.severity || 'info').toLowerCase();
+                const sevBadge = sev === 'warning' ? 'bg-warning' : (sev === 'error' ? 'bg-danger' : 'bg-info');
+                const when = a.detected ? new Date(a.detected).toLocaleString() : '';
+                return `
+                    <tr>
+                        <td>${escapeHtml(a.channel || '')}</td>
+                        <td>${escapeHtml(a.signal || '')}</td>
+                        <td><span class="badge ${sevBadge}" style="z-index:1;">${escapeHtml(sev)}</span></td>
+                        <td>${escapeHtml(when)}</td>
+                        <td><button type="button" class="btn btn-sm btn-outline-primary" disabled title="Review coming soon">Review</button></td>
+                    </tr>`;
+            }).join('');
+        } catch (error) {
+            console.error(error);
+            const tbody = document.querySelector('#anomaly-table tbody');
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Anomalies unavailable</td></tr>';
+            }
+        }
+    }
+
     // Interval management to prevent memory leaks
-    let metricsIntervalId = null;
+    let performanceIntervalId = null;
+    let resourcesIntervalId = null;
     let keywordsIntervalId = null;
+    let anomaliesIntervalId = null;
 
     function startIntervals() {
         // Clear any existing intervals before starting new ones
         stopIntervals();
-        metricsIntervalId = setInterval(refreshMetrics, 120000);
+        performanceIntervalId = setInterval(refreshPerformance, 120000);
+        resourcesIntervalId = setInterval(refreshResources, 120000);
         keywordsIntervalId = setInterval(refreshKeywords, 300000);
+        anomaliesIntervalId = setInterval(refreshAnomalies, 300000);
     }
 
     function stopIntervals() {
-        if (metricsIntervalId !== null) {
-            clearInterval(metricsIntervalId);
-            metricsIntervalId = null;
+        if (performanceIntervalId !== null) {
+            clearInterval(performanceIntervalId);
+            performanceIntervalId = null;
+        }
+        if (resourcesIntervalId !== null) {
+            clearInterval(resourcesIntervalId);
+            resourcesIntervalId = null;
         }
         if (keywordsIntervalId !== null) {
             clearInterval(keywordsIntervalId);
             keywordsIntervalId = null;
         }
+        if (anomaliesIntervalId !== null) {
+            clearInterval(anomaliesIntervalId);
+            anomaliesIntervalId = null;
+        }
     }
 
     document.addEventListener("DOMContentLoaded", () => {
-        document.getElementById("btn-refresh-performance")?.addEventListener("click", refreshMetrics);
-        document.getElementById("btn-refresh-keywords")?.addEventListener("click", refreshKeywords);
-
-        refreshMetrics();
+        document.getElementById("btn-refresh-performance")?.addEventListener("click", refreshPerformance);
+        document.getElementById("btn-refresh-resources")?.addEventListener("click", refreshResources);
+        document.getElementById("btn-refresh-keywords")?.addEventListener("click", () => { refreshKeywords(); refreshAnomalies(); });
+        
+        refreshPerformance();
+        refreshResources();
         refreshKeywords();
+        refreshAnomalies();
         startIntervals();
     });
 

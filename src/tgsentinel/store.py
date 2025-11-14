@@ -1,7 +1,8 @@
 import logging
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import OperationalError, ProgrammingError
 
 log = logging.getLogger(__name__)
 
@@ -12,6 +13,8 @@ CREATE TABLE IF NOT EXISTS messages(
   content_hash TEXT,
   score REAL,
   alerted INTEGER DEFAULT 0,
+  chat_title TEXT,
+  sender_name TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY(chat_id, msg_id)
 );
@@ -24,6 +27,37 @@ CREATE TABLE IF NOT EXISTS feedback(
   PRIMARY KEY(chat_id, msg_id)
 );
 """
+
+
+def _add_column_if_missing(
+    connection, table_name: str, column_name: str, column_type: str
+) -> None:
+    """Add a column to a table if it doesn't already exist.
+
+    Uses SQLAlchemy's inspect to check existing columns, avoiding fragile
+    string-based error parsing.
+
+    Args:
+        connection: SQLAlchemy connection object
+        table_name: Name of the table to modify
+        column_name: Name of the column to add
+        column_type: SQL type for the column (e.g., "TEXT", "INTEGER")
+    """
+    inspector = inspect(connection)
+    existing_columns = {col["name"] for col in inspector.get_columns(table_name)}
+
+    if column_name in existing_columns:
+        log.debug(f"{column_name} column already exists in {table_name} table")
+        return
+
+    try:
+        connection.execute(
+            text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
+        )
+        log.debug(f"Added {column_name} column to {table_name} table")
+    except (OperationalError, ProgrammingError) as e:
+        log.error(f"Failed to add {column_name} column to {table_name}: {e}")
+        raise
 
 
 def init_db(db_uri: str) -> Engine:
@@ -39,6 +73,8 @@ CREATE TABLE IF NOT EXISTS messages(
   content_hash TEXT,
   score REAL,
   alerted INTEGER DEFAULT 0,
+  chat_title TEXT,
+  sender_name TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY(chat_id, msg_id)
 )
@@ -59,21 +95,76 @@ CREATE TABLE IF NOT EXISTS feedback(
         """
             )
         )
+
+        # Add columns to existing tables if they don't exist
+        _add_column_if_missing(con, "messages", "chat_title", "TEXT")
+        _add_column_if_missing(con, "messages", "sender_name", "TEXT")
+        _add_column_if_missing(con, "messages", "message_text", "TEXT")
+        _add_column_if_missing(con, "messages", "triggers", "TEXT")
+        _add_column_if_missing(con, "messages", "sender_id", "INTEGER")
+
+        # Create indexes for performance on common queries
+        # These are idempotent - IF NOT EXISTS prevents errors on re-run
+        con.execute(
+            text("CREATE INDEX IF NOT EXISTS idx_messages_alerted ON messages(alerted)")
+        )
+        con.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at)"
+            )
+        )
+        con.execute(
+            text("CREATE INDEX IF NOT EXISTS idx_messages_chat_id ON messages(chat_id)")
+        )
+        con.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS idx_feedback_chat_msg ON feedback(chat_id, msg_id)"
+            )
+        )
+
     log.info("DB ready")
     return engine
 
 
-def upsert_message(engine: Engine, chat_id: int, msg_id: int, h: str, score: float):
+def upsert_message(
+    engine: Engine,
+    chat_id: int,
+    msg_id: int,
+    h: str,
+    score: float,
+    chat_title: str = "",
+    sender_name: str = "",
+    message_text: str = "",
+    triggers: str = "",
+    sender_id: int = 0,
+):
     with engine.begin() as con:
         con.execute(
             text(
                 """
-          INSERT INTO messages(chat_id,msg_id,content_hash,score,alerted)
-          VALUES(:c,:m,:h,:s,0)
-          ON CONFLICT(chat_id,msg_id) DO UPDATE SET score=excluded.score, content_hash=excluded.content_hash
+          INSERT INTO messages(chat_id,msg_id,content_hash,score,alerted,chat_title,sender_name,message_text,triggers,sender_id)
+          VALUES(:c,:m,:h,:s,0,:title,:sender,:text,:triggers,:sender_id)
+          ON CONFLICT(chat_id,msg_id) DO UPDATE SET 
+            score=excluded.score, 
+            content_hash=excluded.content_hash,
+            chat_title=excluded.chat_title,
+            sender_name=excluded.sender_name,
+            message_text=excluded.message_text,
+            triggers=excluded.triggers,
+            sender_id=excluded.sender_id
         """
             ),
-            {"c": chat_id, "m": msg_id, "h": h, "s": score},
+            {
+                "c": chat_id,
+                "m": msg_id,
+                "h": h,
+                "s": score,
+                "title": chat_title,
+                "sender": sender_name,
+                "text": message_text,
+                "triggers": triggers,
+                "sender_id": sender_id,
+            },
         )
 
 

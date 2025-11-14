@@ -18,6 +18,45 @@ class ChannelRule:
     reply_threshold: int = 0
     rate_limit_per_hour: int = 10
 
+    # Category 1: Direct Action Keywords
+    action_keywords: List[str] = field(default_factory=list)
+
+    # Category 2: Decision & Governance Keywords
+    decision_keywords: List[str] = field(default_factory=list)
+
+    # Category 4: Urgency & Importance Indicators
+    urgency_keywords: List[str] = field(default_factory=list)
+    importance_keywords: List[str] = field(default_factory=list)
+
+    # Category 5: Interest-based Keywords (releases, security, etc.)
+    release_keywords: List[str] = field(default_factory=list)
+    security_keywords: List[str] = field(default_factory=list)
+
+    # Category 6: Structured Data Detection
+    detect_codes: bool = True
+    detect_documents: bool = True
+
+    # Category 8: Risk Keywords
+    risk_keywords: List[str] = field(default_factory=list)
+
+    # Category 9: Opportunity Keywords
+    opportunity_keywords: List[str] = field(default_factory=list)
+
+    # Category 10: Metadata-based Detection
+    prioritize_pinned: bool = True
+    prioritize_admin: bool = True
+    detect_polls: bool = True
+
+    # Chat type detection (private vs group/channel)
+    is_private: bool = False
+
+
+@dataclass
+class MonitoredUser:
+    id: int
+    name: str = ""
+    username: str = ""
+
 
 @dataclass
 class DigestCfg:
@@ -40,6 +79,7 @@ class AppCfg:
     api_hash: str
     alerts: AlertsCfg
     channels: List[ChannelRule]
+    monitored_users: List[MonitoredUser]
     interests: List[str]
     redis: Dict[str, Any]
     db_uri: str
@@ -87,7 +127,9 @@ def load_config(path="config/tgsentinel.yml") -> AppCfg:
 
     db_uri = os.getenv("DB_URI", "sqlite:////app/data/sentinel.db")
     model = os.getenv("EMBEDDINGS_MODEL", None) or None
-    sim_thr = float(os.getenv("SIMILARITY_THRESHOLD", "0.42"))
+    # Strip inline comments from SIMILARITY_THRESHOLD (e.g., "0.42 # comment")
+    sim_thr_raw = os.getenv("SIMILARITY_THRESHOLD", "0.42")
+    sim_thr = float(sim_thr_raw.split("#")[0].strip())
 
     digest_defaults = DigestCfg(**y.get("alerts", {}).get("digest", {}))
     digest_cfg = DigestCfg(
@@ -105,12 +147,14 @@ def load_config(path="config/tgsentinel.yml") -> AppCfg:
     )
 
     channels = [ChannelRule(**c) for c in y.get("channels", [])]
+    monitored_users = [MonitoredUser(**u) for u in y.get("monitored_users", [])]
     return AppCfg(
         telegram_session=y["telegram"]["session"],
         api_id=api_id,
         api_hash=api_hash,
         alerts=alerts,
         channels=channels,
+        monitored_users=monitored_users,
         interests=y.get("interests", []),
         redis=redis,
         db_uri=db_uri,

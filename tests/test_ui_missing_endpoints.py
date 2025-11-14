@@ -109,7 +109,7 @@ class TestAlertsCsvExport:
         ]
 
         with patch("ui.app._load_alerts", return_value=mock_alerts):
-            response = client.get("/api/export_alerts?limit=100")
+            response = client.get("/api/export_alerts?limit=100&format=machine")
 
             assert response.status_code == 200
             assert response.headers["Content-Type"] == "text/csv"
@@ -141,7 +141,7 @@ class TestAlertsCsvExport:
         ]
 
         with patch("ui.app._load_alerts", return_value=mock_alerts[:10]):
-            response = client.get("/api/export_alerts?limit=10")
+            response = client.get("/api/export_alerts?limit=10&format=machine")
 
             content = response.data.decode("utf-8")
             reader = csv.DictReader(io.StringIO(content))
@@ -315,6 +315,87 @@ class TestWebhooksEndpoints:
                 response = client.delete("/api/webhooks/NonExistent")
 
                 assert response.status_code == 404
+
+    def test_create_webhook_without_secret(self, client, mock_init):
+        """Test creating a webhook without a secret (optional field)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            webhooks_path = Path(tmpdir) / "webhooks.yml"
+
+            with patch("ui.app.Path", return_value=webhooks_path):
+                response = client.post(
+                    "/api/webhooks",
+                    json={
+                        "service": "BasicWebhook",
+                        "url": "https://example.com/webhook",
+                    },
+                    content_type="application/json",
+                )
+
+                assert response.status_code == 201
+                data = json.loads(response.data)
+                assert data["status"] == "ok"
+
+                # Verify webhook was saved without secret (key should be omitted when not provided)
+                with open(webhooks_path) as f:
+                    saved_data = yaml.safe_load(f)
+                    webhook = saved_data["webhooks"][0]
+                    assert webhook["service"] == "BasicWebhook"
+                    assert "secret" not in webhook
+
+    def test_create_webhook_invalid_json(self, client, mock_init):
+        """Test creating webhook with invalid JSON."""
+        response = client.post(
+            "/api/webhooks",
+            data="not-json",
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data is not None
+        assert data["status"] == "error"
+        # Verify the error message indicates invalid JSON
+        message = data.get("message", "").lower()
+        assert "invalid" in message and "json" in message
+
+    def test_list_webhooks_with_multiple(self, client, mock_init):
+        """Test listing multiple webhooks."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            webhooks_path = Path(tmpdir) / "webhooks.yml"
+            webhook_data = {
+                "webhooks": [
+                    {
+                        "service": f"Service{i}",
+                        "url": f"https://example.com/webhook{i}",
+                        "enabled": True,
+                    }
+                    for i in range(5)
+                ]
+            }
+
+            with open(webhooks_path, "w") as f:
+                yaml.dump(webhook_data, f)
+
+            with patch("ui.app.Path", return_value=webhooks_path):
+                response = client.get("/api/webhooks")
+
+                assert response.status_code == 200
+                data = json.loads(response.data)
+                assert len(data["webhooks"]) == 5
+                # Verify services are in correct order
+                for i, webhook in enumerate(data["webhooks"]):
+                    assert webhook["service"] == f"Service{i}"
+
+    def test_delete_webhook_file_not_exists(self, client, mock_init):
+        """Test deleting webhook when config file doesn't exist."""
+        with patch("ui.app.Path") as mock_path:
+            mock_path.return_value.exists.return_value = False
+
+            response = client.delete("/api/webhooks/SomeService")
+
+            assert response.status_code == 404
+            data = json.loads(response.data)
+            assert "No webhooks configured" in data["message"]
 
 
 class TestProfilesImport:

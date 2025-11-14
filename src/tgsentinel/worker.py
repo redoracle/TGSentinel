@@ -54,33 +54,113 @@ async def process_stream_message(
     vip = set(rule.vip_senders) if rule else set()
     keywords = rule.keywords if rule else []
     msg_id = _to_int(payload["msg_id"])
+
+    # Detect if this is a private chat (positive ID) or reply to current user
+    is_private = rid > 0
+    is_reply_to_user = False
+
+    # Check if this is a reply to one of our messages
+    if payload.get("is_reply") and payload.get("reply_to_msg_id"):
+        try:
+            # Fetch the replied-to message to check if it was sent by us
+            reply_to_msg_id = _to_int(payload.get("reply_to_msg_id"))
+            replied_msg = await client.get_messages(rid, ids=reply_to_msg_id)
+
+            # Handle both single message and list response
+            if isinstance(replied_msg, list):
+                replied_msg = replied_msg[0] if replied_msg else None
+
+            if replied_msg:
+                # Get our user ID
+                me = await client.get_me()  # type: ignore[misc]
+                our_user_id = getattr(me, "id", None)
+
+                # Check if the replied-to message was sent by us
+                replied_sender_id = getattr(replied_msg, "sender_id", None) or getattr(
+                    getattr(replied_msg, "sender", None), "id", None
+                )
+
+                if our_user_id and replied_sender_id == our_user_id:
+                    is_reply_to_user = True
+
+        except Exception as e:
+            log.warning(
+                "Failed to fetch replied-to message for chat %s, msg %s: %s. "
+                "Falling back to heuristic.",
+                rid,
+                msg_id,
+                e,
+            )
+            # Fall back to simplified heuristic: in groups/channels, reply + mention often means reply to us
+            if not is_private and payload.get("mentioned"):
+                is_reply_to_user = True
+
+    # Detect if sender is admin (would need chat member info, simplified for now)
+    sender_is_admin = False  # Could be enhanced with chat.get_permissions() check
+
     hr = run_heuristics(
         text=str(payload["text"]),
         sender_id=_to_int(payload.get("sender_id"), 0),
-        mentioned=bool(payload["mentioned"]),
-        reactions=_to_int(payload["reactions"]),
-        replies=_to_int(payload["replies"]),
+        mentioned=bool(payload.get("mentioned", False)),
+        reactions=_to_int(payload.get("reactions", 0)),
+        replies=_to_int(payload.get("replies", 0)),
         vip=vip,
         keywords=keywords,
         react_thr=(rule.reaction_threshold if rule else 0),
         reply_thr=(rule.reply_threshold if rule else 0),
+        # Enhanced metadata
+        is_private=is_private,
+        is_reply_to_user=is_reply_to_user,
+        has_media=bool(payload.get("has_media", False)),
+        media_type=payload.get("media_type"),
+        is_pinned=bool(payload.get("is_pinned", False)),
+        is_poll=payload.get("media_type") == "MessageMediaPoll",
+        sender_is_admin=sender_is_admin,
+        has_forward=bool(payload.get("has_forward", False)),
+        # Category-specific keywords from rule
+        action_keywords=rule.action_keywords if rule else None,
+        decision_keywords=rule.decision_keywords if rule else None,
+        urgency_keywords=rule.urgency_keywords if rule else None,
+        importance_keywords=rule.importance_keywords if rule else None,
+        release_keywords=rule.release_keywords if rule else None,
+        security_keywords=rule.security_keywords if rule else None,
+        risk_keywords=rule.risk_keywords if rule else None,
+        opportunity_keywords=rule.opportunity_keywords if rule else None,
+        # Detection flags
+        detect_codes=rule.detect_codes if rule else True,
+        detect_documents=rule.detect_documents if rule else True,
+        prioritize_pinned=rule.prioritize_pinned if rule else True,
+        prioritize_admin=rule.prioritize_admin if rule else True,
+        detect_polls=rule.detect_polls if rule else True,
     )
 
     score = hr.pre_score
     sem = score_text(str(payload["text"]))
     if sem is not None:
         score += sem
+
+    chat_title = str(payload.get("chat_title", ""))
+    sender_name = str(payload.get("sender_name", ""))
+    message_text = str(payload.get("text", ""))
+    triggers = ", ".join(hr.reasons) if hr.reasons else ""
+    sender_id = _to_int(payload.get("sender_id"), 0)
+
     upsert_message(
         engine,
         rid,
         msg_id,
         hr.content_hash,
         score,
+        chat_title,
+        sender_name,
+        message_text,
+        triggers,
+        sender_id,
     )
 
     important = hr.important or (sem is not None and sem >= cfg.similarity_threshold)
     if important:
-        title = str(payload.get("chat_title") or f"chat {rid}")
+        title = chat_title or f"chat {rid}"
         preview = str(payload["text"] or "").strip().replace("\n", " ")
         if len(preview) > 400:
             preview = preview[:400] + "…"
@@ -124,6 +204,57 @@ async def process_loop(cfg: AppCfg, client: TelegramClient, engine):
                     cfg = new_cfg
                     rules = load_rules(cfg)
                     load_interests(cfg.interests)
+                    # Reconnect Telegram client to pick up a newly authenticated session
+                    try:
+                        client.disconnect()
+                    except Exception:
+                        pass
+                    try:
+                        await client.connect()  # type: ignore[misc]
+                        # Ensure authorization; start() will use existing session without interaction
+                        try:
+                            is_auth = await client.is_user_authorized()  # type: ignore[misc]
+                        except Exception:
+                            is_auth = False
+                        if not is_auth:
+                            try:
+                                await client.start()  # type: ignore[misc]
+                            except Exception as start_err:
+                                log.warning(
+                                    "Client start after reload failed: %s", start_err
+                                )
+                        # Refresh user info + avatar for UI
+                        try:
+                            me = await client.get_me()  # type: ignore[misc]
+                            # Download user avatar if available
+                            avatar_path = None
+                            try:
+                                photos = await client.get_profile_photos("me", limit=1)  # type: ignore[misc]
+                                if photos:
+                                    avatar_filename = "user_avatar.jpg"
+                                    avatar_path = f"/app/data/{avatar_filename}"
+                                    await client.download_profile_photo("me", file=avatar_path)  # type: ignore[misc]
+                                    avatar_path = f"/data/{avatar_filename}"
+                            except Exception as avatar_err:
+                                log.debug(
+                                    "Could not refresh user avatar: %s", avatar_err
+                                )
+                            ui = {
+                                "username": getattr(me, "username", None)
+                                or getattr(me, "first_name", "Unknown"),
+                                "first_name": getattr(me, "first_name", ""),
+                                "last_name": getattr(me, "last_name", ""),
+                                "phone": getattr(me, "phone", ""),
+                                "user_id": getattr(me, "id", None),
+                                "avatar": avatar_path or "/static/images/logo.png",
+                            }
+                            r.set("tgsentinel:user_info", json.dumps(ui))
+                        except Exception as me_err:
+                            log.debug(
+                                "Could not refresh user info after reload: %s", me_err
+                            )
+                    except Exception as conn_err:
+                        log.error("Client reconnect after reload failed: %s", conn_err)
                     reload_marker.unlink()
                     log.info(
                         "Configuration reloaded successfully with %d channels",

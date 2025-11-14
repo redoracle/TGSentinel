@@ -1,12 +1,13 @@
 telegram:
   session: /tmp/tgsentinel.session
 alerts:
-  mode: direct
+  mode: dm
   target_channel: '@kit_red_bot'
   digest:
     hourly: true
     daily: false
     top_n: 10
+monitored_users: []
 channels:
 - id: -100123456789
   name: Algorand Dev
@@ -19,9 +20,37 @@ channels:
   - CVE
   - go-algorand
   - governance
+  release_keywords:
+  - v1.
+  - v2.
+  - v3.
+  - new release
+  - update available
+  - changelog
+  security_keywords:
+  - vulnerability
+  - exploit
+  - breach
+  - patch
+  - advisory
+  urgency_keywords:
+  - urgent
+  - critical
+  - breaking
+  - emergency
+  importance_keywords:
+  - important
+  - announcement
+  - heads up
+  - must read
   reaction_threshold: 8
   reply_threshold: 10
   rate_limit_per_hour: 5
+  prioritize_pinned: true
+  prioritize_admin: true
+  detect_polls: true
+  detect_codes: true
+  detect_documents: true
 - id: -100987654321
   name: Security Feeds
   keywords:
@@ -29,9 +58,34 @@ channels:
   - advisory
   - critical
   - zero-day
+  security_keywords:
+  - vulnerability
+  - exploit
+  - malware
+  - phishing
+  - compromised
+  - breach
+  - attack
+  urgency_keywords:
+  - urgent
+  - critical
+  - immediate
+  - emergency
+  risk_keywords:
+  - danger
+  - threat
+  - incident
+  - breach
+  - compromised
   reaction_threshold: 3
   reply_threshold: 5
   rate_limit_per_hour: 10
+  prioritize_pinned: true
+  prioritize_admin: true
+  vip_senders: []
+  detect_codes: true
+  detect_documents: true
+  detect_polls: true
 - id: 355791041
   name: Stakelovelace Italia
   vip_senders: []
@@ -39,6 +93,11 @@ channels:
   reaction_threshold: 5
   reply_threshold: 3
   rate_limit_per_hour: 10
+  detect_codes: true
+  detect_documents: true
+  prioritize_pinned: true
+  prioritize_admin: true
+  detect_polls: true
 - id: 186207886
   name: Stakelovelace Official ENG
   vip_senders: []
@@ -46,6 +105,355 @@ channels:
   reaction_threshold: 5
   reply_threshold: 3
   rate_limit_per_hour: 10
+  detect_codes: true
+  detect_documents: true
+  prioritize_pinned: true
+  prioritize_admin: true
+  detect_polls: true
+- id: 1419992547
+  name: Algorand Foundation Announcements (Official)
+  vip_senders: []
+  keywords: []
+  release_keywords:
+  - release
+  - announcement
+  - launch
+  - update
+  decision_keywords:
+  - governance
+  - proposal
+  - vote
+  - decision
+  importance_keywords:
+  - important
+  - major
+  - official
+  - announcement
+  reaction_threshold: 5
+  reply_threshold: 3
+  rate_limit_per_hour: 10
+  prioritize_pinned: true
+  prioritize_admin: true
+  detect_codes: true
+  detect_documents: true
+  detect_polls: true
+- id: 1299459497
+  name: Algorand Foundation Official
+  vip_senders: []
+  keywords: []
+  release_keywords:
+  - release
+  - announcement
+  - launch
+  - update
+  decision_keywords:
+  - governance
+  - proposal
+  - vote
+  - decision
+  importance_keywords:
+  - important
+  - major
+  - official
+  - announcement
+  reaction_threshold: 5
+  reply_threshold: 3
+  rate_limit_per_hour: 10
+  prioritize_pinned: true
+  prioritize_admin: true
+  detect_codes: true
+  detect_documents: true
+  detect_polls: true
+- id: 1534592031
+  name: Wu Blockchain News
+  vip_senders: []
+  keywords: []
+  release_keywords:
+  - launch
+  - released
+  - announces
+  - introduces
+  security_keywords:
+  - hack
+  - exploit
+  - scam
+  - rug pull
+  - vulnerability
+  urgency_keywords:
+  - breaking
+  - urgent
+  - alert
+  importance_keywords:
+  - major
+  - significant
+  - important
+  opportunity_keywords:
+  - airdrop
+  - token sale
+  - ido
+  - presale
+  reaction_threshold: 5
+  reply_threshold: 3
+  rate_limit_per_hour: 10
+  prioritize_pinned: true
+  detect_codes: true
+  detect_documents: true
+  prioritize_admin: true
+  detect_polls: true
+- id: 378951174
+  name: Cardano Ambassadors
+  vip_senders: []
+  keywords: []
+  reaction_threshold: 5
+  reply_threshold: 3
+  rate_limit_per_hour: 10
+  detect_codes: true
+  detect_documents: true
+  prioritize_pinned: true
+  prioritize_admin: true
+  detect_polls: true
+- id: 1200120592
+  name: Donation to Gertjan
+  vip_senders: []
+  keywords: []
+  reaction_threshold: 5
+  reply_threshold: 3
+  rate_limit_per_hour: 10
+  detect_codes: true
+  detect_documents: true
+  prioritize_pinned: true
+  prioritize_admin: true
+  detect_polls: true
+- id: 1676607533
+  name: Flipper Zero Unleashed FW - English
+  vip_senders: []
+  keywords: []
+  reaction_threshold: 5
+  reply_threshold: 3
+  rate_limit_per_hour: 10
+  detect_codes: true
+  detect_documents: true
+  prioritize_pinned: true
+  prioritize_admin: true
+  detect_polls: true
+- id: 1523176225
+  name: Folks Finance Official
+  vip_senders: []
+  keywords: []
+  reaction_threshold: 5
+  reply_threshold: 3
+  rate_limit_per_hour: 10
+  detect_codes: true
+  detect_documents: true
+  prioritize_pinned: true
+  prioritize_admin: true
+  detect_polls: true
+- id: 1245801359
+  name: IPIB Italians Pool It Better
+  vip_senders: []
+  keywords: []
+  reaction_threshold: 5
+  reply_threshold: 3
+  rate_limit_per_hour: 10
+  detect_codes: true
+  detect_documents: true
+  prioritize_pinned: true
+  prioritize_admin: true
+  detect_polls: true
+- id: 742138586
+  name: Redoracle Security
+  vip_senders: []
+  keywords: []
+  security_keywords:
+  - vulnerability
+  - CVE
+  - exploit
+  - breach
+  - malware
+  - phishing
+  urgency_keywords:
+  - urgent
+  - critical
+  - immediate
+  risk_keywords:
+  - attack
+  - compromised
+  - incident
+  importance_keywords:
+  - alert
+  - warning
+  - advisory
+  reaction_threshold: 5
+  reply_threshold: 3
+  rate_limit_per_hour: 10
+  prioritize_pinned: true
+  prioritize_admin: true
+  detect_codes: true
+  detect_documents: true
+  detect_polls: true
+- id: 1821488140
+  name: Redoracle Security
+  vip_senders: []
+  keywords: []
+  security_keywords:
+  - vulnerability
+  - CVE
+  - exploit
+  - breach
+  - malware
+  - phishing
+  urgency_keywords:
+  - urgent
+  - critical
+  - immediate
+  risk_keywords:
+  - attack
+  - compromised
+  - incident
+  importance_keywords:
+  - alert
+  - warning
+  - advisory
+  reaction_threshold: 5
+  reply_threshold: 3
+  rate_limit_per_hour: 10
+  prioritize_pinned: true
+  prioritize_admin: true
+  detect_codes: true
+  detect_documents: true
+  detect_polls: true
+- id: 1588296581
+  name: Spectrum Protocol - Official Chat Group
+  vip_senders: []
+  keywords: []
+  reaction_threshold: 5
+  reply_threshold: 3
+  rate_limit_per_hour: 10
+  detect_codes: true
+  detect_documents: true
+  prioritize_pinned: true
+  prioritize_admin: true
+  detect_polls: true
+- id: 388472552
+  name: Stakelovelace
+  vip_senders: []
+  keywords: []
+  reaction_threshold: 5
+  reply_threshold: 3
+  rate_limit_per_hour: 10
+  detect_codes: true
+  detect_documents: true
+  prioritize_pinned: true
+  prioritize_admin: true
+  detect_polls: true
+- id: 393346077
+  name: Stakelovelace
+  vip_senders: []
+  keywords: []
+  reaction_threshold: 5
+  reply_threshold: 3
+  rate_limit_per_hour: 10
+  detect_codes: true
+  detect_documents: true
+  prioritize_pinned: true
+  prioritize_admin: true
+  detect_polls: true
+- id: 1172036797
+  name: Stakelovelace.io
+  vip_senders: []
+  keywords: []
+  reaction_threshold: 5
+  reply_threshold: 3
+  rate_limit_per_hour: 10
+  detect_codes: true
+  detect_documents: true
+  prioritize_pinned: true
+  prioritize_admin: true
+  detect_polls: true
+- id: 1467978749
+  name: Stakelovelace.io AAA Stake Pools (en)
+  vip_senders: []
+  keywords: []
+  reaction_threshold: 5
+  reply_threshold: 3
+  rate_limit_per_hour: 10
+  detect_codes: true
+  detect_documents: true
+  prioritize_pinned: true
+  prioritize_admin: true
+  detect_polls: true
+- id: 1343376852
+  name: Stakelovelace.io AAA Stake Pools (it)
+  vip_senders: []
+  keywords: []
+  reaction_threshold: 5
+  reply_threshold: 3
+  rate_limit_per_hour: 10
+  detect_codes: true
+  detect_documents: true
+  prioritize_pinned: true
+  prioritize_admin: true
+  detect_polls: true
+- id: 399737958
+  name: Stakelovelace.io ADA Stake Pool
+  vip_senders: []
+  keywords: []
+  reaction_threshold: 5
+  reply_threshold: 3
+  rate_limit_per_hour: 10
+  detect_codes: true
+  detect_documents: true
+  prioritize_pinned: true
+  prioritize_admin: true
+  detect_polls: true
+- id: 1411760913
+  name: Stakelovelace.io Workgroup
+  vip_senders: []
+  keywords: []
+  reaction_threshold: 5
+  reply_threshold: 3
+  rate_limit_per_hour: 10
+  detect_codes: true
+  detect_documents: true
+  prioritize_pinned: true
+  prioritize_admin: true
+  detect_polls: true
+- id: 487261958
+  name: TemporaryChatSpace
+  vip_senders: []
+  keywords: []
+  reaction_threshold: 5
+  reply_threshold: 3
+  rate_limit_per_hour: 10
+  detect_codes: true
+  detect_documents: true
+  prioritize_pinned: true
+  prioritize_admin: true
+  detect_polls: true
+- id: 528252135
+  name: Traduttori Cardano Italia
+  vip_senders: []
+  keywords: []
+  reaction_threshold: 5
+  reply_threshold: 3
+  rate_limit_per_hour: 10
+  detect_codes: true
+  detect_documents: true
+  prioritize_pinned: true
+  prioritize_admin: true
+  detect_polls: true
+- id: 344799020
+  name: Yoroi traduzione Italiana
+  vip_senders: []
+  keywords: []
+  reaction_threshold: 5
+  reply_threshold: 3
+  rate_limit_per_hour: 10
+  detect_codes: true
+  detect_documents: true
+  prioritize_pinned: true
+  prioritize_admin: true
+  detect_polls: true
 interests:
 - algorand core development
 - blockchain security advisories

@@ -19,42 +19,49 @@
 </head>
 <body>
 	<nav class="navbar navbar-expand-lg sticky-top" aria-label="Primary navigation">
-		<div class="container-fluid">
+		<div class="container-fluid align-items-center">
 			<a class="navbar-brand" href="{{ url_for('dashboard_view') }}">
 				<img src="{{ url_for('static', filename='images/logo.png') }}" alt="TG Sentinel" class="navbar-logo" height="56" width="56">
-				<span class="ms-2">TG Sentinel</span>
+				<div class="ms-2">
+					<div class="navbar-brand-text">TG Sentinel</div>
+					<div class="navbar-brand-subtitle">Intelligent Telegram Activity Sentinel</div>
+				</div>
+				<span id="connection-indicator" class="badge status-offline ms-2" role="status" aria-live="polite">Offline</span>
 			</a>
 			<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#primaryNav" aria-controls="primaryNav" aria-expanded="false" aria-label="Toggle navigation">
 				<span class="navbar-toggler-icon"></span>
 			</button>
-			<div class="collapse navbar-collapse" id="primaryNav">
-				<ul class="navbar-nav me-auto mb-2 mb-lg-0">
+			<div class="collapse navbar-collapse flex-lg-grow-1 justify-content-lg-center" id="primaryNav">
+				<ul class="navbar-nav mx-lg-auto mb-2 mb-lg-0">
 					<li class="nav-item">
 						<a class="nav-link {% if request.endpoint == 'dashboard_view' %}active{% endif %}" href="{{ url_for('dashboard_view') }}">Dashboard</a>
 					</li>
 					<li class="nav-item">
 						<a class="nav-link {% if request.endpoint == 'alerts_view' %}active{% endif %}" href="{{ url_for('alerts_view') }}">Alerts</a>
 					</li>
-					<li class="nav-item">
-						<a class="nav-link {% if request.endpoint == 'config_view' %}active{% endif %}" href="{{ url_for('config_view') }}">Configuration</a>
+					<li class="nav-item dropdown">
+						<a class="nav-link dropdown-toggle {% if request.endpoint in ['config_view', 'profiles_view'] %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+							Configuration
+						</a>
+						<ul class="dropdown-menu">
+							<li><a class="dropdown-item {% if request.endpoint == 'config_view' %}active{% endif %}" href="{{ url_for('config_view') }}">Settings</a></li>
+							<li><a class="dropdown-item {% if request.endpoint == 'profiles_view' %}active{% endif %}" href="{{ url_for('profiles_view') }}">Profiles</a></li>
+						</ul>
 					</li>
 					<li class="nav-item">
 						<a class="nav-link {% if request.endpoint == 'analytics_view' %}active{% endif %}" href="{{ url_for('analytics_view') }}">Analytics</a>
 					</li>
-					<li class="nav-item">
-						<a class="nav-link {% if request.endpoint == 'profiles_view' %}active{% endif %}" href="{{ url_for('profiles_view') }}">Profiles</a>
-					</li>
-					<li class="nav-item">
-						<a class="nav-link {% if request.endpoint == 'developer_view' %}active{% endif %}" href="{{ url_for('developer_view') }}">Developer</a>
-					</li>
-					<li class="nav-item">
-						<a class="nav-link {% if request.endpoint == 'console_view' %}active{% endif %}" href="{{ url_for('console_view') }}">Console</a>
+					<li class="nav-item dropdown">
+						<a class="nav-link dropdown-toggle {% if request.endpoint in ['developer_view', 'docs_view', 'console_view'] %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+							Developer
+						</a>
+						<ul class="dropdown-menu">
+							<li><a class="dropdown-item {% if request.endpoint == 'developer_view' %}active{% endif %}" href="{{ url_for('developer_view') }}">Overview</a></li>
+							<li><a class="dropdown-item {% if request.endpoint == 'docs_view' %}active{% endif %}" href="{{ url_for('docs_view') }}">API Docs</a></li>
+							<li><a class="dropdown-item {% if request.endpoint == 'console_view' %}active{% endif %}" href="{{ url_for('console_view') }}">Console</a></li>
+						</ul>
 					</li>
 				</ul>
-				<div class="d-flex align-items-center gap-2">
-					<span id="connection-indicator" class="badge status-offline" role="status" aria-live="polite">Offline</span>
-					<span class="text-muted small" id="connected-chats-label"></span>
-				</div>
 			</div>
 		</div>
 	</nav>
@@ -65,13 +72,15 @@
 				<img id="user-avatar" src="{{ url_for('static', filename='images/logo.png') }}" alt="User avatar" class="rounded-circle shadow-sm" width="64" height="64">
 				<div>
 					<p class="mb-1 fw-semibold" id="user-name">Analyst</p>
-					<p class="mb-0 text-muted small" id="session-path-label">Session path: loading...</p>
+					<p class="mb-0 text-muted small" id="username-label">Username: loading...</p>
 					<p class="mb-0 text-muted small" id="phone-mask">Phone: pending</p>
 				</div>
 			</div>
 			<div class="d-flex flex-wrap align-items-center gap-2">
-				<button class="btn btn-outline-primary btn-sm" type="button" id="btn-relogin">Re-login / Switch Account</button>
-				<button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-session">Refresh Session Info</button>
+				<a class="btn btn-outline-primary btn-sm" href="/logout" id="btn-logout" aria-label="Logout">Logout</a>
+				<button class="btn btn-ghost btn-sm btn-lock" type="button" id="btn-ui-lock" title="Lock UI" aria-label="Lock UI">
+					<i class="bi bi-lock-fill icon-lg"></i>
+				</button>
 			</div>
 		</div>
 	</header>
@@ -82,7 +91,142 @@
 
 	<div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3" aria-live="polite" aria-atomic="true"></div>
 
+	<!-- Participant Info Modal -->
+	<div class="modal fade" id="participantModal" tabindex="-1" aria-labelledby="participantModalLabel" aria-hidden="true">
+		<div class="modal-dialog modal-dialog-centered">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title" id="participantModalLabel">Participant Information</h5>
+					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+				</div>
+				<div class="modal-body" id="participantModalBody">
+					<div class="text-center py-4">
+						<div class="spinner-border" role="status">
+							<span class="visually-hidden">Loading...</span>
+						</div>
+						<p class="mt-2">Loading participant information...</p>
+					</div>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Login / Re-authentication Modal -->
+	<div class="modal fade" id="loginModal" tabindex="-1" aria-labelledby="loginModalLabel" aria-hidden="true">
+		<div class="modal-dialog modal-dialog-centered">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title" id="loginModalLabel">Authenticate Telegram Session</h5>
+					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+				</div>
+				<div class="modal-body">
+					<form id="loginForm" onsubmit="return false;">
+						<div class="mb-3">
+							<label for="loginPhone" class="form-label">Phone Number</label>
+                    <input type="tel" class="form-control" id="loginPhone" placeholder="+1 555 0100" required autocomplete="tel" inputmode="tel">
+							<div class="form-text">Enter your Telegram account phone in international format.</div>
+						</div>
+						<div class="mb-3 d-none" id="codeRow">
+							<label for="loginCode" class="form-label">Code</label>
+                    <input type="text" class="form-control" id="loginCode" placeholder="12345" autocomplete="one-time-code" inputmode="numeric">
+							<div class="form-text">Enter the code you received in Telegram.</div>
+						</div>
+						<div class="mb-3 d-none" id="passwordRow">
+							<label for="loginPassword" class="form-label">Password</label>
+                    <input type="password" class="form-control" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
+							<div class="form-text">If two-factor authentication is enabled.</div>
+						</div>
+					</form>
+					<div id="loginAlert" class="alert d-none" role="alert"></div>
+				</div>
+                <div class="modal-footer align-items-center">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" id="btnSendCode" class="btn btn-outline-primary">Send Code</button>
+                    <button type="button" id="btnVerifyCode" class="btn btn-primary d-none">Verify</button>
+                    <button type="button" id="btnResendCode" class="btn btn-link d-none">Resend code</button>
+                    <span id="resendCountdown" class="text-muted small d-none" aria-live="polite"></span>
+                </div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Unlock Modal -->
+	<div class="modal fade" id="unlockModal" tabindex="-1" aria-labelledby="unlockModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+		<div class="modal-dialog">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title" id="unlockModalLabel">Unlock UI</h5>
+					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+				</div>
+				<div class="modal-body">
+					<div id="unlockAlert" class="alert d-none" role="alert"></div>
+					<div class="mb-3">
+						<label for="unlockPassword" class="form-label">Password</label>
+						<input type="password" class="form-control" id="unlockPassword" placeholder="••••••••" autocomplete="current-password">
+						<div class="form-text">Enter the UI lock password to continue.</div>
+					</div>
+				</div>
+				<div class="modal-footer">
+					<button type="button" id="btnUnlockNow" class="btn btn-primary">Unlock</button>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Logout Confirmation Modal -->
+	<div class="modal fade" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+		<div class="modal-dialog modal-dialog-centered">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title" id="logoutModalLabel">Confirm Logout</h5>
+					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+				</div>
+				<div class="modal-body">
+					<p class="mb-0">Are you sure you want to log out? You will need to authenticate again to access TG Sentinel.</p>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+					<button type="button" id="btnConfirmLogout" class="btn btn-danger">Logout</button>
+				</div>
+			</div>
+		</div>
+	</div>
+
 	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+	<script>
+		// Global function to enhance modals with glass backdrop effect
+		function applyGlassBackdrop(modalElement) {
+			if (!modalElement) return;
+			
+			const addGlassClass = () => {
+				// Small delay to ensure backdrop is rendered
+				setTimeout(() => {
+					const backdrop = document.querySelector('.modal-backdrop');
+					if (backdrop && !backdrop.classList.contains('glass-backdrop')) {
+						backdrop.classList.add('glass-backdrop');
+					}
+				}, 50);
+			};
+			
+			modalElement.addEventListener('shown.bs.modal', addGlassClass);
+			modalElement.addEventListener('show.bs.modal', addGlassClass);
+		}
+		
+		// Apply glass effect to all modals on page load
+		document.addEventListener('DOMContentLoaded', () => {
+			document.querySelectorAll('.modal').forEach(modal => {
+				applyGlassBackdrop(modal);
+			});
+		});
+	</script>
+	<script>
+		// UI Lock config from server
+		window.UI_LOCK_TIMEOUT = {{ ui_lock_timeout|int }};
+		window.UI_LOCK_ENABLED = {{ 'true' if ui_lock_enabled else 'false' }};
+	</script>
 	<script>
 		const toastContainer = document.getElementById("toast-container");
 
@@ -135,27 +279,18 @@
 		}
 
 		function populateSessionInfo(data) {
-			const nameEl = document.getElementById("user-name");
 			const avatarEl = document.getElementById("user-avatar");
-			const sessionPathEl = document.getElementById("session-path-label");
+			const usernameEl = document.getElementById("username-label");
 			const phoneEl = document.getElementById("phone-mask");
-			const chatsEl = document.getElementById("connected-chats-label");
 
-			if (nameEl && data.username) {
-				nameEl.textContent = data.username;
-			}
 			if (avatarEl && data.avatar) {
 				avatarEl.src = data.avatar;
 			}
-			if (sessionPathEl && data.session_path) {
-				sessionPathEl.textContent = `Session path: ${data.session_path}`;
+			if (usernameEl && data.username) {
+				usernameEl.textContent = `Username: ${data.username}`;
 			}
 			if (phoneEl && data.phone_masked) {
 				phoneEl.textContent = `Phone: ${data.phone_masked}`;
-			}
-			if (chatsEl) {
-				const list = (data.connected_chats || []).slice(0, 3).join(", ");
-				chatsEl.textContent = list ? `Watching: ${list}` : "";
 			}
 			updateConnectionIndicator({ connected: Boolean(data.connected) });
 		}
@@ -177,36 +312,732 @@
 		document.addEventListener("DOMContentLoaded", () => {
 			refreshSessionInfo();
 
-		const reloginBtn = document.getElementById("btn-relogin");
-		if (reloginBtn) {
-			reloginBtn.addEventListener("click", async () => {
-				showToast("Re-authentication request sent to backend logs", "info");
+		// Logout button shows confirmation modal with glass effect
+		const logoutBtn = document.getElementById("btn-logout");
+		if (logoutBtn) {
+			logoutBtn.addEventListener("click", (ev) => {
+				ev.preventDefault();
 				try {
-					const response = await fetch("{{ url_for('api_console_command') }}", {
-						method: "POST",
-						headers: { "Content-Type": "application/json" },
-						body: JSON.stringify({ command: "reauth" }),
-					});
-					if (!response.ok) {
-						throw new Error(`HTTP error: ${response.status}`);
+					const modalEl = document.getElementById('logoutModal');
+					if (modalEl) {
+						const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl, { backdrop: 'static', keyboard: false });
+						modal.show();
 					}
-					// Optionally confirm success with the response payload
-					const payload = await response.json();
-					console.log("Reauth command accepted:", payload);
-				} catch (error) {
-					console.error("Re-authentication request failed:", error);
-					showToast("Re-authentication request failed. Check console for details.", "error");
+				} catch (e) {
+					console.error('Failed to show logout modal:', e);
 				}
 			});
-		}			const refreshBtn = document.getElementById("btn-refresh-session");
-			if (refreshBtn) {
-				refreshBtn.addEventListener("click", refreshSessionInfo);
-			}
+		}
 
-			const socketFactory = window.io || null;
-			let socket;
+		// Confirm logout button performs actual logout
+		const btnConfirmLogout = document.getElementById("btnConfirmLogout");
+		if (btnConfirmLogout) {
+			btnConfirmLogout.addEventListener("click", async () => {
+				// Disable to prevent double clicks and show busy state
+				btnConfirmLogout.setAttribute('aria-busy', 'true');
+				btnConfirmLogout.classList.add('disabled');
+				// Short-timeout POST to logout API; always fall back to /logout navigation
+				try {
+					const controller = new AbortController();
+					const tid = setTimeout(() => controller.abort(), 1200);
+					try { await fetch('/api/session/logout', { method: 'POST', signal: controller.signal }); } catch (_) {}
+					clearTimeout(tid);
+				} catch (_) {}
+				// Clear local state and broadcast to other tabs
+				try { sessionStorage.clear(); } catch (_) {}
+				try { localStorage.clear(); } catch (_) {}
+				try { localStorage.setItem('tgsentinel:logout', String(Date.now())); } catch (_) {}
+				// Navigate via server-side /logout route to guarantee session invalidation + gating
+				try { window.location.assign('/logout'); } catch (_) { window.location.href = '/logout'; }
+			});
+		}
+
+		// Cross-tab logout listener
+		window.addEventListener('storage', (e) => {
+			try {
+				if (e && e.key === 'tgsentinel:logout') {
+					window.location.assign('/logout');
+				}
+			} catch (_) {}
+		});
+
+		const refreshBtn = document.getElementById("btn-refresh-session");
+		if (refreshBtn) {
+			refreshBtn.addEventListener("click", refreshSessionInfo);
+		}
+
+		// Participant Information Modal
+		document.addEventListener("tgsentinel:show-participant-info", async (event) => {
+			const { chatId, userId, chatName, senderName, infoType } = event.detail;
+			const modal = new bootstrap.Modal(document.getElementById("participantModal"));
+			const modalLabel = document.getElementById("participantModalLabel");
+			const modalBody = document.getElementById("participantModalBody");
 			
-			if (!socketFactory) {
+			// Set title based on type
+			if (infoType === 'user') {
+				modalLabel.textContent = `User Info: ${senderName || "Unknown"}`;
+			} else if (infoType === 'chat') {
+				modalLabel.textContent = `Chat Info: ${chatName || "Unknown"}`;
+			} else {
+				modalLabel.textContent = `Info: ${senderName || chatName || "Participant"}`;
+			}
+			
+			modalBody.innerHTML = `
+				<div class="text-center py-4">
+					<div class="spinner-border text-primary" role="status">
+						<span class="visually-hidden">Loading...</span>
+					</div>
+					<p class="mt-2 text-muted">Fetching information...</p>
+				</div>
+			`;
+			modal.show();
+			
+			// Fetch participant info
+			try {
+				const params = new URLSearchParams({ chat_id: chatId, pending: '1' });
+				if (userId) {
+					params.append("user_id", userId);
+				}
+				
+				const response = await fetch(`/api/participant/info?${params}`);
+				// Handle non-OK responses explicitly to avoid silent fallbacks
+				if (!response.ok && response.status !== 202) {
+					let message = `Request failed (${response.status})`;
+					try {
+						const err = await response.json();
+						if (err && err.error) message = err.error;
+					} catch (e) {}
+					modalBody.innerHTML = `
+						<div class="alert alert-danger">
+							<i class="bi bi-exclamation-triangle me-2"></i>
+							${escapeHtml(message)}
+						</div>
+					`;
+					return;
+				}
+
+				const result = await response.json();
+				
+				if (response.status === 202) {
+					// Still processing; display minimal info if provided, then show a loading hint
+					try {
+						displayParticipantInfo(result, modalBody, infoType);
+					} catch (e) {
+						// Fall back to a generic spinner if minimal info isn't available
+						modalBody.innerHTML = '';
+					}
+					const loader = document.createElement('div');
+					loader.className = 'text-center py-3';
+					loader.innerHTML = `
+						<div class="spinner-border text-warning" role="status">
+							<span class="visually-hidden">Processing...</span>
+						</div>
+						<p class="mt-2 text-muted">Fetching data from Telegram...</p>
+					`;
+					modalBody.appendChild(loader);
+					
+					// Retry once after a slightly longer delay to match worker scan interval
+					await new Promise(resolve => setTimeout(resolve, 2000));
+					const retryResponse = await fetch(`/api/participant/info?${params}`);
+					if (!retryResponse.ok && retryResponse.status !== 202) {
+						let message = `Request failed (${retryResponse.status})`;
+						try {
+							const err = await retryResponse.json();
+							if (err && err.error) message = err.error;
+						} catch (e) {}
+						modalBody.innerHTML = `
+							<div class="alert alert-danger">
+								<i class="bi bi-exclamation-triangle me-2"></i>
+								${escapeHtml(message)}
+							</div>
+						`;
+						return;
+					}
+						const retryResult = await retryResponse.json();
+						if (retryResponse.status === 202) {
+						try { modalBody.innerHTML = ''; } catch (e) {}
+						displayParticipantInfo(retryResult, modalBody, infoType);
+						const warning = document.createElement('div');
+						warning.className = 'alert alert-warning mt-2';
+						warning.innerHTML = '<i class="bi bi-clock-history me-2"></i>Still fetching data. Please try again in a moment.';
+						modalBody.appendChild(warning);
+						return;
+					}
+					
+					displayParticipantInfo(retryResult, modalBody, infoType);
+				} else {
+					displayParticipantInfo(result, modalBody, infoType);
+				}
+			} catch (error) {
+				console.error("Failed to fetch participant info:", error);
+				modalBody.innerHTML = `
+					<div class="alert alert-danger">
+						<i class="bi bi-exclamation-triangle me-2"></i>
+						Failed to load information.
+					</div>
+				`;
+			}
+		});
+		
+		function displayParticipantInfo(data, container, infoType) {
+			// Handle explicit error payloads from API
+			if (data && data.error) {
+				container.innerHTML = `
+					<div class="alert alert-danger">
+						<i class="bi bi-exclamation-triangle me-2"></i>
+						${escapeHtml(String(data.error))}
+					</div>
+				`;
+				return;
+			}
+			let html = "";
+			
+			// Chat Information - show when requested, or as fallback if user info missing
+			if (data.chat && (!infoType || infoType === 'chat' || (infoType === 'user' && !data.user))) {
+				html += `<div class="mb-4">
+					<h6 class="text-muted mb-3"><i class="bi bi-chat-dots me-2"></i>Chat Information</h6>`;
+				
+				// Add chat avatar if available
+				if (data.chat.avatar_url) {
+					html += `<div class="text-center mb-3">
+						<img src="${escapeHtml(data.chat.avatar_url)}" alt="Chat avatar" class="rounded-circle" style="width: 80px; height: 80px; object-fit: cover;" onerror="this.style.display='none';">
+					</div>`;
+				}
+				
+				html += `<dl class="row mb-0">`;
+				
+				if (data.chat.title) {
+					html += `
+						<dt class="col-sm-4">Title</dt>
+						<dd class="col-sm-8"><strong>${escapeHtml(data.chat.title)}</strong></dd>`;
+				}
+				
+				if (data.chat.type) {
+					let typeClass = "bg-info";
+					if (data.chat.type === "supergroup") typeClass = "bg-primary";
+					else if (data.chat.type === "channel") typeClass = "bg-success";
+					else if (data.chat.type === "group") typeClass = "bg-secondary";
+					html += `
+						<dt class="col-sm-4">Type</dt>
+						<dd class="col-sm-8"><span class="badge ${typeClass}">${escapeHtml(data.chat.type.toUpperCase())}</span>`;
+					if (data.chat.broadcast) html += ` <span class="badge bg-warning text-dark">BROADCAST</span>`;
+					if (data.chat.megagroup) html += ` <span class="badge bg-info">MEGAGROUP</span>`;
+					if (data.chat.gigagroup) html += ` <span class="badge bg-danger">GIGAGROUP</span>`;
+					if (data.chat.forum) html += ` <span class="badge bg-purple">FORUM</span>`;
+					html += `</dd>`;
+				}
+				
+				if (data.chat.username) {
+					html += `
+						<dt class="col-sm-4">Username</dt>
+						<dd class="col-sm-8">@${escapeHtml(data.chat.username)} <span class="badge bg-success">PUBLIC</span></dd>`;
+				}
+				
+				if (data.chat.id) {
+					html += `
+						<dt class="col-sm-4">Chat ID</dt>
+						<dd class="col-sm-8"><code class="user-select-all">${escapeHtml(String(data.chat.id))}</code></dd>`;
+				}
+				
+				if (data.chat.access_hash) {
+					html += `
+						<dt class="col-sm-4">Access Hash</dt>
+						<dd class="col-sm-8"><code class="user-select-all small">${escapeHtml(String(data.chat.access_hash))}</code></dd>`;
+				}
+				
+				if (data.chat.participants_count !== undefined) {
+					html += `
+						<dt class="col-sm-4">Members</dt>
+						<dd class="col-sm-8"><i class="bi bi-people-fill me-1"></i>${escapeHtml(String(data.chat.participants_count))}</dd>`;
+				}
+				
+				if (data.chat.created_date) {
+					const createdDate = new Date(data.chat.created_date * 1000);
+					html += `
+						<dt class="col-sm-4">Created</dt>
+						<dd class="col-sm-8">${createdDate.toLocaleString()}</dd>`;
+				}
+				
+				if (data.chat.description) {
+					html += `
+						<dt class="col-sm-4">Description</dt>
+						<dd class="col-sm-8"><em>${escapeHtml(data.chat.description)}</em></dd>`;
+				}
+				
+				if (data.chat.invite_link) {
+					html += `
+						<dt class="col-sm-4">Invite Link</dt>
+						<dd class="col-sm-8"><a href="${escapeHtml(data.chat.invite_link)}" target="_blank" class="text-decoration-none"><i class="bi bi-link-45deg"></i> View Link</a></dd>`;
+				}
+				
+				if (data.chat.pinned_msg_id) {
+					html += `
+						<dt class="col-sm-4">Pinned Message</dt>
+						<dd class="col-sm-8"><code>#${escapeHtml(String(data.chat.pinned_msg_id))}</code></dd>`;
+				}
+				
+				// Permissions and Flags
+				if (data.chat.noforwards) {
+					html += `
+						<dt class="col-sm-4">Restrictions</dt>
+						<dd class="col-sm-8"><span class="badge bg-warning text-dark"><i class="bi bi-shield-lock me-1"></i>Forwarding Disabled</span></dd>`;
+				}
+				
+				if (data.chat.verified) {
+					html += `
+						<dt class="col-sm-4">Verified</dt>
+						<dd class="col-sm-8"><span class="badge bg-primary"><i class="bi bi-patch-check-fill me-1"></i>VERIFIED</span></dd>`;
+				}
+				
+				if (data.chat.scam) {
+					html += `
+						<dt class="col-sm-4">Warning</dt>
+						<dd class="col-sm-8"><span class="badge bg-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>SCAM</span></dd>`;
+				}
+				
+				if (data.chat.fake) {
+					html += `
+						<dt class="col-sm-4">Warning</dt>
+						<dd class="col-sm-8"><span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle-fill me-1"></i>FAKE</span></dd>`;
+				}
+				
+				// Admin Rights (if current user has any)
+				if (data.chat.admin_rights) {
+					html += `
+						<dt class="col-sm-4">Your Admin Rights</dt>
+						<dd class="col-sm-8"><small>`;
+					const rights = [];
+					if (data.chat.admin_rights.change_info) rights.push("Change Info");
+					if (data.chat.admin_rights.post_messages) rights.push("Post Messages");
+					if (data.chat.admin_rights.edit_messages) rights.push("Edit Messages");
+					if (data.chat.admin_rights.delete_messages) rights.push("Delete Messages");
+					if (data.chat.admin_rights.ban_users) rights.push("Ban Users");
+					if (data.chat.admin_rights.invite_users) rights.push("Invite Users");
+					if (data.chat.admin_rights.pin_messages) rights.push("Pin Messages");
+					if (data.chat.admin_rights.add_admins) rights.push("Add Admins");
+					if (data.chat.admin_rights.manage_call) rights.push("Manage Calls");
+					if (data.chat.admin_rights.anonymous) rights.push("Anonymous");
+					if (rights.length > 0) {
+						html += rights.map(r => `<span class="badge bg-success me-1">${r}</span>`).join('');
+					} else {
+						html += `<span class="text-muted">No admin rights</span>`;
+					}
+					html += `</small></dd>`;
+				}
+				
+				// Default Banned Rights (default permissions for members)
+				if (data.chat.default_banned_rights) {
+					html += `
+						<dt class="col-sm-4">Default Permissions</dt>
+						<dd class="col-sm-8"><small>`;
+					const perms = [];
+					if (!data.chat.default_banned_rights.send_messages) perms.push("Send Messages");
+					if (!data.chat.default_banned_rights.send_media) perms.push("Send Media");
+					if (!data.chat.default_banned_rights.send_stickers) perms.push("Send Stickers");
+					if (!data.chat.default_banned_rights.send_gifs) perms.push("Send GIFs");
+					if (!data.chat.default_banned_rights.send_games) perms.push("Send Games");
+					if (!data.chat.default_banned_rights.send_inline) perms.push("Use Inline Bots");
+					if (!data.chat.default_banned_rights.embed_links) perms.push("Embed Links");
+					if (!data.chat.default_banned_rights.send_polls) perms.push("Send Polls");
+					if (!data.chat.default_banned_rights.change_info) perms.push("Change Info");
+					if (!data.chat.default_banned_rights.invite_users) perms.push("Invite Users");
+					if (!data.chat.default_banned_rights.pin_messages) perms.push("Pin Messages");
+					if (perms.length > 0) {
+						html += perms.map(p => `<span class="badge bg-light text-dark me-1 mb-1">${p}</span>`).join('');
+					} else {
+						html += `<span class="text-muted">All restricted</span>`;
+					}
+					html += `</small></dd>`;
+				}
+				
+				html += `</dl></div>`;
+			}
+			
+			// User Information - show when requested, or as fallback if chat info missing
+			if (data.user && (!infoType || infoType === 'user' || (infoType === 'chat' && !data.chat))) {
+				html += `<div class="mb-4">
+					<h6 class="text-muted mb-3"><i class="bi bi-person-circle me-2"></i>User Information</h6>`;
+				
+				// Add user avatar if available
+				if (data.user.avatar_url) {
+					html += `<div class="text-center mb-3">
+						<img src="${escapeHtml(data.user.avatar_url)}" alt="User avatar" class="rounded-circle" style="width: 80px; height: 80px; object-fit: cover;" onerror="this.style.display='none';">
+					</div>`;
+				}
+				
+				html += `<dl class="row mb-0">`;
+				
+				// Show display name (only if it's not just "User {id}")
+				if (data.user.name && !data.user.name.match(/^User \d+$/)) {
+					html += `
+						<dt class="col-sm-4">Display Name</dt>
+						<dd class="col-sm-8"><strong>${escapeHtml(data.user.name)}</strong>`;
+					if (data.user.bot) {
+						html += ` <span class="badge bg-secondary"><i class="bi bi-robot me-1"></i>BOT</span>`;
+					}
+					if (data.user.verified) {
+						html += ` <span class="badge bg-primary"><i class="bi bi-patch-check-fill me-1"></i>VERIFIED</span>`;
+					}
+					if (data.user.premium) {
+						html += ` <span class="badge bg-warning text-dark"><i class="bi bi-star-fill me-1"></i>PREMIUM</span>`;
+					}
+					if (data.user.scam) {
+						html += ` <span class="badge bg-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>SCAM</span>`;
+					}
+					if (data.user.fake) {
+						html += ` <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle-fill me-1"></i>FAKE</span>`;
+					}
+					html += `</dd>`;
+				}
+				
+				if (data.user.first_name || data.user.last_name) {
+					html += `
+						<dt class="col-sm-4">Full Name</dt>
+						<dd class="col-sm-8">${escapeHtml((data.user.first_name || '') + ' ' + (data.user.last_name || '')).trim()}</dd>`;
+				}
+				
+				if (data.user.username) {
+					html += `
+						<dt class="col-sm-4">Username</dt>
+						<dd class="col-sm-8">@${escapeHtml(data.user.username)}</dd>`;
+				}
+				
+				if (data.user.usernames && data.user.usernames.length > 0) {
+					html += `
+						<dt class="col-sm-4">Alt Usernames</dt>
+						<dd class="col-sm-8">`;
+					data.user.usernames.forEach(username => {
+						html += `<span class="badge bg-light text-dark me-1">@${escapeHtml(username)}</span>`;
+					});
+					html += `</dd>`;
+				}
+				
+				if (data.user.id) {
+					html += `
+						<dt class="col-sm-4">User ID</dt>
+						<dd class="col-sm-8">
+							<code class="user-select-all">${escapeHtml(String(data.user.id))}</code>`;
+					// Add badges at the User ID level if name wasn't shown
+					if (!data.user.name || data.user.name.match(/^User \d+$/)) {
+						if (data.user.bot) {
+							html += ` <span class="badge bg-secondary"><i class="bi bi-robot me-1"></i>BOT</span>`;
+						}
+						if (data.user.verified) {
+							html += ` <span class="badge bg-primary"><i class="bi bi-patch-check-fill me-1"></i>VERIFIED</span>`;
+						}
+						if (data.user.premium) {
+							html += ` <span class="badge bg-warning text-dark"><i class="bi bi-star-fill me-1"></i>PREMIUM</span>`;
+						}
+						if (data.user.scam) {
+							html += ` <span class="badge bg-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>SCAM</span>`;
+						}
+						if (data.user.fake) {
+							html += ` <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle-fill me-1"></i>FAKE</span>`;
+						}
+					}
+					html += `</dd>`;
+				}
+				
+				if (data.user.access_hash) {
+					html += `
+						<dt class="col-sm-4">Access Hash</dt>
+						<dd class="col-sm-8"><code class="user-select-all small">${escapeHtml(String(data.user.access_hash))}</code></dd>`;
+				}
+				
+				if (data.user.phone) {
+					html += `
+						<dt class="col-sm-4">Phone</dt>
+						<dd class="col-sm-8"><i class="bi bi-telephone me-1"></i>${escapeHtml(data.user.phone)}</dd>`;
+				}
+				
+				// Support flag
+				if (data.user.support !== undefined && data.user.support) {
+					html += `
+						<dt class="col-sm-4">Account Type</dt>
+						<dd class="col-sm-8"><span class="badge bg-info"><i class="bi bi-life-preserver me-1"></i>SUPPORT</span></dd>`;
+				}
+				
+				// Min/Max fields (for privacy indicators)
+				if (data.user.min !== undefined && data.user.min) {
+					html += `
+						<dt class="col-sm-4">Privacy</dt>
+						<dd class="col-sm-8"><span class="badge bg-light text-dark"><i class="bi bi-shield-lock me-1"></i>Limited Info</span></dd>`;
+				}
+				
+				// Stories fields
+				if (data.user.stories_max_id !== undefined && data.user.stories_max_id > 0) {
+					html += `
+						<dt class="col-sm-4">Stories</dt>
+						<dd class="col-sm-8"><span class="badge bg-primary"><i class="bi bi-camera-reels me-1"></i>Has Stories</span></dd>`;
+				}
+				
+				if (data.user.stories_unavailable !== undefined && data.user.stories_unavailable) {
+					html += `
+						<dt class="col-sm-4">Stories</dt>
+						<dd class="col-sm-8"><span class="badge bg-secondary">Stories Hidden</span></dd>`;
+				}
+				
+				// Emoji status
+				if (data.user.emoji_status !== undefined && data.user.emoji_status) {
+					html += `
+						<dt class="col-sm-4">Emoji Status</dt>
+						<dd class="col-sm-8">${escapeHtml(data.user.emoji_status)}</dd>`;
+				}
+				
+				// Apply min photo
+				if (data.user.apply_min_photo !== undefined && data.user.apply_min_photo) {
+					html += `
+						<dt class="col-sm-4">Photo Privacy</dt>
+						<dd class="col-sm-8"><span class="badge bg-light text-dark">Restricted</span></dd>`;
+				}
+				
+				if (data.user.about) {
+					html += `
+						<dt class="col-sm-4">Bio</dt>
+						<dd class="col-sm-8"><em>${escapeHtml(data.user.about)}</em></dd>`;
+				}
+				
+				if (data.user.lang_code) {
+					html += `
+						<dt class="col-sm-4">Language</dt>
+						<dd class="col-sm-8"><span class="badge bg-light text-dark">${escapeHtml(data.user.lang_code.toUpperCase())}</span></dd>`;
+				}
+				
+				// Status indicators
+				if (data.user.status) {
+					html += `
+						<dt class="col-sm-4">Status</dt>
+						<dd class="col-sm-8">`;
+					if (data.user.status === 'online') {
+						html += `<span class="badge bg-success"><i class="bi bi-circle-fill me-1"></i>Online</span>`;
+					} else if (data.user.status === 'offline') {
+						html += `<span class="badge bg-secondary"><i class="bi bi-circle me-1"></i>Offline</span>`;
+					} else if (data.user.status === 'recently') {
+						html += `<span class="badge bg-info">Recently Active</span>`;
+					} else if (data.user.status === 'last_week') {
+						html += `<span class="badge bg-light text-dark">Last Week</span>`;
+					} else if (data.user.status === 'last_month') {
+						html += `<span class="badge bg-light text-dark">Last Month</span>`;
+					} else {
+						html += `<span class="badge bg-light text-dark">${escapeHtml(data.user.status)}</span>`;
+					}
+					html += `</dd>`;
+				}
+				
+				if (data.user.last_seen) {
+					const lastSeen = new Date(data.user.last_seen * 1000);
+					html += `
+						<dt class="col-sm-4">Last Seen</dt>
+						<dd class="col-sm-8">${lastSeen.toLocaleString()}</dd>`;
+				}
+				
+				// Privacy settings
+				if (data.user.photo_available !== undefined) {
+					html += `
+						<dt class="col-sm-4">Profile Photo</dt>
+						<dd class="col-sm-8">`;
+					if (data.user.photo_available) {
+						html += `<span class="badge bg-success">Available</span>`;
+					} else {
+						html += `<span class="badge bg-secondary">Not Set</span>`;
+					}
+					html += `</dd>`;
+				}
+				
+				// Contact/mutual info
+				if (data.user.mutual_contact) {
+					html += `
+						<dt class="col-sm-4">Contact</dt>
+						<dd class="col-sm-8"><span class="badge bg-success"><i class="bi bi-person-check-fill me-1"></i>Mutual Contact</span></dd>`;
+				} else if (data.user.contact) {
+					html += `
+						<dt class="col-sm-4">Contact</dt>
+						<dd class="col-sm-8"><span class="badge bg-info"><i class="bi bi-person-plus me-1"></i>In Contacts</span></dd>`;
+				}
+				
+				// Restrictions
+				if (data.user.restricted) {
+					html += `
+						<dt class="col-sm-4">Restrictions</dt>
+						<dd class="col-sm-8"><span class="badge bg-warning text-dark"><i class="bi bi-shield-exclamation me-1"></i>Restricted</span>`;
+					if (data.user.restriction_reason) {
+						html += `<br><small class="text-muted">${escapeHtml(data.user.restriction_reason)}</small>`;
+					}
+					html += `</dd>`;
+				}
+				
+				// Show groups list if available
+				if (data.user.common_chats && data.user.common_chats.length > 0) {
+					html += `
+						<dt class="col-sm-4">Common Groups</dt>
+						<dd class="col-sm-8">
+							<ul class="list-unstyled mb-0">`;
+					data.user.common_chats.forEach(chat => {
+						html += `<li class="mb-1"><i class="bi bi-chat-dots me-1 text-primary"></i><small>${escapeHtml(chat)}</small></li>`;
+					});
+					html += `</ul>
+						</dd>`;
+				}
+				
+				if (data.user.common_chats_count) {
+					html += `
+						<dt class="col-sm-4">Common Groups Count</dt>
+						<dd class="col-sm-8"><span class="badge bg-primary">${escapeHtml(String(data.user.common_chats_count))}</span></dd>`;
+				}
+				
+				html += `</dl></div>`;
+			}
+			
+			// Participant Information - only show if infoType is 'user' or undefined (both)
+			if (data.participant && (!infoType || infoType === 'user')) {
+				html += `<div class="mb-3">
+					<h6 class="text-muted mb-3"><i class="bi bi-person-badge me-2"></i>Participant Details (in this chat)</h6>
+					<dl class="row mb-0">`;
+				
+				if (data.participant.role) {
+					let badgeClass = "bg-secondary";
+					let icon = "person";
+					if (data.participant.role === "creator") {
+						badgeClass = "bg-danger";
+						icon = "star-fill";
+					} else if (data.participant.role === "admin") {
+						badgeClass = "bg-warning text-dark";
+						icon = "shield-fill";
+					} else if (data.participant.role === "member") {
+						badgeClass = "bg-success";
+						icon = "person-check";
+					} else if (data.participant.role === "banned" || data.participant.role === "kicked") {
+						badgeClass = "bg-danger";
+						icon = "person-x";
+					} else if (data.participant.role === "left") {
+						badgeClass = "bg-secondary";
+						icon = "person-dash";
+					}
+					
+					html += `
+						<dt class="col-sm-4">Role</dt>
+						<dd class="col-sm-8"><span class="badge ${badgeClass}"><i class="bi bi-${icon} me-1"></i>${escapeHtml(data.participant.role.toUpperCase())}</span></dd>`;
+				}
+				
+				if (data.participant.rank || data.participant.custom_title) {
+					html += `
+						<dt class="col-sm-4">Custom Title</dt>
+						<dd class="col-sm-8"><span class="badge bg-info">${escapeHtml(data.participant.rank || data.participant.custom_title)}</span></dd>`;
+				}
+				
+				if (data.participant.join_date || data.participant.date) {
+					const date = new Date((data.participant.join_date || data.participant.date) * 1000);
+					html += `
+						<dt class="col-sm-4">Joined</dt>
+						<dd class="col-sm-8"><i class="bi bi-calendar-check me-1"></i>${date.toLocaleString()}</dd>`;
+				}
+				
+				if (data.participant.promoted_by) {
+					html += `
+						<dt class="col-sm-4">Promoted By</dt>
+						<dd class="col-sm-8">User ID: <code>${escapeHtml(String(data.participant.promoted_by))}</code></dd>`;
+				}
+				
+				if (data.participant.inviter_id || data.participant.invited_by) {
+					html += `
+						<dt class="col-sm-4">Invited By</dt>
+						<dd class="col-sm-8">User ID: <code>${escapeHtml(String(data.participant.inviter_id || data.participant.invited_by))}</code></dd>`;
+				}
+				
+				// Detailed Admin Rights for this participant
+				if (data.participant.admin_rights) {
+					html += `
+						<dt class="col-sm-4">Admin Permissions</dt>
+						<dd class="col-sm-8"><small>`;
+					const adminRights = [];
+					if (data.participant.admin_rights.change_info) adminRights.push("Change Info");
+					if (data.participant.admin_rights.post_messages) adminRights.push("Post");
+					if (data.participant.admin_rights.edit_messages) adminRights.push("Edit");
+					if (data.participant.admin_rights.delete_messages) adminRights.push("Delete");
+					if (data.participant.admin_rights.ban_users) adminRights.push("Ban");
+					if (data.participant.admin_rights.invite_users) adminRights.push("Invite");
+					if (data.participant.admin_rights.pin_messages) adminRights.push("Pin");
+					if (data.participant.admin_rights.add_admins) adminRights.push("Add Admins");
+					if (data.participant.admin_rights.manage_call) adminRights.push("Manage Calls");
+					if (data.participant.admin_rights.manage_topics) adminRights.push("Manage Topics");
+					if (data.participant.admin_rights.anonymous) adminRights.push("Anonymous Posting");
+					if (data.participant.admin_rights.other) adminRights.push("Other Rights");
+					
+					if (adminRights.length > 0) {
+						html += adminRights.map(r => `<span class="badge bg-success me-1 mb-1">${r}</span>`).join('');
+					} else {
+						html += `<span class="text-muted">Limited rights</span>`;
+					}
+					html += `</small></dd>`;
+				}
+				
+				// Banned/Restricted Rights
+				if (data.participant.banned_rights) {
+					html += `
+						<dt class="col-sm-4">Restrictions</dt>
+						<dd class="col-sm-8"><small>`;
+					const restrictions = [];
+					if (data.participant.banned_rights.view_messages) restrictions.push("Cannot View");
+					if (data.participant.banned_rights.send_messages) restrictions.push("Cannot Send Messages");
+					if (data.participant.banned_rights.send_media) restrictions.push("Cannot Send Media");
+					if (data.participant.banned_rights.send_stickers) restrictions.push("No Stickers");
+					if (data.participant.banned_rights.send_gifs) restrictions.push("No GIFs");
+					if (data.participant.banned_rights.send_games) restrictions.push("No Games");
+					if (data.participant.banned_rights.send_inline) restrictions.push("No Inline Bots");
+					if (data.participant.banned_rights.embed_links) restrictions.push("No Link Previews");
+					if (data.participant.banned_rights.send_polls) restrictions.push("No Polls");
+					if (data.participant.banned_rights.change_info) restrictions.push("Cannot Change Info");
+					if (data.participant.banned_rights.invite_users) restrictions.push("Cannot Invite");
+					if (data.participant.banned_rights.pin_messages) restrictions.push("Cannot Pin");
+					
+					if (restrictions.length > 0) {
+						html += restrictions.map(r => `<span class="badge bg-danger me-1 mb-1">${r}</span>`).join('');
+					} else {
+						html += `<span class="text-success">No restrictions</span>`;
+					}
+					
+					if (data.participant.banned_rights.until_date) {
+						const untilDate = new Date(data.participant.banned_rights.until_date * 1000);
+						if (data.participant.banned_rights.until_date > Math.floor(Date.now() / 1000)) {
+							html += `<br><span class="text-warning"><i class="bi bi-clock me-1"></i>Until: ${untilDate.toLocaleString()}</span>`;
+						} else {
+							html += `<br><span class="text-muted"><i class="bi bi-check-circle me-1"></i>Expired</span>`;
+						}
+					}
+					html += `</small></dd>`;
+				}
+				
+				if (data.participant.kicked_by) {
+					html += `
+						<dt class="col-sm-4">Kicked By</dt>
+						<dd class="col-sm-8">User ID: <code>${escapeHtml(String(data.participant.kicked_by))}</code></dd>`;
+				}
+				
+				if (data.participant.left) {
+					html += `
+						<dt class="col-sm-4">Status</dt>
+						<dd class="col-sm-8"><span class="badge bg-secondary"><i class="bi bi-box-arrow-right me-1"></i>Left Chat</span></dd>`;
+				}
+				
+				html += `</dl></div>`;
+			}
+			
+			if (!html) {
+				html = `<div class="alert alert-info">No participant information available.</div>`;
+			}
+			
+			container.innerHTML = html;
+		}
+		
+		function escapeHtml(text) {
+			if (text === null || text === undefined) return "";
+			const div = document.createElement('div');
+			div.textContent = String(text);
+			return div.innerHTML;
+		}
+
+		const socketFactory = window.io || null;
+		let socket;			if (!socketFactory) {
 				// Socket.IO library failed to load - create no-op fallback
 				console.warn(
 					"[TG Sentinel] Socket.IO library not available. Real-time updates disabled.\n" +
@@ -230,9 +1061,24 @@
 				
 				// Show user-facing notification
 				showToast("Real-time updates unavailable. Dashboard will require manual refresh.", "warning");
-			} else {
-				socket = socketFactory();
-			}
+				} else {
+					try {
+						socket = socketFactory();
+					} catch (err) {
+						console.warn("[TG Sentinel] Socket.IO failed to initialize:", err);
+						// Fallback to no-op socket if CSP blocks eval or library throws
+						socket = {
+							on: (event, callback) => {
+								console.debug(`[TG Sentinel] Socket event '${event}' registered but no-op (Socket.IO init failed)`);
+							},
+							emit: (event, data) => {
+								console.debug(`[TG Sentinel] Socket emit '${event}' ignored (Socket.IO init failed)`);
+							},
+							connected: false
+						};
+						showToast("Real-time updates disabled by browser policy. Manual refresh only.", "warning");
+					}
+				}
 			
 			let reconnectToastShown = false;
 
@@ -255,13 +1101,30 @@
 				showToast(message, "error");
 			});
 
-			socket.on("dashboard:update", () => {
-				const event = new CustomEvent("tgsentinel:dashboard-update");
-				document.dispatchEvent(event);
-			});
+            socket.on("dashboard:update", () => {
+                const event = new CustomEvent("tgsentinel:dashboard-update");
+                document.dispatchEvent(event);
+            });
+
+            
 		});
 	</script>
+	<script src="{{ url_for('static', filename='js/login.js') }}"></script>
+	<script src="{{ url_for('static', filename='js/ui-lock.js') }}"></script>
+
+    {% if login_required %}
+    <script>
+      document.addEventListener('DOMContentLoaded', ()=>{
+        try {
+          const modal = new bootstrap.Modal(document.getElementById('loginModal'));
+          modal.show();
+        } catch (e) {}
+        // Ensure session info still populates header for visual context
+        try { if (window.refreshSessionInfo) window.refreshSessionInfo(); } catch (e) {}
+      });
+    </script>
+    {% endif %}
 
 	{% block extra_scripts %}{% endblock %}
-</body>
-</html>
+	</body>
+	</html>

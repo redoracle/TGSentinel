@@ -20,6 +20,7 @@ class TestMakeClient:
             api_hash="test_hash",
             alerts=AlertsCfg(),
             channels=[],
+            monitored_users=[],
             interests=[],
             redis={},
             db_uri="sqlite:///:memory:",
@@ -106,6 +107,7 @@ class TestStartIngestion:
             api_hash="test_hash",
             alerts=AlertsCfg(),
             channels=[],
+            monitored_users=[],
             interests=[],
             redis={"stream": "test:stream"},
             db_uri="sqlite:///:memory:",
@@ -118,7 +120,7 @@ class TestStartIngestion:
 
             # Verify handler was registered
             mock_telegram_client.on.assert_called()
-            assert result == mock_telegram_client
+            assert result is None
 
     @pytest.mark.asyncio
     async def test_handler_processes_message(self, mock_redis, sample_telegram_event):
@@ -129,6 +131,7 @@ class TestStartIngestion:
             api_hash="test_hash",
             alerts=AlertsCfg(),
             channels=[],
+            monitored_users=[],
             interests=[],
             redis={"stream": "test:stream"},
             db_uri="sqlite:///:memory:",
@@ -172,6 +175,8 @@ class TestStartIngestion:
         assert captured_payload["chat_id"] == -100123456789
         assert captured_payload["msg_id"] == 12345
         assert captured_payload["sender_id"] == 11111
+        assert captured_payload["sender_name"] == "John Doe"
+        assert captured_payload["chat_title"] == "Test Channel"
         assert captured_payload["mentioned"] is False
         assert captured_payload["text"] == "Test message"
 
@@ -184,6 +189,7 @@ class TestStartIngestion:
             api_hash="test_hash",
             alerts=AlertsCfg(),
             channels=[],
+            monitored_users=[],
             interests=[],
             redis={"stream": "test:stream"},
             db_uri="sqlite:///:memory:",
@@ -198,6 +204,9 @@ class TestStartIngestion:
         event.chat_id = -100123456789
         event.chat = MagicMock()
         event.chat.title = "Test"
+        event.sender = MagicMock()
+        event.sender.first_name = "Test"
+        event.sender.last_name = None
         event.message = MagicMock()
         event.message.id = 12345
         event.message.sender_id = 11111
@@ -205,6 +214,9 @@ class TestStartIngestion:
         event.message.message = "Test"
         event.message.replies = None  # This is the key test
         event.message.reactions = None
+        from datetime import datetime, timezone
+
+        event.message.date = datetime.now(timezone.utc)
 
         registered_handlers = []
 
@@ -237,6 +249,234 @@ class TestStartIngestion:
         assert captured_payload["replies"] == 0
 
     @pytest.mark.asyncio
+    async def test_handler_none_sender(self, mock_redis):
+        """Test that handler gracefully handles None sender without AttributeError."""
+        cfg = AppCfg(
+            telegram_session="test.session",
+            api_id=123456,
+            api_hash="test_hash",
+            alerts=AlertsCfg(),
+            channels=[],
+            monitored_users=[],
+            interests=[],
+            redis={"stream": "test:stream"},
+            db_uri="sqlite:///:memory:",
+            embeddings_model=None,
+            similarity_threshold=0.42,
+        )
+
+        client = AsyncMock()
+
+        # Create event with None sender
+        event = MagicMock()
+        event.chat_id = -100123456789
+        event.chat = MagicMock()
+        event.chat.title = "Test Chat"
+        event.sender = None  # This is the key test - None sender
+        event.message = MagicMock()
+        event.message.id = 12345
+        event.message.sender_id = 11111
+        event.message.mentioned = False
+        event.message.message = "Test message"
+        event.message.replies = None
+        event.message.reactions = None
+        from datetime import datetime, timezone
+
+        event.message.date = datetime.now(timezone.utc)
+
+        registered_handlers = []
+
+        def mock_on(event_type):
+            def decorator(func):
+                registered_handlers.append(func)
+                return func
+
+            return decorator
+
+        client.on = mock_on
+
+        captured_payload = None
+
+        def mock_xadd(stream, fields, **kwargs):
+            nonlocal captured_payload
+            captured_payload = json.loads(fields["json"])
+            return b"1234567890-0"
+
+        mock_redis.xadd = mock_xadd
+
+        start_ingestion(cfg, client, mock_redis)
+
+        # Call the handler - should not raise AttributeError
+        try:
+            if registered_handlers:
+                await registered_handlers[0](event)
+        except AttributeError as e:
+            pytest.fail(f"Handler raised AttributeError with None sender: {e}")
+
+        # Verify sender_name uses safe fallback (empty string)
+        assert captured_payload is not None
+        assert captured_payload["sender_name"] == ""
+
+    @pytest.mark.asyncio
+    async def test_handler_none_chat(self, mock_redis):
+        """Test that handler gracefully handles None chat without AttributeError."""
+        cfg = AppCfg(
+            telegram_session="test.session",
+            api_id=123456,
+            api_hash="test_hash",
+            alerts=AlertsCfg(),
+            channels=[],
+            monitored_users=[],
+            interests=[],
+            redis={"stream": "test:stream"},
+            db_uri="sqlite:///:memory:",
+            embeddings_model=None,
+            similarity_threshold=0.42,
+        )
+
+        client = AsyncMock()
+
+        # Create event with None chat
+        event = MagicMock()
+        event.chat_id = -100123456789
+        event.chat = None  # This is the key test - None chat
+        event.sender = MagicMock()
+        event.sender.first_name = "Test User"
+        event.sender.last_name = None
+        event.message = MagicMock()
+        event.message.id = 12345
+        event.message.sender_id = 11111
+        event.message.mentioned = False
+        event.message.message = "Test message"
+        event.message.replies = None
+        event.message.reactions = None
+        from datetime import datetime, timezone
+
+        event.message.date = datetime.now(timezone.utc)
+
+        registered_handlers = []
+
+        def mock_on(event_type):
+            def decorator(func):
+                registered_handlers.append(func)
+                return func
+
+            return decorator
+
+        client.on = mock_on
+
+        captured_payload = None
+
+        def mock_xadd(stream, fields, **kwargs):
+            nonlocal captured_payload
+            captured_payload = json.loads(fields["json"])
+            return b"1234567890-0"
+
+        mock_redis.xadd = mock_xadd
+
+        start_ingestion(cfg, client, mock_redis)
+
+        # Call the handler - should not raise AttributeError
+        try:
+            if registered_handlers:
+                await registered_handlers[0](event)
+        except AttributeError as e:
+            pytest.fail(f"Handler raised AttributeError with None chat: {e}")
+
+        # Verify chat_title uses safe fallback (empty string)
+        assert captured_payload is not None
+        assert captured_payload["chat_title"] == ""
+
+    @pytest.mark.asyncio
+    async def test_handler_none_first_name(self, mock_redis):
+        """Test that handler gracefully handles None first_name without AttributeError."""
+        cfg = AppCfg(
+            telegram_session="test.session",
+            api_id=123456,
+            api_hash="test_hash",
+            alerts=AlertsCfg(),
+            channels=[],
+            monitored_users=[],
+            interests=[],
+            redis={"stream": "test:stream"},
+            db_uri="sqlite:///:memory:",
+            embeddings_model=None,
+            similarity_threshold=0.42,
+        )
+
+        client = AsyncMock()
+
+        # Create event with sender that has None first_name
+        event = MagicMock()
+        event.chat_id = -100123456789
+
+        # Mock chat and get_chat() method
+        chat = MagicMock()
+        chat.title = "Test Chat"
+        event.chat = chat
+
+        async def mock_get_chat():
+            return chat
+
+        event.get_chat = mock_get_chat
+
+        # Mock sender with None first_name
+        sender = MagicMock()
+        sender.first_name = None  # This is the key test - None first_name
+        sender.last_name = "User"
+        event.sender = sender
+
+        async def mock_get_sender():
+            return sender
+
+        event.get_sender = mock_get_sender
+
+        event.message = MagicMock()
+        event.message.id = 12345
+        event.message.sender_id = 11111
+        event.message.mentioned = False
+        event.message.message = "Test message"
+        event.message.replies = None
+        event.message.reactions = None
+        from datetime import datetime, timezone
+
+        event.message.date = datetime.now(timezone.utc)
+
+        registered_handlers = []
+
+        def mock_on(event_type):
+            def decorator(func):
+                registered_handlers.append(func)
+                return func
+
+            return decorator
+
+        client.on = mock_on
+
+        captured_payload = None
+
+        def mock_xadd(stream, fields, **kwargs):
+            nonlocal captured_payload
+            captured_payload = json.loads(fields["json"])
+            return b"1234567890-0"
+
+        mock_redis.xadd = mock_xadd
+
+        start_ingestion(cfg, client, mock_redis)
+
+        # Call the handler - should not raise AttributeError
+        try:
+            if registered_handlers:
+                await registered_handlers[0](event)
+        except AttributeError as e:
+            pytest.fail(f"Handler raised AttributeError with None first_name: {e}")
+
+        # Verify sender_name uses safe fallback without leading/trailing spaces
+        # When first_name is None, only last_name should be used (no leading space)
+        assert captured_payload is not None
+        assert captured_payload["sender_name"] == "User"
+
+    @pytest.mark.asyncio
     async def test_handler_exception_handling(self, mock_redis, caplog):
         """Test that handler exceptions are caught and logged."""
         cfg = AppCfg(
@@ -245,6 +485,7 @@ class TestStartIngestion:
             api_hash="test_hash",
             alerts=AlertsCfg(),
             channels=[],
+            monitored_users=[],
             interests=[],
             redis={"stream": "test:stream"},
             db_uri="sqlite:///:memory:",

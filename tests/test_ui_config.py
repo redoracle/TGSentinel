@@ -21,6 +21,7 @@ def mock_config():
             digest=DigestCfg(hourly=True, daily=True, top_n=10),
         ),
         channels=[],
+        monitored_users=[],
         interests=["test interest 1", "test interest 2"],
         redis={"host": "redis", "port": 6379, "stream": "test"},
         db_uri="sqlite:///test.db",

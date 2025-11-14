@@ -33,8 +33,8 @@ class TestSendDigest:
     @pytest.mark.asyncio
     async def test_send_digest_with_messages_dm_mode(self, in_memory_db):
         """Test sending digest in DM mode."""
-        from tgsentinel.store import mark_alerted, upsert_message
         from tgsentinel.config import ChannelRule
+        from tgsentinel.store import mark_alerted, upsert_message
 
         # Insert some test messages
         upsert_message(in_memory_db, -100123, 1, "hash1", 2.5)

@@ -44,14 +44,17 @@
 <section class="row g-4 mb-4">
     <div class="col-12 col-xl-6">
         <article class="card h-100" aria-labelledby="system-health-heading">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <div>
-                    <h2 class="card-title mb-0" id="system-health-heading">System Health</h2>
-                    <small class="text-muted">Real-time infrastructure pulse</small>
-                </div>
-                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-health">Refresh</button>
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#system-health-body" aria-expanded="true" aria-controls="system-health-body" style="text-decoration: none; color: inherit;">
+                    <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+                    <div>
+                        <h1 class="card-title mb-0" id="system-health-heading">System Health</h1>
+                        <small class="text-muted">Real-time infrastructure pulse</small>
+                    </div>
+                </button>
+                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-health" title="Refresh system metrics">Refresh</button>
             </div>
-            <div class="card-body">
+            <div class="collapse show card-body" id="system-health-body">
                 <div class="row g-4">
                     <div class="col-6">
                         <div class="glass-effect p-3 rounded" aria-live="polite">
@@ -87,29 +90,83 @@
     </div>
     <div class="col-12 col-xl-6">
         <article class="card h-100" aria-labelledby="live-activity-heading">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <div>
-                    <h2 class="card-title mb-0" id="live-activity-heading">Live Activity Feed</h2>
-                    <small class="text-muted">Most recent heuristic hits</small>
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#live-activity-body" aria-expanded="true" aria-controls="live-activity-body" style="text-decoration: none; color: inherit;">
+                    <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+                    <div>
+                        <h1 class="card-title mb-0" id="live-activity-heading">Live Activity Feed</h1>
+                        <small class="text-muted">Most recent heuristic hits</small>
+                    </div>
+                </button>
+                <div class="d-flex align-items-center gap-3">
+                    <div class="live-toggle-container">
+                        <label class="live-toggle-label" for="live-toggle-switch">
+                            <span class="live-toggle-text">Live:</span>
+                            <div class="live-toggle-switch" role="switch" aria-checked="false" tabindex="0" id="live-toggle-switch" data-live="false">
+                                <span class="live-toggle-slider"></span>
+                                <span class="live-toggle-status" id="live-toggle-status">OFF</span>
+                            </div>
+                        </label>
+                    </div>
                 </div>
-                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-activity">Refresh</button>
             </div>
-            <div class="card-body">
+            <div class="collapse show card-body" id="live-activity-body">
                 <ul class="list-unstyled mb-0" id="activity-feed" aria-live="polite">
                     {%- for entry in activity %}
                     <li class="activity-item mb-3">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <p class="mb-1 fw-semibold">{{ entry.chat_name }}</p>
-                                <p class="mb-0 text-muted small">{{ entry.sender }} · {{ entry.timestamp }}</p>
+                        <div class="d-flex gap-3">
+                            <div class="flex-shrink-0">
+                                <div class="activity-avatar participant-link" 
+                                     data-chat-id="{{ entry.chat_id if entry.chat_id is not none else '' }}" 
+                                     data-user-id="{{ entry.sender_id if entry.sender_id is not none else '' }}"
+                                     data-sender-name="{{ entry.sender }}"
+                                     title="Click for sender information">
+                                    {% if entry.avatar_url %}
+                                    <img src="{{ entry.avatar_url }}" alt="{{ entry.sender }}" onerror="this.style.display='none';">
+                                    {% endif %}
+                                    <span class="avatar-initials">
+                                        {% if entry.sender %}
+                                            {{ entry.sender[0].upper() }}
+                                        {% else %}
+                                            ?
+                                        {% endif %}
+                                    </span>
+                                </div>
                             </div>
-                            <span class="badge badge-success">{{ entry.importance }}</span>
-                        </div>
-                        <p class="mt-2 mb-1">{{ entry.message }}</p>
-                        <div class="d-flex flex-wrap gap-2">
-                            {% for tag in entry.tags %}
-                            <span class="badge badge-info text-uppercase">{{ tag }}</span>
-                            {%- endfor %}
+                            <div class="flex-grow-1" style="min-width: 0;">
+                                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                                    <div class="flex-grow-1" style="min-width: 0;">
+                                        <p class="mb-1">
+                                            <span class="fw-semibold participant-link" 
+                                                  data-chat-id="{{ entry.chat_id }}" 
+                                                  data-user-id="{{ entry.sender_id }}"
+                                                  data-sender-name="{{ entry.sender }}"
+                                                  style="cursor: pointer; text-decoration: underline; color: var(--bs-link-color);"
+                                                  title="Click for sender information">
+                                                {{ entry.sender }}
+                                            </span>
+                                            <span class="text-muted small">in</span>
+                                            <span class="participant-link" 
+                                                  data-chat-id="{{ entry.chat_id if entry.chat_id is not none else '' }}" 
+                                                  data-chat-name="{{ entry.chat_name }}"
+                                                  style="cursor: pointer; text-decoration: underline; color: var(--bs-link-color);"
+                                                  title="Click for chat information">
+                                                {{ entry.chat_name }}
+                                            </span>
+                                        </p>
+                                        <p class="mb-2 text-muted small">
+                                            <i class="bi bi-clock me-1"></i>{{ entry.timestamp }}
+                                        </p>
+                                    </div>
+                                    <span class="badge bg-success flex-shrink-0" style="z-index: 1;">{{ entry.importance }}</span>
+                                </div>
+                                <p class="mb-2" style="word-break: break-word; overflow-wrap: break-word;">{{ entry.message }}</p>
+                                <div class="d-flex flex-wrap gap-2">
+                                    {% for tag in entry.tags %}
+                                    <span class="badge bg-info text-uppercase" style="z-index: 1;">{{ tag }}</span>
+                                    {%- endfor %}
+                                </div>
+                            </div>
                         </div>
                     </li>
                     {%- else %}
@@ -122,44 +179,49 @@
 </section>
 
 <section class="card" aria-labelledby="alerts-overview-heading">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <div>
-            <h2 class="card-title mb-0" id="alerts-overview-heading">Latest Alerts</h2>
-            <small class="text-muted">Digest of the most recent escalations</small>
+    <div class="card-header d-flex justify-content-between align-items-center" role="button" data-bs-toggle="collapse" data-bs-target="#latestAlertsCollapse" aria-expanded="false" aria-controls="latestAlertsCollapse" style="cursor: pointer;">
+        <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+            <div>
+                <h2 class="card-title mb-0" id="alerts-overview-heading">Latest Alerts</h2>
+                <small class="text-muted">Digest of the most recent escalations</small>
+            </div>
         </div>
-        <a class="btn btn-outline-primary btn-sm" href="{{ url_for('alerts_view') }}">View all</a>
+        <a class="btn btn-outline-primary btn-sm" href="{{ url_for('alerts_view') }}" id="btn-view-all-alerts">View all</a>
     </div>
-    <div class="card-body table-responsive">
-        <table class="table align-middle mb-0" aria-describedby="alerts-overview-heading">
-            <thead>
-                <tr>
-                    <th scope="col">Channel</th>
-                    <th scope="col">Sender</th>
-                    <th scope="col">Excerpt</th>
-                    <th scope="col">Score</th>
-                    <th scope="col">Trigger</th>
-                    <th scope="col">Sent to</th>
-                    <th scope="col">Timestamp</th>
-                </tr>
-            </thead>
-            <tbody id="recent-alerts-body">
-                {%- for alert in recent_alerts %}
-                <tr>
-                    <td>{{ alert.chat_name }}</td>
-                    <td>{{ alert.sender or 'Unknown' }}</td>
-                    <td>{{ alert.excerpt }}</td>
-                    <td><span class="badge badge-danger">{{ '%.2f'|format(alert.score) }}</span></td>
-                    <td>{{ alert.trigger or 'N/A' }}</td>
-                    <td>{{ alert.sent_to }}</td>
-                    <td>{{ alert.created_at }}</td>
-                </tr>
-                {%- else %}
-                <tr>
-                    <td colspan="7" class="text-center text-muted">No alerts have been sent yet.</td>
-                </tr>
-                {%- endfor %}
-            </tbody>
-        </table>
+    <div class="collapse" id="latestAlertsCollapse">
+        <div class="card-body table-responsive">
+            <table class="table align-middle mb-0" aria-describedby="alerts-overview-heading">
+                <thead>
+                    <tr>
+                        <th scope="col">Channel</th>
+                        <th scope="col">Sender</th>
+                        <th scope="col">Excerpt</th>
+                        <th scope="col">Score</th>
+                        <th scope="col">Trigger</th>
+                        <th scope="col">Sent to</th>
+                        <th scope="col">Timestamp</th>
+                    </tr>
+                </thead>
+                <tbody id="recent-alerts-body">
+                    {%- for alert in recent_alerts %}
+                    <tr>
+                        <td>{{ alert.chat_name }}</td>
+                        <td>{{ alert.sender | default("Unknown") }}</td>
+                        <td>{{ alert.excerpt }}</td>
+                        <td><span class="badge bg-danger" style="z-index: 1;">{{ '%.2f'|format(alert.score) }}</span></td>
+                        <td>{{ alert.trigger or 'N/A' }}</td>
+                        <td>{{ alert.sent_to }}</td>
+                        <td>{{ alert.created_at }}</td>
+                    </tr>
+                    {%- else %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted">No alerts have been sent yet.</td>
+                    </tr>
+                    {%- endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 </section>
 {% endblock %}
@@ -225,36 +287,107 @@
             const listItem = document.createElement("li");
             listItem.className = "activity-item mb-3";
             
-            // Create header div with chat name, sender, timestamp, and importance
+            // Create main flex container
+            const mainDiv = document.createElement("div");
+            mainDiv.className = "d-flex gap-3";
+            
+            // Avatar
+            const avatarContainer = document.createElement("div");
+            avatarContainer.className = "flex-shrink-0";
+            
+            const avatar = document.createElement("div");
+            avatar.className = "activity-avatar participant-link";
+            avatar.setAttribute("data-chat-id", entry.chat_id || "");
+            avatar.setAttribute("data-user-id", entry.sender_id || "");
+            avatar.setAttribute("data-chat-name", entry.chat_name || "");
+            avatar.setAttribute("data-sender-name", entry.sender || "");
+            avatar.title = "Click for sender information";
+            
+            // Add avatar image if available
+            if (entry.avatar_url) {
+                const img = document.createElement("img");
+                img.src = entry.avatar_url;
+                img.alt = entry.sender || "";
+                img.onerror = function() {
+                    this.style.display = 'none';
+                };
+                avatar.appendChild(img);
+            }
+            
+            // Add initials as fallback
+            const initialsSpan = document.createElement("span");
+            initialsSpan.className = "avatar-initials";
+            initialsSpan.textContent = entry.sender ? entry.sender[0].toUpperCase() : "?";
+            avatar.appendChild(initialsSpan);
+            
+            avatarContainer.appendChild(avatar);
+            mainDiv.appendChild(avatarContainer);
+            
+            // Content area
+            const contentDiv = document.createElement("div");
+            contentDiv.className = "flex-grow-1";
+            
+            // Header with sender, chat, timestamp, importance
             const headerDiv = document.createElement("div");
-            headerDiv.className = "d-flex justify-content-between align-items-center";
+            headerDiv.className = "d-flex justify-content-between align-items-start";
             
             const leftDiv = document.createElement("div");
             
-            const chatNameP = document.createElement("p");
-            chatNameP.className = "mb-1 fw-semibold";
-            chatNameP.textContent = entry.chat_name || "";
-            leftDiv.appendChild(chatNameP);
+            // First line: Sender in Chat
+            const firstLineP = document.createElement("p");
+            firstLineP.className = "mb-1";
             
-            const metaP = document.createElement("p");
-            metaP.className = "mb-0 text-muted small";
-            metaP.textContent = `${entry.sender || ""} · ${entry.timestamp || ""}`;
-            leftDiv.appendChild(metaP);
+            const senderSpan = document.createElement("span");
+            senderSpan.className = "fw-semibold participant-link";
+            senderSpan.setAttribute("data-chat-id", entry.chat_id || "");
+            senderSpan.setAttribute("data-user-id", entry.sender_id || "");
+            senderSpan.setAttribute("data-chat-name", entry.chat_name || "");
+            senderSpan.setAttribute("data-sender-name", entry.sender || "");
+            senderSpan.style.cssText = "cursor: pointer; text-decoration: underline; color: var(--bs-link-color);";
+            senderSpan.title = "Click for sender information";
+            senderSpan.textContent = entry.sender || "Unknown sender";
+            
+            const inText = document.createElement("span");
+            inText.className = "text-muted small";
+            inText.textContent = " in ";
+            
+            const chatSpan = document.createElement("span");
+            chatSpan.className = "participant-link";
+            chatSpan.setAttribute("data-chat-id", entry.chat_id || "");
+            chatSpan.setAttribute("data-chat-name", entry.chat_name || "");
+            chatSpan.style.cssText = "cursor: pointer; text-decoration: underline; color: var(--bs-link-color);";
+            chatSpan.title = "Click for chat information";
+            chatSpan.textContent = entry.chat_name || "Unknown chat";
+            
+            firstLineP.appendChild(senderSpan);
+            firstLineP.appendChild(inText);
+            firstLineP.appendChild(chatSpan);
+            leftDiv.appendChild(firstLineP);
+            
+            // Second line: Timestamp
+            const timestampP = document.createElement("p");
+            timestampP.className = "mb-2 text-muted small";
+            const clockIcon = document.createElement("i");
+            clockIcon.className = "bi bi-clock me-1";
+            timestampP.appendChild(clockIcon);
+            timestampP.appendChild(document.createTextNode(entry.timestamp || ""));
+            leftDiv.appendChild(timestampP);
             
             headerDiv.appendChild(leftDiv);
             
+            // Importance badge
             const importanceBadge = document.createElement("span");
-            importanceBadge.className = "badge badge-success";
+            importanceBadge.className = "badge bg-success";
             importanceBadge.textContent = entry.importance || "";
             headerDiv.appendChild(importanceBadge);
             
-            listItem.appendChild(headerDiv);
+            contentDiv.appendChild(headerDiv);
             
             // Message paragraph
             const messageP = document.createElement("p");
-            messageP.className = "mt-2 mb-1";
+            messageP.className = "mb-2";
             messageP.textContent = entry.message || "";
-            listItem.appendChild(messageP);
+            contentDiv.appendChild(messageP);
             
             // Tags div
             const tagsDiv = document.createElement("div");
@@ -262,12 +395,15 @@
             
             (entry.tags || []).forEach((tag) => {
                 const tagSpan = document.createElement("span");
-                tagSpan.className = "badge badge-info text-uppercase";
+                tagSpan.className = "badge bg-info text-uppercase";
                 tagSpan.textContent = tag;
                 tagsDiv.appendChild(tagSpan);
             });
             
-            listItem.appendChild(tagsDiv);
+            contentDiv.appendChild(tagsDiv);
+            mainDiv.appendChild(contentDiv);
+            
+            listItem.appendChild(mainDiv);
             container.appendChild(listItem);
         });
     }
@@ -326,7 +462,7 @@
             // Score badge
             const scoreCell = document.createElement("td");
             const badge = document.createElement("span");
-            badge.className = "badge badge-danger";
+            badge.className = "badge bg-danger";
             badge.textContent = Number(alert.score || 0).toFixed(2);
             scoreCell.appendChild(badge);
             row.appendChild(scoreCell);
@@ -363,9 +499,127 @@
         }
     }
 
+
     document.addEventListener("DOMContentLoaded", () => {
-        document.getElementById("btn-refresh-health")?.addEventListener("click", updateHealth);
-        document.getElementById("btn-refresh-activity")?.addEventListener("click", updateActivity);
+        // Prevent collapse toggling when interacting with controls inside collapsible headers
+        // We need to stop propagation AFTER the button's own handlers run, not before
+        const stopCollapseOnButton = (buttonId) => {
+            const btn = document.getElementById(buttonId);
+            if (btn) {
+                btn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                }, false); // Use bubbling phase, not capture
+            }
+        };
+        
+        const stopCollapseOnContainer = (containerSelector) => {
+            document.querySelectorAll(containerSelector).forEach(el => {
+                el.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                }, false);
+            });
+        };
+        
+        // These will stop propagation to prevent collapse, but won't interfere with the button's own handlers
+        stopCollapseOnButton("btn-refresh-health");
+        stopCollapseOnButton("btn-view-all-alerts");
+        stopCollapseOnContainer(".live-toggle-container");
+
+        document.getElementById("btn-refresh-health")?.addEventListener("click", async (ev) => {
+            const btn = ev.currentTarget;
+            if (!btn) { updateHealth(); return; }
+            const original = btn.innerHTML;
+            try {
+                btn.disabled = true;
+                btn.setAttribute("aria-busy", "true");
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Refreshing';
+                await updateHealth();
+            } catch (e) {
+                try { showToast("Failed to refresh system health", "error"); } catch (_) {}
+            } finally {
+                btn.disabled = false;
+                btn.removeAttribute("aria-busy");
+                btn.innerHTML = original;
+            }
+        });
+
+        // Toggle Live Feed with new switch design
+        let liveInterval = null;
+        const toggleSwitch = document.getElementById("live-toggle-switch");
+        const toggleStatus = document.getElementById("live-toggle-status");
+        
+        function updateLiveState(isLive) {
+            if (isLive) {
+                // Start live updates
+                liveInterval = setInterval(updateActivity, 5000);
+                toggleSwitch.setAttribute("data-live", "true");
+                toggleSwitch.setAttribute("aria-checked", "true");
+                toggleSwitch.classList.add("active");
+                toggleStatus.textContent = "ON";
+                updateActivity(); // Immediate update
+            } else {
+                // Stop live updates
+                if (liveInterval) {
+                    clearInterval(liveInterval);
+                    liveInterval = null;
+                }
+                toggleSwitch.setAttribute("data-live", "false");
+                toggleSwitch.setAttribute("aria-checked", "false");
+                toggleSwitch.classList.remove("active");
+                toggleStatus.textContent = "OFF";
+            }
+        }
+        
+        if (toggleSwitch) {
+            // Click handler
+            toggleSwitch.addEventListener("click", () => {
+                const isLive = toggleSwitch.getAttribute("data-live") === "true";
+                updateLiveState(!isLive);
+            });
+            
+            // Keyboard support
+            toggleSwitch.addEventListener("keydown", (e) => {
+                if (e.key === " " || e.key === "Enter") {
+                    e.preventDefault();
+                    const isLive = toggleSwitch.getAttribute("data-live") === "true";
+                    updateLiveState(!isLive);
+                }
+            });
+        }
+
+        // Participant info modal click handlers
+        document.addEventListener("click", (e) => {
+            const participantLink = e.target.closest(".participant-link");
+            if (participantLink) {
+                e.preventDefault();
+                const chatId = participantLink.getAttribute("data-chat-id");
+                const userId = participantLink.getAttribute("data-user-id");
+                const chatName = participantLink.getAttribute("data-chat-name");
+                const senderName = participantLink.getAttribute("data-sender-name");
+                
+                // Determine info type based on what data is available
+                // If has userId and senderName, it's a user click
+                // If has chatName only, it's a chat click
+                let infoType = null;
+                if (userId && senderName) {
+                    infoType = 'user';
+                } else if (chatName && !userId) {
+                    infoType = 'chat';
+                }
+                
+                // Dispatch custom event that will be handled in base.html
+                const event = new CustomEvent("tgsentinel:show-participant-info", {
+                    detail: {
+                        chatId: chatId,
+                        userId: userId || null,
+                        chatName: chatName || null,
+                        senderName: senderName || null,
+                        infoType: infoType
+                    }
+                });
+                document.dispatchEvent(event);
+            }
+        });
 
         updateSummary();
         updateHealth();

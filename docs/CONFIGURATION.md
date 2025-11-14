@@ -6,7 +6,7 @@ This guide helps you customize TG Sentinel's behavior and monitor its activity.
 
 ## 🎯 Quick Reference: Configuration Priority
 
-```
+```text
 Environment Variables (.env) > YAML File (config/tgsentinel.yml)
 ```
 
@@ -26,7 +26,7 @@ Environment Variables (.env) > YAML File (config/tgsentinel.yml)
 
 ## 📋 Table of Contents
 
-- [Configuration Priority](#quick-reference-configuration-priority)
+- [Configuration Priority](#-quick-reference-configuration-priority)
 - [Configuration Overview](#configuration-overview)
 - [Environment Variables](#environment-variables)
 - [YAML Configuration](#yaml-configuration)
@@ -128,6 +128,34 @@ DB_URI=sqlite:////app/data/sentinel.db
 # Logging
 LOG_LEVEL=INFO                        # DEBUG | INFO | WARNING | ERROR
 ```
+
+### Anomaly Detection
+
+Configure analytics anomaly detection thresholds:
+
+```bash
+# Use standard deviation mode (recommended)
+ANOMALY_USE_STDDEV=true              # Enable statistical anomaly detection
+ANOMALY_STDDEV_MULTIPLIER=2.0        # Multiplier for std-dev threshold (higher = less sensitive)
+
+# Or use fixed thresholds
+ANOMALY_VOLUME_THRESHOLD=50          # Messages per channel per hour
+ANOMALY_IMPORTANCE_THRESHOLD=3.0     # Average score threshold
+ANOMALY_ALERT_RATE=0.3               # Alert rate threshold (30%)
+```
+
+**Standard Deviation Mode** (recommended):
+
+- Calculates mean and standard deviation for each metric across channels
+- Flags channels exceeding `mean + (stddev * multiplier)`
+- Adapts to your specific channel activity patterns
+- Example: With `ANOMALY_STDDEV_MULTIPLIER=2.0`, channels 2 standard deviations above mean are flagged
+
+**Fixed Thresholds Mode**:
+
+- Uses absolute values for volume, importance, and alert rate
+- Simpler but less adaptive to your workload
+- Example: `ANOMALY_VOLUME_THRESHOLD=50` flags channels with >50 messages/hour
 
 ### Testing
 
@@ -233,6 +261,16 @@ interests:
 ---
 
 ## Monitoring & Logs
+
+### First‑Run Login and Access Control
+
+On first run, or after a re‑login that clears the Telethon session, the UI is locked until you authenticate. The login modal opens automatically and the background is disabled (keyboard and pointer) so no other page actions are possible until login succeeds.
+
+- The session file path is read from `config/tgsentinel.yml` under `telegram.session`, or from `TG_SESSION_PATH` if provided.
+- After successful login, the worker reloads configuration and reconnects to Telegram automatically (no manual restart required). The Analyst header (username/phone/avatar) updates immediately.
+- If a confirmation code expires or is missing, the login modal prompts to resend with a cooldown to prevent spam.
+
+Note: There is no longer a separate “Refresh Session Info” button – session details auto‑refresh after login. You can always re‑login via “Re‑login / Switch Account” in the header.
 
 ### View Live Logs
 

@@ -33,43 +33,54 @@
         <article class="card h-100" aria-labelledby="webhook-table-heading">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h2 class="card-title mb-0" id="webhook-table-heading">Webhooks</h2>
-                <span class="text-muted small" id="webhook-coming-soon" role="note" aria-live="polite">Webhook creation flow coming soon</span>
+                <button class="btn btn-primary btn-sm" type="button" id="btn-add-webhook">
+                    <i class="bi bi-plus-circle"></i> Add Webhook
+                </button>
             </div>
-            <div class="card-body table-responsive">
-                <table class="table align-middle mb-0" id="webhook-table">
-                    <thead>
-                        <tr>
-                            <th scope="col">Service</th>
-                            <th scope="col">URL</th>
-                            <th scope="col">Secret</th>
-                            <th scope="col">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>Pushover</td>
-                            <td>https://api.pushover.net/...</td>
-                            <td>••••••</td>
-                            <td>
-                                <div class="btn-group" role="group" aria-label="Webhook actions">
-                                    <button class="btn btn-outline-primary btn-sm" type="button" data-action="test">Test</button>
-                                    <button class="btn btn-outline-primary btn-sm" type="button" data-action="delete">Delete</button>
-                                </div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>Discord</td>
-                            <td>https://discordapp.com/api/webhooks/...</td>
-                            <td>••••</td>
-                            <td>
-                                <div class="btn-group" role="group" aria-label="Webhook actions">
-                                    <button class="btn btn-outline-primary btn-sm" type="button" data-action="test">Test</button>
-                                    <button class="btn btn-outline-primary btn-sm" type="button" data-action="delete">Delete</button>
-                                </div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+            <div class="card-body">
+                <div id="webhook-form" class="d-none mb-3">
+                    <form id="form-webhook">
+                        <div class="mb-3">
+                            <label class="form-label" for="webhook-service">Service Name</label>
+                            <input class="form-control form-control-sm" id="webhook-service" type="text" placeholder="e.g., Pushover, Discord, Slack" required>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label" for="webhook-url">Webhook URL</label>
+                            <input class="form-control form-control-sm" id="webhook-url" type="url" placeholder="https://" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="webhook-secret">Secret/Token (optional)</label>
+                            <input class="form-control form-control-sm" id="webhook-secret" type="password" placeholder="Authentication token">
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-primary btn-sm" type="submit">Create</button>
+                            <button class="btn btn-outline-secondary btn-sm" type="button" id="btn-cancel-webhook">Cancel</button>
+                        </div>
+                    </form>
+                    <hr class="my-3">
+                </div>
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0" id="webhook-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Service</th>
+                                <th scope="col">URL</th>
+                                <th scope="col">Secret</th>
+                                <th scope="col">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="webhook-table-body">
+                            <tr id="webhook-loading">
+                                <td colspan="4" class="text-center text-muted">
+                                    <div class="spinner-border spinner-border-sm me-2" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    Loading webhooks...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </article>
     </div>
@@ -149,6 +160,60 @@
         const apiKeyInput = document.getElementById("api-key");
         const copyButton = document.getElementById("btn-copy-key");
 
+        // Load webhooks on page load
+        loadWebhooks();
+
+        // Add webhook button
+        document.getElementById("btn-add-webhook")?.addEventListener("click", () => {
+            const webhookForm = document.getElementById("webhook-form");
+            webhookForm?.classList.remove("d-none");
+            document.getElementById("webhook-service")?.focus();
+        });
+
+        // Cancel webhook button
+        document.getElementById("btn-cancel-webhook")?.addEventListener("click", () => {
+            const webhookForm = document.getElementById("webhook-form");
+            webhookForm?.classList.add("d-none");
+            document.getElementById("form-webhook")?.reset();
+        });
+
+        // Submit webhook form
+        document.getElementById("form-webhook")?.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const service = document.getElementById("webhook-service").value.trim();
+            const url = document.getElementById("webhook-url").value.trim();
+            const secret = document.getElementById("webhook-secret").value.trim();
+
+            if (!service || !url) {
+                showToast("Service name and URL are required", "error");
+                return;
+            }
+
+            try {
+                const response = await fetch("/api/webhooks", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ service, url, secret }),
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showToast(`Webhook '${service}' created successfully`, "success");
+                    appendDeveloperLog(`Created webhook: ${service}`);
+                    const webhookForm = document.getElementById("webhook-form");
+                    webhookForm?.classList.add("d-none");
+                    document.getElementById("form-webhook")?.reset();
+                    loadWebhooks(); // Reload the table
+                } else {
+                    showToast(data.message || "Failed to create webhook", "error");
+                }
+            } catch (error) {
+                console.error("Error creating webhook:", error);
+                showToast("Failed to create webhook", "error");
+            }
+        });
+
         document.getElementById("btn-generate-key")?.addEventListener("click", () => {
             try {
                 pendingApiKey = randomKey();
@@ -208,22 +273,159 @@
             appendDeveloperLog("Webhook test dispatched");
             showToast("Webhook test queued", "success");
         });
-        document.querySelectorAll("#webhook-table button[data-action='test']").forEach((button) => {
-            button.addEventListener("click", () => {
-                appendDeveloperLog("Webhook test event sent");
-                showToast("Webhook tested", "info");
-            });
-        });
-        document.querySelectorAll("#webhook-table button[data-action='delete']").forEach((button) => {
-            button.addEventListener("click", () => {
-                const confirmed = window.confirm("Remove this webhook? This action cannot be undone.");
-                if (!confirmed) {
-                    return;
-                }
-                appendDeveloperLog("Webhook removed");
-                showToast("Webhook deleted", "warning");
-            });
-        });
     });
+
+    async function loadWebhooks() {
+        const tbody = document.getElementById("webhook-table-body");
+        if (!tbody) return;
+
+        try {
+            const response = await fetch("/api/webhooks");
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || "Failed to load webhooks");
+            }
+
+            tbody.innerHTML = "";
+
+            if (data.webhooks.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="text-center text-muted py-3">
+                            No webhooks configured. Click "Add Webhook" to create one.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            data.webhooks.forEach((webhook) => {
+                const row = document.createElement("tr");
+                
+                // Service column
+                const serviceCell = document.createElement("td");
+                serviceCell.textContent = webhook.service || "Unknown";
+                row.appendChild(serviceCell);
+
+                // URL column with copy button and tooltip
+                const urlCell = document.createElement("td");
+                const urlContainer = document.createElement("div");
+                urlContainer.className = "d-flex align-items-center gap-2";
+                
+                const urlSpan = document.createElement("span");
+                urlSpan.className = "text-truncate";
+                urlSpan.style.maxWidth = "200px";
+                urlSpan.textContent = webhook.url || "";
+                urlSpan.title = webhook.url || ""; // Full URL on hover
+                
+                const copyBtn = document.createElement("button");
+                copyBtn.className = "btn btn-outline-secondary btn-sm";
+                copyBtn.innerHTML = '<i class="bi bi-clipboard"></i>';
+                copyBtn.title = "Copy URL";
+                copyBtn.setAttribute("data-url", webhook.url);
+                copyBtn.addEventListener("click", async function() {
+                    const url = this.getAttribute("data-url");
+                    try {
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                            await navigator.clipboard.writeText(url);
+                        } else {
+                            // Fallback for browsers without Clipboard API
+                            const textarea = document.createElement("textarea");
+                            textarea.value = url;
+                            textarea.setAttribute("readonly", "");
+                            textarea.style.position = "absolute";
+                            textarea.style.left = "-9999px";
+                            document.body.appendChild(textarea);
+                            textarea.select();
+                            textarea.setSelectionRange(0, textarea.value.length);
+                            const success = document.execCommand("copy");
+                            document.body.removeChild(textarea);
+                            if (!success) {
+                                throw new Error("execCommand failed");
+                            }
+                        }
+                        showToast("URL copied to clipboard", "success");
+                    } catch (err) {
+                        console.error("Failed to copy:", err);
+                        showToast("Failed to copy URL", "error");
+                    }
+                });
+                
+                urlContainer.appendChild(urlSpan);
+                urlContainer.appendChild(copyBtn);
+                urlCell.appendChild(urlContainer);
+                row.appendChild(urlCell);
+
+                // Secret column
+                const secretCell = document.createElement("td");
+                secretCell.textContent = webhook.secret || "—";
+                row.appendChild(secretCell);
+
+                // Actions column
+                const actionsCell = document.createElement("td");
+                const btnGroup = document.createElement("div");
+                btnGroup.className = "btn-group";
+                btnGroup.setAttribute("role", "group");
+
+                const testBtn = document.createElement("button");
+                testBtn.className = "btn btn-outline-primary btn-sm";
+                testBtn.textContent = "Test";
+                testBtn.addEventListener("click", () => {
+                    appendDeveloperLog(`Webhook test sent: ${webhook.service}`);
+                    showToast(`Testing webhook: ${webhook.service}`, "info");
+                });
+
+                const deleteBtn = document.createElement("button");
+                deleteBtn.className = "btn btn-outline-danger btn-sm";
+                deleteBtn.textContent = "Delete";
+                deleteBtn.addEventListener("click", async () => {
+                    if (!confirm(`Remove webhook '${webhook.service}'? This action cannot be undone.`)) {
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch(`/api/webhooks/${encodeURIComponent(webhook.service)}`, {
+                            method: "DELETE",
+                        });
+
+                        const result = await response.json();
+
+                        if (response.ok) {
+                            showToast(`Webhook '${webhook.service}' deleted`, "success");
+                            appendDeveloperLog(`Deleted webhook: ${webhook.service}`);
+                            loadWebhooks(); // Reload the table
+                        } else {
+                            showToast(result.message || "Failed to delete webhook", "error");
+                        }
+                    } catch (error) {
+                        console.error("Error deleting webhook:", error);
+                        showToast("Failed to delete webhook", "error");
+                    }
+                });
+
+                btnGroup.appendChild(testBtn);
+                btnGroup.appendChild(deleteBtn);
+                actionsCell.appendChild(btnGroup);
+                row.appendChild(actionsCell);
+
+                tbody.appendChild(row);
+            });
+
+        } catch (error) {
+            console.error("Error loading webhooks:", error);
+            // Clear tbody safely
+            tbody.innerHTML = "";
+            
+            // Create error row with safe text insertion
+            const errorRow = document.createElement("tr");
+            const errorCell = document.createElement("td");
+            errorCell.colSpan = 4;
+            errorCell.className = "text-center text-danger py-3";
+            errorCell.textContent = `Failed to load webhooks: ${error.message}`;
+            errorRow.appendChild(errorCell);
+            tbody.appendChild(errorRow);
+        }
+    }
 </script>
 {% endblock %}

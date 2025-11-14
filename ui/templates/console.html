@@ -25,9 +25,18 @@
                 <input class="form-control" id="console-command" type="text" placeholder="/restart">
                 <button class="btn btn-outline-primary" type="button" id="btn-run-command">Execute</button>
                 <div class="d-grid gap-2">
-                    <button class="btn btn-outline-primary btn-sm btn-action" type="button" data-command="/flush redis">Flush Redis</button>
-                    <button class="btn btn-outline-primary btn-sm btn-action" type="button" data-command="/purge db">Purge Database</button>
-                    <button class="btn btn-outline-primary btn-sm btn-action" type="button" data-command="/reload config">Reload Config</button>
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-outline-primary btn-sm btn-action flex-grow-1" type="button" data-command="/flush redis">Flush Redis</button>
+                        <i class="bi bi-info-circle text-muted" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="left" title="Clear Redis cache (streams, participant data, avatars). Does not affect database."></i>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-outline-primary btn-sm btn-action flex-grow-1" type="button" data-command="/purge db">Purge Database</button>
+                        <i class="bi bi-info-circle text-muted" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="left" title="Delete ALL data: messages, feedback, Redis stream, all caches. Vacuums database. Cannot be undone."></i>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-outline-primary btn-sm btn-action flex-grow-1" type="button" data-command="/reload config">Reload Config</button>
+                        <i class="bi bi-info-circle text-muted" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="left" title="Reload configuration from YAML files without restarting the application."></i>
+                    </div>
                 </div>
             </div>
         </article>
@@ -41,9 +50,18 @@
                 <h2 class="card-title mb-0" id="maintenance-heading">Maintenance Actions</h2>
             </div>
             <div class="card-body d-grid gap-2">
-                <button class="btn btn-outline-primary" type="button" data-command="vacuum">Vacuum database</button>
-                <button class="btn btn-outline-primary" type="button" data-command="rotate">Rotate logs</button>
-                <button class="btn btn-outline-primary" type="button" data-command="backup">Backup session</button>
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-outline-primary flex-grow-1" type="button" data-command="vacuum">Vacuum database</button>
+                    <i class="bi bi-info-circle text-muted" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="left" title="Optimize SQLite database by rebuilding it. Reclaims free space and improves query performance."></i>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-outline-primary flex-grow-1" type="button" data-command="rotate">Rotate logs</button>
+                    <i class="bi bi-info-circle text-muted" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="left" title="Archive current logs and start fresh log files. Not yet implemented."></i>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-outline-primary flex-grow-1" type="button" data-command="backup">Backup session</button>
+                    <i class="bi bi-info-circle text-muted" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="left" title="Create a backup of Telegram session file (.session). Not yet implemented."></i>
+                </div>
             </div>
         </article>
     </div>
@@ -54,7 +72,10 @@
             </div>
             <div class="card-body d-grid gap-3">
                 <p class="text-muted mb-0">Download anonymised telemetry snapshot for support.</p>
-                <button class="btn btn-outline-primary" type="button" id="btn-export-diagnostics">Export diagnostics</button>
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-outline-primary flex-grow-1" type="button" id="btn-export-diagnostics">Export diagnostics</button>
+                    <i class="bi bi-info-circle text-muted" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="left" title="Download a JSON file with system status, health metrics, and anonymized configuration for troubleshooting."></i>
+                </div>
             </div>
         </article>
     </div>
@@ -114,6 +135,10 @@
     }
 
     document.addEventListener("DOMContentLoaded", () => {
+        // Initialize Bootstrap tooltips
+        const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+        [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+
         const input = document.getElementById("console-command");
         document.getElementById("btn-run-command")?.addEventListener("click", () => sendCommand(input.value));
         input?.addEventListener("keydown", (event) => {

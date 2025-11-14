@@ -39,6 +39,7 @@ def _make_cfg(
                 rate_limit_per_hour=10,
             )
         ],
+        monitored_users=[],
         interests=["test topic"],
         redis={
             "host": "localhost",

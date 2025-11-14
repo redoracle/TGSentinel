@@ -59,6 +59,7 @@ def test_config_ui_loads_env_vars_integration():
                     digest=DigestCfg(hourly=True, daily=True, top_n=10),
                 ),
                 channels=[],
+                monitored_users=[],
                 interests=[],
                 redis={"host": "redis", "port": 6379, "stream": "test"},
                 db_uri="sqlite:///test.db",

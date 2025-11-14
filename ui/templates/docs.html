@@ -1,0 +1,1178 @@
+{% extends "base.html" %}
+{% block title %}API Documentation · TG Sentinel{% endblock %}
+
+{% block extra_head %}
+<!-- Highlight.js for syntax highlighting -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" integrity="sha512-rO+olRTkcf304DQBxSWxln8JXCzTHlKnIdnMUwYvQa9/Jd4cQaNkItIUj6Z4nvW1dqK0SKXLbn9h4KwZTNtAyw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 col-lg-3 mb-4">
+        <div class="card sticky-nav">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Navigation</h5>
+            </div>
+            <div class="card-body">
+                <nav class="nav flex-column nav-pills" aria-label="API documentation navigation">
+                    <a class="nav-link active" href="#overview" aria-current="page">Overview</a>
+                    <a class="nav-link" href="#authentication">Authentication</a>
+                    <a class="nav-link" href="#session-login">Session Login</a>
+                    <a class="nav-link" href="#ui-lock">UI Lock</a>
+                    <a class="nav-link" href="#dashboard">Dashboard</a>
+                    <a class="nav-link" href="#alerts">Alerts</a>
+                    <a class="nav-link" href="#config">Configuration</a>
+                    <a class="nav-link" href="#analytics">Analytics</a>
+                    <a class="nav-link" href="#telegram">Telegram</a>
+                    <a class="nav-link" href="#webhooks">Webhooks</a>
+                    <a class="nav-link" href="#system">System</a>
+                    <a class="nav-link" href="#examples">Examples</a>
+                </nav>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-9">
+        <!-- Overview -->
+        <section id="overview" class="mb-5">
+            <h1 class="section-header">TG Sentinel API Documentation</h1>
+            <p class="lead">Complete REST API reference for TG Sentinel monitoring and alerting system.</p>
+            
+            <div class="alert alert-info">
+                <strong>Base URL:</strong> <code>{{ api_base_url }}</code><br>
+                <strong>API Version:</strong> v1<br>
+                <strong>Response Format:</strong> JSON
+            </div>
+
+            <h3>Quick Start</h3>
+            <p>All API endpoints return JSON responses. Most endpoints require the application to be initialized.</p>
+            <pre class="code-block"><code class="language-bash">
+curl -X GET {{ api_base_url }}/api/system/health \
+  -H "Content-Type: application/json"
+            </code></pre>
+        </section>
+
+        <!-- Authentication -->
+        <section id="authentication" class="mb-5">
+            <h2 class="section-header">Authentication</h2>
+            <p>Currently, API authentication is handled via session cookies. API key authentication is planned for future releases.</p>
+            
+            <div class="endpoint-card card method-get">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                            <strong class="ms-2 section-url">/api/session/info</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Get current session information including username, connection status, and connected chats.</p>
+                    
+                    <h6 class="alert alert-info">Response Example:</h6>
+                    <pre class="code-block"><code class="language-json">
+{
+  "username": "Analyst",
+  "avatar": "/static/images/logo.png",
+  "session_path": "data/tgsentinel.session",
+  "phone_masked": "+1***1234",
+  "connected": true,
+  "connected_chats": ["Channel Alpha", "Channel Beta"]
+}
+                    </code></pre>
+                </div>
+            </div>
+
+            <div class="endpoint-card card method-post">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-post" aria-label="HTTP POST method">POST</span>
+                            <strong class="ms-2 section-url">/api/alerts/feedback</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Record thumbs up/down feedback for an alert (improves heuristics).</p>
+                    <h6>Request Body:</h6>
+                    <pre class="code-block"><code class="language-json">{
+  "chat_id": -1001234567890,
+  "msg_id": 12345,
+  "label": "up" // or "down"
+}</code></pre>
+                    <h6 class="alert alert-info">Response:</h6>
+                    <pre class="code-block"><code class="language-json">{"status": "ok"}</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <!-- Session Login -->
+        <section id="session-login" class="mb-5">
+            <h2 class="section-header">Session Login</h2>
+            <p>Endpoints to start and verify interactive MTProto login from the UI. These endpoints are designed for user-initiated flows, not long‑lived programmatic tokens.</p>
+
+            <div class="endpoint-card card method-post">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-post" aria-label="HTTP POST method">POST</span>
+                            <strong class="ms-2 section-url">/api/session/login/start</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Send a login confirmation code to the specified phone number. Normalizes phone and stores a short‑lived login context.</p>
+                    <h6>Request Body:</h6>
+                    <pre class="code-block"><code class="language-json">{
+  "phone": "+1 555 0100"
+}</code></pre>
+                    <h6 class="alert alert-info">Response:</h6>
+                    <pre class="code-block"><code class="language-json">{
+  "status": "ok",
+  "message": "Code sent"
+}</code></pre>
+                </div>
+            </div>
+
+            <div class="endpoint-card card method-post">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-post" aria-label="HTTP POST method">POST</span>
+                            <strong class="ms-2 section-url">/api/session/login/verify</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Verify the received code and finalize login. Supports 2FA password when required.</p>
+                    <h6>Request Body:</h6>
+                    <pre class="code-block"><code class="language-json">{
+  "phone": "+1 555 0100",
+  "code": "12345",
+  "password": "optional-2fa-password"
+}</code></pre>
+                    <h6 class="alert alert-info">Responses:</h6>
+                    <pre class="code-block"><code class="language-json">// 200 OK
+{
+  "status": "ok",
+  "message": "Authenticated",
+  "redirect": "/alerts"
+}
+
+// 410 Gone (context expired or missing)
+{
+  "status": "error",
+  "message": "Login session expired or missing. Please click 'Send Code' again."
+}</code></pre>
+                </div>
+            </div>
+
+            <div class="endpoint-card card method-post">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-post" aria-label="HTTP POST method">POST</span>
+                            <strong class="ms-2 section-url">/api/session/relogin</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Clears the current session and returns a hint to start the re‑authentication flow.</p>
+                    <pre class="code-block"><code class="language-json">{
+  "status": "ok",
+  "message": "Session cleared. Start re-authentication.",
+  "relogin_required": true,
+  "redirect": "/alerts"
+}</code></pre>
+                </div>
+            </div>
+
+            <div class="endpoint-card card method-post">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-post" aria-label="HTTP POST method">POST</span>
+                            <strong class="ms-2 section-url">/api/session/logout</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Invalidates the local Telethon session and clears cached user data.</p>
+                    <pre class="code-block"><code class="language-json">{
+  "status": "ok",
+  "message": "Session cleared. You may re-login.",
+  "details": {"file_removed": true},
+  "redirect": "/alerts"
+}</code></pre>
+                </div>
+            </div>
+
+            <div class="endpoint-card card method-post">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-post" aria-label="HTTP POST method">POST</span>
+                            <strong class="ms-2 section-url">/api/config/channels/add</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Add one or more channels to the config (id + name). Skips duplicates.</p>
+                    <h6>Request Body:</h6>
+                    <pre class="code-block"><code class="language-json">{
+  "channels": [
+    {"id": -1001111111111, "name": "Broadcast Channel"},
+    {"id": -1002222222222, "name": "Supergroup"}
+  ]
+}</code></pre>
+                    <h6 class="alert alert-info">Response:</h6>
+                    <pre class="code-block"><code class="language-json">{"status": "ok", "added": 2}</code></pre>
+                </div>
+            </div>
+
+            <div class="endpoint-card card method-delete">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-delete" aria-label="HTTP DELETE method">DELETE</span>
+                            <strong class="ms-2 section-url">/api/config/channels/&lt;chat_id&gt;</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Delete a channel by ID.</p>
+                    <pre class="code-block"><code class="language-bash">curl -X DELETE {{ api_base_url }}/api/config/channels/-1001111111111</code></pre>
+                </div>
+            </div>
+
+            <div class="endpoint-card card method-post">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-post" aria-label="HTTP POST method">POST</span>
+                            <strong class="ms-2 section-url">/api/config/users/add</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Add monitored users to the config.</p>
+                    <h6>Request Body:</h6>
+                    <pre class="code-block"><code class="language-json">{
+  "users": [
+    {"id": 555555, "name": "User 1", "username": "u1"},
+    {"id": 666666, "name": "User 2", "username": "u2"}
+  ]
+}</code></pre>
+                </div>
+            </div>
+
+            <div class="endpoint-card card method-delete">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-delete" aria-label="HTTP DELETE method">DELETE</span>
+                            <strong class="ms-2 section-url">/api/config/users/&lt;user_id&gt;</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Delete a monitored user by ID.</p>
+                    <pre class="code-block"><code class="language-bash">curl -X DELETE {{ api_base_url }}/api/config/users/555555</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <!-- UI Lock -->
+        <section id="ui-lock" class="mb-5">
+            <h2 class="section-header">UI Lock</h2>
+            <p>Lock the UI without logging out of Telegram. Unlock with a password (optional).</p>
+
+            <div class="endpoint-card card method-post">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-post" aria-label="HTTP POST method">POST</span>
+                            <strong class="ms-2 section-url">/api/ui/lock</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Lock or unlock the UI. Requires JSON body.</p>
+                    <h6>Lock Request Body:</h6>
+                    <pre class="code-block"><code class="language-json">{"action": "lock"}</code></pre>
+                    <h6>Unlock Request Body:</h6>
+                    <pre class="code-block"><code class="language-json">{"action": "unlock", "password": "your-password"}</code></pre>
+                    <h6 class="alert alert-info">Responses:</h6>
+                    <pre class="code-block"><code class="language-json">// 200 OK
+{"status":"ok","locked":true}
+
+// 403 when password mismatches
+{"status":"error","message":"Invalid password"}
+
+// 423 for locked API routes (except /api/ui/lock and /api/session/*)
+{"status":"locked","message":"UI locked"}
+                    </code></pre>
+                </div>
+            </div>
+
+            <div class="endpoint-card card method-get">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                            <strong class="ms-2 section-url">/api/ui/lock/status</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Get current lock status and configuration hints.</p>
+                    <pre class="code-block"><code class="language-json">{
+  "locked": false,
+  "timeout": 900,
+  "enabled": true
+}</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <!-- Dashboard -->
+        <section id="dashboard" class="mb-5">
+            <h2 class="section-header">Dashboard</h2>
+
+            <div class="endpoint-card card method-get">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                            <strong class="ms-2 section-url">/api/dashboard/summary</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Get dashboard summary statistics for the last 24 hours.</p>
+                    
+                    <h6 class="alert alert-info">Response Example:</h6>
+                    <pre class="code-block"><code class="language-json">
+{
+  "messages_ingested": 1250,
+  "alerts_sent": 45,
+  "avg_importance": 0.67,
+  "feedback_accuracy": 87.5
+}
+                    </code></pre>
+                </div>
+            </div>
+
+            <div class="endpoint-card card method-get">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                            <strong class="ms-2 section-url">/api/dashboard/activity</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Get live activity feed from Redis stream.</p>
+                    
+                    <h6 class="alert alert-info">Query Parameters:</h6>
+                    <table class="table table-sm param-table">
+                        <thead>
+                            <tr>
+                                <th>Parameter</th>
+                                <th>Type</th>
+                                <th>Default</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>limit</code></td>
+                                <td>integer</td>
+                                <td>20</td>
+                                <td>Maximum number of entries (max: 100)</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <h6 class="alert alert-info">Response Example:</h6>
+                    <pre class="code-block"><code class="language-json">
+{
+  "entries": [
+    {
+      "id": "1699876543210-0",
+      "chat_name": "Algorand Dev",
+      "sender": "Alice",
+      "message": "New smart contract deployed...",
+      "importance": 0.85,
+      "tags": ["smart-contract", "deployment"],
+      "timestamp": "2025-11-12T10:30:00Z"
+    }
+  ]
+}
+                    </code></pre>
+                </div>
+            </div>
+        </section>
+
+        <!-- Alerts -->
+        <section id="alerts" class="mb-5">
+            <h2 class="section-header">Alerts</h2>
+
+            <div class="endpoint-card card method-get">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                            <strong class="ms-2 section-url">/api/alerts/recent</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Get recent alerts ordered by creation time (descending).</p>
+                    
+                    <h6 class="alert alert-info">Query Parameters:</h6>
+                    <table class="table table-sm param-table">
+                        <thead>
+                            <tr>
+                                <th>Parameter</th>
+                                <th>Type</th>
+                                <th>Default</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>limit</code></td>
+                                <td>integer</td>
+                                <td>100</td>
+                                <td>Maximum number of alerts (max: 250)</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <h6 class="alert alert-info">Response Example:</h6>
+                    <pre class="code-block"><code class="language-json">
+{
+  "alerts": [
+    {
+      "chat_id": -1001234567890,
+      "chat_name": "Crypto Alerts",
+      "sender": "Bob",
+      "excerpt": "Important security update...",
+      "score": 0.92,
+      "trigger": "Importance threshold",
+      "sent_to": "both",
+      "created_at": "2025-11-12T09:15:00"
+    }
+  ]
+}
+                    </code></pre>
+                </div>
+            </div>
+
+            <div class="endpoint-card card method-get">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                            <strong class="ms-2 section-url">/api/alerts/digests</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Get digest summaries grouped by date.</p>
+                    
+                    <h6 class="alert alert-info">Response Example:</h6>
+                    <pre class="code-block"><code class="language-json">
+{
+  "digests": [
+    {
+      "date": "2025-11-12",
+      "items": 15,
+      "avg_score": 0.78
+    },
+    {
+      "date": "2025-11-11",
+      "items": 23,
+      "avg_score": 0.82
+    }
+  ]
+}
+                    </code></pre>
+                </div>
+            </div>
+
+            <div class="endpoint-card card method-get">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge" aria-label="HTTP GET method">GET</span>
+                            <strong class="ms-2 section-url">/api/export_alerts</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Export alerts as CSV. When data is present, headers are machine-friendly for CSV parsers.</p>
+                    <pre class="code-block"><code class="language-bash">curl -L {{ api_base_url }}/api/export_alerts?limit=500 -o alerts.csv</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <!-- Configuration -->
+        <section id="config" class="mb-5">
+            <h2 class="section-header">Configuration</h2>
+
+            <div class="endpoint-card card method-get">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                            <strong class="ms-2 section-url">/api/config/current</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Get current configuration including environment variables.</p>
+                    
+                    <h6 class="alert alert-info">Response Example:</h6>
+                    <pre class="code-block"><code class="language-json">
+{
+  "telegram": {
+    "api_id": "12345678",
+    "api_hash": "abcd1234...",
+    "phone_number": "+1234567890",
+    "session": "data/tgsentinel.session"
+  },
+  "alerts": {
+    "mode": "both",
+    "target_channel": "@my_alerts"
+  },
+  "digest": {
+    "hourly": true,
+    "daily": false,
+    "top_n": 10
+  },
+  "redis": {
+    "host": "redis",
+    "port": 6379
+  },
+  "semantic": {
+    "embeddings_model": "all-MiniLM-L6-v2",
+    "similarity_threshold": 0.42
+  },
+  "database_uri": "sqlite:///data/sentinel.db"
+}
+                    </code></pre>
+                </div>
+            </div>
+
+            <div class="endpoint-card card method-post">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-post" aria-label="HTTP POST method">POST</span>
+                            <strong class="ms-2 section-url">/api/config/save</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Save configuration changes to YAML file.</p>
+                    
+                    <h6>Request Body:</h6>
+                    <pre class="code-block"><code class="language-json">
+{
+  "phone_number": "+1234567890",
+  "mode": "both",
+  "target_channel": "@alerts",
+  "digest": {
+    "hourly": true,
+    "daily": false,
+    "top_n": 10
+  }
+}
+                    </code></pre>
+
+                    <h6 class="alert alert-info">Response Example:</h6>
+                    <pre class="code-block"><code class="language-json">
+{
+  "status": "ok"
+}
+                    </code></pre>
+                </div>
+            </div>
+
+            <div class="endpoint-card card method-get">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                            <strong class="ms-2 section-url">/api/config/channels</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Get list of configured Telegram channels.</p>
+                    
+                    <h6 class="alert alert-info">Response Example:</h6>
+                    <pre class="code-block"><code class="language-json">
+{
+  "channels": [
+    {
+      "id": -1001234567890,
+      "chat_id": -1001234567890,
+      "name": "Algorand Official",
+      "vip_senders": [111111, 222222],
+      "keywords": ["governance", "update"],
+      "reaction_threshold": 5,
+      "reply_threshold": 3,
+      "rate_limit": 10,
+      "enabled": true
+    }
+  ]
+}
+                    </code></pre>
+                </div>
+            </div>
+
+            <div class="endpoint-card card method-post">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-post" aria-label="HTTP POST method">POST</span>
+                            <strong class="ms-2 section-url">/api/sentinel/restart</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Restart the sentinel container to apply configuration changes.</p>
+                    
+                    <h6 class="alert alert-info">Response Example:</h6>
+                    <pre class="code-block"><code class="language-json">
+{
+  "status": "ok",
+  "message": "Sentinel restarting"
+}
+                    </code></pre>
+                </div>
+            </div>
+
+            <div class="endpoint-card card method-post">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-post" aria-label="HTTP POST method">POST</span>
+                            <strong class="ms-2 section-url">/api/config/rules/test</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Run a lightweight rules test for configured channels (diagnostics only).</p>
+                    <h6>Request Body (optional):</h6>
+                    <pre class="code-block"><code class="language-json">{
+  "channel_ids": [-1001234567890],
+  "text": "sample text"
+}</code></pre>
+                    <h6 class="alert alert-info">Response Example:</h6>
+                    <pre class="code-block"><code class="language-json">{
+  "status": "ok",
+  "tested": 1,
+  "results": [
+    {
+      "channel_id": -1001234567890,
+      "channel_name": "Example",
+      "matched_rules": ["keyword"],
+      "diagnostics": {
+        "keywords": ["keyword"],
+        "vip_senders": [],
+        "reaction_threshold": 5,
+        "reply_threshold": 3
+      }
+    }
+  ]
+}</code></pre>
+                </div>
+            </div>
+
+            <div class="endpoint-card card method-post">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-post" aria-label="HTTP POST method">POST</span>
+                            <strong class="ms-2 section-url">/api/config/stats/reset</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Reset transient per‑channel counters (best‑effort).</p>
+                    <h6 class="alert alert-info">Response Example:</h6>
+                    <pre class="code-block"><code class="language-json">{
+  "status": "ok",
+  "cleared_keys": 3
+}</code></pre>
+                </div>
+            </div>
+
+            <div class="endpoint-card card method-get">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                            <strong class="ms-2 section-url">/api/config/export</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Download the current YAML configuration.</p>
+                    <h6 class="alert alert-info">Response:</h6>
+                    <pre class="code-block"><code class="language-bash">curl -OJ {{ api_base_url }}/api/config/export</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <!-- Analytics -->
+        <section id="analytics" class="mb-5">
+            <h2 class="section-header">Analytics</h2>
+
+            <div class="endpoint-card card method-get">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                            <strong class="ms-2 section-url">/api/analytics/metrics</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Get real-time system and processing metrics.</p>
+                    
+                    <h6 class="alert alert-info">Response Example:</h6>
+                    <pre class="code-block"><code class="language-json">
+{
+  "messages_per_min": 12.5,
+  "semantic_latency": 45,
+  "cpu": 23.4,
+  "memory": 512.3,
+  "redis_stream_depth": 156
+}
+                    </code></pre>
+                </div>
+            </div>
+
+            <div class="endpoint-card card method-get">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                            <strong class="ms-2 section-url">/api/analytics/keywords</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Get top keywords and their frequency.</p>
+                    
+                    <h6 class="alert alert-info">Response Example:</h6>
+                    <pre class="code-block"><code class="language-json">
+{
+  "keywords": [
+    {"keyword": "governance", "count": 45},
+    {"keyword": "security", "count": 32},
+    {"keyword": "update", "count": 28}
+  ]
+}
+                    </code></pre>
+                </div>
+            </div>
+
+            <div class="endpoint-card card method-get">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                            <strong class="ms-2 section-url">/api/analytics/anomalies</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Detect anomalies in message volume and patterns.</p>
+                    
+                    <h6 class="alert alert-info">Response Example:</h6>
+                    <pre class="code-block"><code class="language-json">
+{
+  "anomalies": [
+    {
+      "type": "volume_spike",
+      "severity": "high",
+      "description": "Message volume 3x above baseline",
+      "timestamp": "2025-11-12T10:00:00Z",
+      "affected_channels": ["Crypto News"]
+    }
+  ]
+}
+                    </code></pre>
+                </div>
+            </div>
+        </section>
+
+        <!-- Console -->
+        <section id="console" class="mb-5">
+            <h2 class="section-header">Console</h2>
+            <p>Administrative console actions and diagnostics export.</p>
+
+            <div class="endpoint-card card method-post">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-post" aria-label="HTTP POST method">POST</span>
+                            <strong class="ms-2 section-url">/api/console/command</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Accepts simple commands (e.g., "reauth"). Returns accepted status.</p>
+                    <pre class="code-block"><code class="language-json">{
+  "command": "reauth"
+}</code></pre>
+                </div>
+            </div>
+
+            <div class="endpoint-card card method-get">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                            <strong class="ms-2 section-url">/api/console/diagnostics</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Exports anonymized diagnostics bundle (JSON attachment).</p>
+                    <pre class="code-block"><code class="language-bash">curl -L {{ api_base_url }}/api/console/diagnostics -o diagnostics.json</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <!-- Developer -->
+        <section id="developer" class="mb-5">
+            <h2 class="section-header">Developer</h2>
+            <p>Integration settings for Prometheus metrics and local API docs.</p>
+            <div class="endpoint-card card method-post">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-post" aria-label="HTTP POST method">POST</span>
+                            <strong class="ms-2 section-url">/api/developer/settings</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Persist developer settings like Prometheus port and an ephemeral API key.</p>
+                    <h6>Request Body:</h6>
+                    <pre class="code-block"><code class="language-json">{
+  "prometheus_port": 9100,
+  "api_key": "(optional)"
+}</code></pre>
+                    <h6 class="alert alert-info">Response:</h6>
+                    <pre class="code-block"><code class="language-json">{"status": "ok"}</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <!-- Telegram -->
+        <section id="telegram" class="mb-5">
+            <h2 class="section-header">Telegram</h2>
+            <p>Direct MTProto access endpoints used by the UI for channel/user discovery.</p>
+
+            <div class="endpoint-card card method-get">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                            <strong class="ms-2 section-url">/api/telegram/chats</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">List accessible chats (channels/supergroups). Requires env TG_API_ID/TG_API_HASH and a valid session file.</p>
+                    <h6 class="alert alert-info">Response Example:</h6>
+                    <pre class="code-block"><code class="language-json">{
+  "chats": [
+    {"id": -100123, "name": "Channel A", "type": "channel", "username": null},
+    {"id": -100456, "name": "Supergroup B", "type": "supergroup", "username": "groupb"}
+  ]
+}</code></pre>
+                </div>
+            </div>
+
+            <div class="endpoint-card card method-get">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                            <strong class="ms-2 section-url">/api/telegram/users</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Fetch private chats (users) via a cache+request pattern to the sentinel worker. Returns 200 with cached or fallback data; 503 when Redis is explicitly unavailable.</p>
+                    <h6 class="alert alert-info">Response Example:</h6>
+                    <pre class="code-block"><code class="language-json">{
+  "users": [
+    {"id": 111111, "name": "Cached User", "username": "cached", "phone": null}
+  ]
+}</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <!-- Webhooks -->
+        <section id="webhooks" class="mb-5">
+            <h2 class="section-header">Webhooks</h2>
+
+            <div class="endpoint-card card method-get">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                            <strong class="ms-2 section-url">/api/webhooks</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">List all configured webhooks (secrets are masked).</p>
+                    
+                    <h6 class="alert alert-info">Response Example:</h6>
+                    <pre class="code-block"><code class="language-json">
+{
+  "webhooks": [
+    {
+      "service": "Pushover",
+      "url": "https://api.pushover.net/1/messages.json",
+      "secret": "••••••",
+      "enabled": true
+    }
+  ]
+}
+                    </code></pre>
+                </div>
+            </div>
+
+            <div class="endpoint-card card method-post">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-post" aria-label="HTTP POST method">POST</span>
+                            <strong class="ms-2 section-url">/api/webhooks</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Create a new webhook configuration.</p>
+                    
+                    <h6>Request Body:</h6>
+                    <pre class="code-block"><code class="language-json">
+{
+  "service": "Discord",
+  "url": "https://discord.com/api/webhooks/123/abc",
+  "secret": "optional-token"
+}
+                    </code></pre>
+
+                    <h6 class="alert alert-info">Response Example:</h6>
+                    <pre class="code-block"><code class="language-json">
+{
+  "status": "ok",
+  "service": "Discord"
+}
+                    </code></pre>
+
+                    <h6>Error Responses:</h6>
+                    <ul>
+                        <li><code>400</code> - Missing required fields</li>
+                        <li><code>409</code> - Duplicate service name</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="endpoint-card card method-delete">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-delete" aria-label="HTTP DELETE method">DELETE</span>
+                            <strong class="ms-2 section-url">/api/webhooks/:service_name</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Delete a webhook by service name.</p>
+                    
+                    <h6 class="alert alert-info">Response Example:</h6>
+                    <pre class="code-block"><code class="language-json">
+{
+  "status": "ok",
+  "deleted": "Discord"
+}
+                    </code></pre>
+                </div>
+            </div>
+        </section>
+
+        <!-- System -->
+        <section id="system" class="mb-5">
+            <h2 class="section-header">System</h2>
+
+            <div class="endpoint-card card method-get">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                            <strong class="ms-2 section-url">/api/system/health</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Get system health metrics and connection status.</p>
+                    
+                    <h6 class="alert alert-info">Response Example:</h6>
+                    <pre class="code-block"><code class="language-json">
+{
+  "redis_stream_depth": 156,
+  "database_size_mb": 12.5,
+  "redis_online": true,
+  "cpu_percent": 23.4,
+  "memory_mb": 512.3,
+  "last_checkpoint": "2025-11-12T10:30:00Z"
+}
+                    </code></pre>
+                </div>
+            </div>
+
+            <div class="endpoint-card card method-get">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                            <strong class="ms-2 section-url">/api/participant/info</strong>
+                        </div>
+                    </div>
+                    <p class="mb-2 alert-info">Return chat/user/participant details. Supports pending mode (202) with minimal info and re‑polling.</p>
+                    <pre class="code-block"><code class="language-bash">curl "{{ api_base_url }}/api/participant/info?chat_id=-100123&user_id=42&pending=1"</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <!-- Examples -->
+        <section id="examples" class="mb-5">
+            <h2 class="section-header">Code Examples</h2>
+
+            <h3>Python</h3>
+            <pre class="code-block"><code class="language-python">
+import requests
+
+# Get system health
+response = requests.get('{{ api_base_url }}/api/system/health')
+health = response.json()
+print(f"Redis online: {health['redis_online']}")
+
+# Create a webhook
+webhook_data = {
+    "service": "Slack",
+    "url": "https://hooks.slack.com/services/T00/B00/XXX",
+    "secret": "xoxb-token"
+}
+response = requests.post(
+    '{{ api_base_url }}/api/webhooks',
+    json=webhook_data
+)
+print(response.json())
+            </code></pre>
+
+            <h3>JavaScript/Node.js</h3>
+            <pre class="code-block"><code class="language-javascript">
+// Get recent alerts
+fetch('{{ api_base_url }}/api/alerts/recent?limit=10')
+  .then(response => response.json())
+  .then(data => {
+    console.log(`Found ${data.alerts.length} alerts`);
+    data.alerts.forEach(alert => {
+      console.log(`${alert.chat_name}: ${alert.excerpt}`);
+    });
+  });
+
+// Save configuration
+const config = {
+  mode: "both",
+  target_channel: "@my_alerts"
+};
+
+fetch('{{ api_base_url }}/api/config/save', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify(config)
+})
+  .then(response => response.json())
+  .then(data => console.log('Config saved:', data));
+            </code></pre>
+
+            <h3>cURL</h3>
+            <pre class="code-block"><code class="language-bash">
+# Get dashboard summary
+curl -X GET {{ api_base_url }}/api/dashboard/summary
+
+# Create webhook
+curl -X POST {{ api_base_url }}/api/webhooks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "service": "Discord",
+    "url": "https://discord.com/api/webhooks/123/abc"
+  }'
+
+# Delete webhook
+curl -X DELETE {{ api_base_url }}/api/webhooks/Discord
+
+# Get analytics metrics
+curl -X GET {{ api_base_url }}/api/analytics/metrics
+            </code></pre>
+        </section>
+
+        <div class="alert alert-secondary">
+            <strong>Need Help?</strong> For issues or questions, check the <a href="https://github.com/redoracle/TGSentinel" target="_blank" rel="noopener noreferrer">GitHub repository</a> or open an issue.
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Smooth scrolling for navigation links (pointer events only, preserves keyboard/screen-reader navigation)
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function (e) {
+            // Only prevent default for mouse/pointer events, not keyboard events
+            // This ensures links work as native anchors when JS is absent or for keyboard/screen-reader users
+            if (e.detail !== 0) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                    
+                    // Update active nav link
+                    document.querySelectorAll('.nav-pills .nav-link').forEach(link => {
+                        link.classList.remove('active');
+                        link.removeAttribute('aria-current');
+                    });
+                    this.classList.add('active');
+                    this.setAttribute('aria-current', 'page');
+                }
+            }
+        });
+    });
+
+    // Highlight active section on scroll with debouncing and cleanup
+    let updateTimeout = null;
+    let currentActiveSection = null;
+    
+    const updateActiveLink = (id) => {
+        // Avoid unnecessary updates if the section hasn't changed
+        if (currentActiveSection === id) return;
+        currentActiveSection = id;
+        
+        document.querySelectorAll('.nav-pills .nav-link').forEach(link => {
+            link.classList.remove('active');
+            link.removeAttribute('aria-current');
+            if (link.getAttribute('href') === `#${id}`) {
+                link.classList.add('active');
+                link.setAttribute('aria-current', 'page');
+            }
+        });
+    };
+    
+    const observer = new IntersectionObserver((entries) => {
+        // Debounce updates to prevent flicker during rapid scrolling
+        if (updateTimeout) {
+            clearTimeout(updateTimeout);
+        }
+        
+        updateTimeout = setTimeout(() => {
+            // Find the most visible section (highest intersection ratio)
+            let mostVisible = null;
+            let maxRatio = 0;
+            
+            entries.forEach(entry => {
+                if (entry.isIntersecting && entry.intersectionRatio > maxRatio) {
+                    maxRatio = entry.intersectionRatio;
+                    mostVisible = entry.target;
+                }
+            });
+            
+            if (mostVisible) {
+                const id = mostVisible.getAttribute('id');
+                updateActiveLink(id);
+            }
+        }, 100); // 100ms debounce delay
+    }, { 
+        threshold: [0, 0.25, 0.5, 0.75, 1],
+        rootMargin: '-20% 0px -20% 0px'
+    });
+
+    document.querySelectorAll('section[id]').forEach(section => {
+        observer.observe(section);
+    });
+    
+    // Cleanup: disconnect observer on page unload to prevent memory leaks
+    const cleanup = () => {
+        if (updateTimeout) {
+            clearTimeout(updateTimeout);
+        }
+        observer.disconnect();
+    };
+    
+    window.addEventListener('beforeunload', cleanup);
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            cleanup();
+        }
+    });
+
+    // Initialize Highlight.js for syntax highlighting
+    document.addEventListener('DOMContentLoaded', (event) => {
+        document.querySelectorAll('pre code').forEach((block) => {
+            hljs.highlightElement(block);
+        });
+    });
+</script>
+<!-- Highlight.js library -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha512-D9gUyxqja7hBtkWpPWGt9wfbfaMGVt9gnyCvYa+jojwwPHLCzUm5i8rpk7vD7wNee9bA35eYIjobYPaQuKS1MQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+{% endblock %}

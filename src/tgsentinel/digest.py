@@ -29,6 +29,22 @@ async def send_digest(
     Args:
         channels_config: List of ChannelRule objects with id and name
     """
+    # Validate mode early
+    if mode not in ("dm", "channel", "both"):
+        log.warning(
+            f"Invalid digest mode '{mode}'. Expected 'dm', 'channel', or 'both'. "
+            "Digest not sent. Please update config.yml alerts.mode"
+        )
+        return
+
+    # Validate channel when required
+    if mode in ("channel", "both") and not channel:
+        log.warning(
+            f"Digest mode '{mode}' requires a channel, but none provided. "
+            "Digest not sent. Please update config.yml alerts.channel"
+        )
+        return
+
     now_utc = dt.datetime.now(dt.UTC)
     since = (now_utc - dt.timedelta(hours=since_hours)).replace(tzinfo=None)
     since_str = since.strftime("%Y-%m-%d %H:%M:%S")
@@ -127,11 +143,11 @@ async def send_digest(
 
     msg_text = "\n".join(lines)
 
-    log.info(f"Sending digest with {len(rows)} messages")
+    log.info(f"Sending digest with {len(rows)} messages (mode={mode})")
 
     if mode in ("dm", "both"):
         await client.send_message("me", msg_text, link_preview=False)
-        log.info("Digest sent to DM")
+        log.info("Digest sent to DM (Saved Messages)")
 
     if mode in ("channel", "both") and channel:
         await client.send_message(channel, msg_text, link_preview=False)

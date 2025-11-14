@@ -17,32 +17,52 @@
             </div>
             <div class="card-body table-responsive">
                 <table class="table align-middle mb-0" id="alerts-table">
-                    <thead>
-                        <tr>
-                            <th scope="col">Channel</th>
-                            <th scope="col">Sender</th>
-                            <th scope="col">Excerpt</th>
-                            <th scope="col">Score</th>
-                            <th scope="col">Trigger</th>
-                            <th scope="col">Destination</th>
-                            <th scope="col">Timestamp</th>
-                            <th scope="col" class="text-center">Feedback</th>
-                        </tr>
-                    </thead>
-                    <tbody>
+                                <thead>
+                <tr>
+                    <th>Channel</th>
+                    <th>Sender</th>
+                    <th>Excerpt</th>
+                    <th>Score</th>
+                    <th>Trigger</th>
+                    <th>Timestamp</th>
+                    <th class="text-center">Feedback</th>
+                </tr>
+            </thead>
+            <tbody>
                         {%- for alert in alerts %}
                         <tr>
                             <td data-label="Channel">{{ alert.chat_name }}</td>
-                            <td data-label="Sender">{{ alert.sender or 'Unknown' }}</td>
-                            <td data-label="Excerpt" class="text-truncate">{{ alert.excerpt }}</td>
-                            <td data-label="Score"><span class="badge badge-danger">{{ '%.2f'|format(alert.score) }}</span></td>
+                            <td data-label="Sender">{{ alert.sender | default("Unknown") }}</td>
+                            <td data-label="Excerpt"
+                                class="alert-excerpt"
+                                data-bs-toggle="tooltip"
+                                data-bs-placement="auto"
+                                data-bs-custom-class="excerpt-tooltip"
+                                data-bs-title="{{ (alert.message_text or alert.excerpt) | e }}">
+                                {{ alert.excerpt }}
+                            </td>
+                            <td data-label="Score"><span class="badge bg-danger" style="z-index: 1;">{{ '%.2f'|format(alert.score) }}</span></td>
                             <td data-label="Trigger">{{ alert.trigger or 'N/A' }}</td>
-                            <td data-label="Destination">{{ alert.sent_to }}</td>
-                            <td data-label="Timestamp">{{ alert.created_at }}</td>
+                            {% set _date = alert.created_at.split(' ')[0] if alert.created_at else '' %}
+                            {% set _time = alert.created_at.split(' ')[1] if alert.created_at and alert.created_at.split(' ')|length > 1 else '' %}
+                            <td data-label="Timestamp"
+                                class="alert-timestamp"
+                                data-bs-toggle="tooltip"
+                                data-bs-html="true"
+                                data-bs-placement="top"
+                                data-bs-custom-class="timestamp-tooltip"
+                                data-bs-title='<div><div><strong>Date:</strong> {{ _date }}</div><div><strong>Time:</strong> {{ _time }}</div><div><strong>Destination:</strong> {{ alert.sent_to }}</div></div>'>
+                                {% if alert.created_at %}
+                                    <div class="timestamp-date">{{ _date }}</div>
+                                    <div class="timestamp-time">{{ _time }}</div>
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </td>
                             <td class="text-center" data-label="Feedback">
                                 <div class="btn-group" role="group" aria-label="Feedback controls">
-                                    <button class="btn btn-outline-primary btn-sm btn-feedback" data-score="up" data-alert-id="{{ loop.index0 }}" type="button" aria-label="Give positive feedback for alert {{ loop.index0 }}">👍</button>
-                                    <button class="btn btn-outline-primary btn-sm btn-feedback" data-score="down" data-alert-id="{{ loop.index0 }}" type="button" aria-label="Give negative feedback for alert {{ loop.index0 }}">👎</button>
+                                    <button class="btn btn-outline-primary btn-sm btn-feedback" data-score="up" data-chat-id="{{ alert.chat_id }}" data-msg-id="{{ alert.msg_id | default(0) }}" type="button" aria-label="Give positive feedback">👍</button>
+                                    <button class="btn btn-outline-primary btn-sm btn-feedback" data-score="down" data-chat-id="{{ alert.chat_id }}" data-msg-id="{{ alert.msg_id | default(0) }}" type="button" aria-label="Give negative feedback">👎</button>
                                 </div>
                             </td>
                         </tr>
@@ -75,7 +95,7 @@
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <h3 class="h5 mb-0">{{ digest.date }}</h3>
-                                <span class="badge badge-info">{{ digest.items }} messages</span>
+                                <span class="badge bg-info" style="z-index: 1;">{{ digest.items }} messages</span>
                             </div>
                             <p class="mb-0 text-muted">Average score: {{ digest.avg_score }}</p>
                         </div>
@@ -146,26 +166,44 @@
             return;
         }
         if (!alerts.length) {
-            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No alerts available.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">No alerts available.</td></tr>';
             return;
         }
-        const rows = alerts.map((alert, index) => `
+        const rows = alerts.map((alert, index) => {
+            // Use msg_id directly from API response
+            const msgId = alert.msg_id || 0;
+            
+            // Format timestamp to 2 lines
+            let timestampHtml = 'N/A';
+            let date = '';
+            let time = '';
+            if (alert.created_at) {
+                const ps = alert.created_at.split(' ');
+                date = ps[0] || '';
+                time = ps[1] || '';
+                timestampHtml = `<div class="timestamp-date">${escapeHtml(date)}</div><div class="timestamp-time">${escapeHtml(time)}</div>`;
+            }
+            
+            return `
             <tr>
                 <td data-label="Channel">${escapeHtml(alert.chat_name)}</td>
                 <td data-label="Sender">${escapeHtml(alert.sender || "Unknown")}</td>
-                <td data-label="Excerpt" class="text-truncate">${escapeHtml(alert.excerpt)}</td>
-                <td data-label="Score"><span class="badge badge-danger">${escapeHtml(Number(alert.score || 0).toFixed(2))}</span></td>
+                <td data-label="Excerpt" class="alert-excerpt" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-custom-class="excerpt-tooltip" data-bs-title="${escapeHtml(alert.message_text || alert.excerpt)}">${escapeHtml(alert.excerpt)}</td>
+                <td data-label="Score"><span class="badge bg-danger" style="z-index: 1;">${escapeHtml(Number(alert.score || 0).toFixed(2))}</span></td>
                 <td data-label="Trigger">${escapeHtml(alert.trigger || "N/A")}</td>
-                <td data-label="Destination">${escapeHtml(alert.sent_to || "dm")}</td>
-                <td data-label="Timestamp">${escapeHtml(alert.created_at || "N/A")}</td>
+                <td data-label="Timestamp" class="alert-timestamp" data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="top" data-bs-custom-class="timestamp-tooltip" data-bs-title='<div><div><strong>Date:</strong> ${escapeHtml(date)}</div><div><strong>Time:</strong> ${escapeHtml(time)}</div><div><strong>Destination:</strong> ${escapeHtml(alert.sent_to || "dm")}</div></div>'>${timestampHtml}</td>
                 <td class="text-center" data-label="Feedback">
                     <div class="btn-group" role="group" aria-label="Feedback controls">
-                        <button class="btn btn-outline-primary btn-sm btn-feedback" data-score="up" data-alert-id="${escapeHtml(alert.id)}" type="button" aria-label="Give positive feedback for alert from ${escapeHtml(alert.sender || 'Unknown')}">👍</button>
-                        <button class="btn btn-outline-primary btn-sm btn-feedback" data-score="down" data-alert-id="${escapeHtml(alert.id)}" type="button" aria-label="Give negative feedback for alert from ${escapeHtml(alert.sender || 'Unknown')}">👎</button>
+                        <button class="btn btn-outline-primary btn-sm btn-feedback" data-score="up" data-chat-id="${escapeHtml(alert.chat_id)}" data-msg-id="${msgId}" type="button" aria-label="Give positive feedback">👍</button>
+                        <button class="btn btn-outline-primary btn-sm btn-feedback" data-score="down" data-chat-id="${escapeHtml(alert.chat_id)}" data-msg-id="${msgId}" type="button" aria-label="Give negative feedback">👎</button>
                     </div>
                 </td>
-            </tr>`).join("");
+            </tr>`;
+        }).join("");
         tbody.innerHTML = rows;
+        
+        // Re-init tooltips for dynamically injected elements
+        initTooltips(tbody);
     }
 
     async function refreshDigests() {
@@ -182,6 +220,24 @@
         }
     }
 
+    function initTooltips(context=document) {
+        try {
+            const nodes = (context || document).querySelectorAll('[data-bs-toggle="tooltip"]');
+            nodes.forEach(el => {
+                // Dispose existing instance if any
+                const existing = bootstrap.Tooltip.getInstance(el);
+                if (existing) existing.dispose();
+                new bootstrap.Tooltip(el, { container: 'body', html: true, delay: { show: 0, hide: 100 } });
+            });
+        } catch (e) {
+            console.debug('Tooltip init failed:', e);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        initTooltips();
+    });
+
     function renderDigests(digests) {
         const timeline = document.getElementById("digest-timeline");
         if (!timeline) {
@@ -196,23 +252,111 @@
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <h3 class="h5 mb-0">${escapeHtml(digest.date)}</h3>
-                        <span class="badge badge-info">${escapeHtml(digest.items)}</span>
+                        <span class="badge bg-info" style="z-index: 1;">${escapeHtml(digest.items)}</span>
                     </div>
                     <p class="mb-0 text-muted">Average score: ${escapeHtml(digest.avg_score)}</p>
                 </div>
             </div>`).join("");
     }
 
-    function bindInteractions() {
-        document.querySelectorAll(".btn-feedback").forEach((button) => {
-            button.addEventListener("click", () => {
-                const direction = button.getAttribute("data-score") === "up" ? "success" : "warning";
-                showToast("Feedback recorded", direction);
-            });
+    // Use event delegation to handle feedback button clicks
+    // This prevents duplicate listeners on rapid refresh cycles
+    function setupFeedbackDelegation() {
+        const alertsTableBody = document.querySelector("#alerts-table tbody");
+        if (!alertsTableBody) {
+            return;
+        }
+        
+        // Remove any existing listener before adding new one
+        const newTableBody = alertsTableBody.cloneNode(true);
+        alertsTableBody.parentNode.replaceChild(newTableBody, alertsTableBody);
+        
+        // Add single delegated listener to the tbody
+        newTableBody.addEventListener("click", async (event) => {
+            const button = event.target.closest(".btn-feedback");
+            if (!button) {
+                return; // Not a feedback button click
+            }
+            
+            const chatId = button.getAttribute("data-chat-id");
+            const msgId = button.getAttribute("data-msg-id");
+            const label = button.getAttribute("data-score"); // "up" or "down"
+            
+            if (!chatId || !msgId) {
+                showToast("Unable to record feedback: missing alert data", "error");
+                return;
+            }
+            
+            // Parse with explicit radix and validate
+            const parsedChatId = parseInt(chatId, 10);
+            const parsedMsgId = parseInt(msgId, 10);
+            
+            if (!Number.isInteger(parsedChatId) || Number.isNaN(parsedChatId)) {
+                console.error("Invalid chat_id for feedback:", chatId);
+                showToast("Unable to record feedback: invalid chat ID", "error");
+                return;
+            }
+            
+            if (!Number.isInteger(parsedMsgId) || Number.isNaN(parsedMsgId)) {
+                console.error("Invalid msg_id for feedback:", msgId);
+                showToast("Unable to record feedback: invalid message ID", "error");
+                return;
+            }
+            
+            try {
+                const response = await fetch("{{ url_for('api_alert_feedback') }}", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        chat_id: parsedChatId,
+                        msg_id: parsedMsgId,
+                        label: label
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error("Feedback submission failed");
+                }
+                
+                const result = await response.json();
+                if (result.status === "ok") {
+                    const direction = label === "up" ? "success" : "warning";
+                    showToast("Feedback recorded", direction);
+                    
+                    // Visual feedback - briefly highlight the button
+                    button.classList.add(label === "up" ? "btn-success" : "btn-warning");
+                    button.classList.remove("btn-outline-primary");
+                    setTimeout(() => {
+                        button.classList.remove("btn-success", "btn-warning");
+                        button.classList.add("btn-outline-primary");
+                    }, 1500);
+                } else {
+                    throw new Error(result.message || "Unknown error");
+                }
+            } catch (error) {
+                console.error("Feedback error:", error);
+                showToast("Failed to record feedback", "error");
+            }
         });
+    }
+
+    function bindInteractions() {
+        setupFeedbackDelegation();
         document.getElementById("btn-refresh-alerts")?.addEventListener("click", refreshAlerts);
         document.getElementById("btn-download-digest")?.addEventListener("click", refreshDigests);
-        document.getElementById("btn-export-alerts")?.addEventListener("click", () => showToast("CSV export queued", "info"));
+        document.getElementById("btn-export-alerts")?.addEventListener("click", async () => {
+            try {
+                // Trigger a file download by navigating to the export endpoint
+                const href = "{{ url_for('api_export_alerts') }}?limit=1000";
+                window.open(href, "_blank");
+                showToast("Export started", "info");
+            } catch (err) {
+                console.error("Export failed", err);
+                showToast("Export failed", "error");
+            }
+        });
         document.getElementById("threshold-slider")?.addEventListener("input", (event) => {
             document.getElementById("threshold-value").textContent = Number(event.target.value).toFixed(2);
         });

@@ -23,6 +23,7 @@ def mock_config():
             digest=DigestCfg(hourly=True, daily=True, top_n=10),
         ),
         channels=[],
+        monitored_users=[],
         interests=["test interest 1", "test interest 2"],
         redis={"host": "redis", "port": 6379, "stream": "test"},
         db_uri="sqlite:///test.db",
@@ -107,6 +108,17 @@ def test_profiles_view(app_client):
     assert b"Profiles" in response.data or b"Interest" in response.data
 
 
+def test_docs_view(app_client):
+    """Test API documentation page renders."""
+    response = app_client.get("/docs")
+    assert response.status_code == 200
+    assert b"API Documentation" in response.data or b"API" in response.data
+    # Check for key sections
+    assert b"Dashboard" in response.data or b"dashboard" in response.data
+    assert b"Webhooks" in response.data or b"webhooks" in response.data
+    assert b"Examples" in response.data or b"examples" in response.data
+
+
 # Test API Endpoints - Dashboard
 def test_api_dashboard_summary(app_client):
     """Test /api/dashboard/summary endpoint."""
@@ -189,7 +201,7 @@ def test_api_config_save(app_client):
     payload = {
         "api_id": "12345",
         "api_hash": "test",
-        "mode": "direct",  # Use valid mode
+        "mode": "dm",  # Use valid mode (dm, channel, or both)
         "interests": ["test"],
     }
     response = app_client.post(

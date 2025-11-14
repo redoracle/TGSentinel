@@ -75,6 +75,7 @@ def build_config() -> AppCfg:
         api_hash="hash",
         alerts=AlertsCfg(digest=DigestCfg(hourly=False, daily=False, top_n=5)),
         channels=[channel],
+        monitored_users=[],
         interests=[],
         redis={
             "host": "localhost",
@@ -106,6 +107,8 @@ async def test_full_ingest_and_process_pipeline(monkeypatch):
 
     assert fake_client.handlers, "Handler should be registered"
 
+    from datetime import datetime, timezone
+
     message = SimpleNamespace(
         id=42,
         sender_id=11111,
@@ -113,6 +116,7 @@ async def test_full_ingest_and_process_pipeline(monkeypatch):
         message="Critical update",
         replies=SimpleNamespace(replies=2),
         reactions=SimpleNamespace(results=[SimpleNamespace(count=3)]),
+        date=datetime.now(timezone.utc),
     )
     event = SimpleNamespace(
         chat_id=-100123,
