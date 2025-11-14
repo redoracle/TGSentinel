@@ -11,7 +11,7 @@ Flask-SocketIO==5.3.5
 fsspec==2025.10.0
 h11==0.16.0
 hf-xet==1.2.0
-huggingface-hub==0.36.0
+huggingface-hub==1.1.4
 idna==3.11
 iniconfig==2.3.0
 itsdangerous==2.2.0
