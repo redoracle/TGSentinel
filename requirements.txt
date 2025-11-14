@@ -47,7 +47,7 @@ setuptools==80.9.0
 simple-websocket==1.1.0
 SQLAlchemy==2.0.44
 sympy==1.14.0
-Telethon==1.36.0
+Telethon==1.42.0
 threadpoolctl==3.6.0
 tokenizers==0.22.1
 torch==2.9.0
