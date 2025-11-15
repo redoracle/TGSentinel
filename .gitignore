@@ -21,6 +21,7 @@ env/
 *.db
 *.session
 /data/
+config/*.yml
 
 # Cache directories
 .cache/

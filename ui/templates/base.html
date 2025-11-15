@@ -232,15 +232,27 @@
 		<div class="modal-dialog modal-dialog-centered">
 			<div class="modal-content">
 				<div class="modal-header">
-					<h5 class="modal-title" id="logoutModalLabel">Confirm Logout</h5>
+					<h5 class="modal-title" id="logoutModalLabel">⚠️ Complete System Reset</h5>
 					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 				</div>
 				<div class="modal-body">
-					<p class="mb-0">Are you sure you want to log out? You will need to authenticate again to access TG Sentinel.</p>
+					<div class="alert alert-danger mb-3">
+						<strong>Warning:</strong> This will permanently delete ALL data:
+						<ul class="mb-0 mt-2">
+							<li>Database (sentinel.db)</li>
+							<li>Redis cache and streams</li>
+							<li>Telegram session files</li>
+							<li>All configuration YML files</li>
+							<li>User avatars and cached data</li>
+						</ul>
+					</div>
+					<p class="mb-3">To confirm this action, type <strong>DELETE ALL</strong> below:</p>
+					<input type="text" class="form-control" id="logoutConfirmInput" placeholder="Type DELETE ALL to confirm" autocomplete="off">
+					<div id="logoutConfirmError" class="text-danger mt-2" style="display: none;">Please type "DELETE ALL" exactly to proceed.</div>
 				</div>
 				<div class="modal-footer">
 					<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-					<button type="button" id="btnConfirmLogout" class="btn btn-danger">Logout</button>
+					<button type="button" id="btnConfirmLogout" class="btn btn-danger" disabled>Delete All & Logout</button>
 				</div>
 			</div>
 		</div>
@@ -411,20 +423,59 @@
 			logoutBtnMobile.addEventListener("click", handleLogout);
 		}
 
-		// Confirm logout button performs actual logout
+		// Enable/disable logout button based on confirmation input
+		const logoutConfirmInput = document.getElementById("logoutConfirmInput");
 		const btnConfirmLogout = document.getElementById("btnConfirmLogout");
+		const logoutConfirmError = document.getElementById("logoutConfirmError");
+		
+		if (logoutConfirmInput && btnConfirmLogout) {
+			logoutConfirmInput.addEventListener("input", () => {
+				const value = logoutConfirmInput.value.trim();
+				if (value === "DELETE ALL") {
+					btnConfirmLogout.disabled = false;
+					logoutConfirmError.style.display = "none";
+				} else {
+					btnConfirmLogout.disabled = true;
+				}
+			});
+			
+			// Reset input when modal is hidden
+			const logoutModal = document.getElementById("logoutModal");
+			if (logoutModal) {
+				logoutModal.addEventListener("hidden.bs.modal", () => {
+					logoutConfirmInput.value = "";
+					btnConfirmLogout.disabled = true;
+					logoutConfirmError.style.display = "none";
+				});
+			}
+		}
+
+		// Confirm logout button performs complete data cleanup
 		if (btnConfirmLogout) {
 			btnConfirmLogout.addEventListener("click", async () => {
+				// Validate one more time
+				if (logoutConfirmInput && logoutConfirmInput.value.trim() !== "DELETE ALL") {
+					if (logoutConfirmError) {
+						logoutConfirmError.style.display = "block";
+					}
+					return;
+				}
+				
 				// Disable to prevent double clicks and show busy state
 				btnConfirmLogout.setAttribute('aria-busy', 'true');
 				btnConfirmLogout.classList.add('disabled');
-				// Short-timeout POST to logout API; always fall back to /logout navigation
+				btnConfirmLogout.textContent = "Deleting...";
+				
+				// Call complete cleanup API
 				try {
 					const controller = new AbortController();
-					const tid = setTimeout(() => controller.abort(), 1200);
-					try { await fetch('/api/session/logout', { method: 'POST', signal: controller.signal }); } catch (_) {}
+					const tid = setTimeout(() => controller.abort(), 5000);
+					try { 
+						await fetch('/api/session/logout-complete', { method: 'POST', signal: controller.signal });
+					} catch (_) {}
 					clearTimeout(tid);
 				} catch (_) {}
+				
 				// Clear local state and broadcast to other tabs
 				try { sessionStorage.clear(); } catch (_) {}
 				try { localStorage.clear(); } catch (_) {}

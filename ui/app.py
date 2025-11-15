@@ -161,7 +161,7 @@ except Exception:  # pragma: no cover - optional dependency
         def run(self, app: Flask, *args: Any, **kwargs: Any) -> None:
             host = kwargs.get("host", "0.0.0.0")
             port = kwargs.get("port", 5000)
-            app.run(host=host, port=port, debug=True)
+            app.run(host=host, port=port)
 
         def emit(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401
             return None
@@ -298,6 +298,19 @@ AUTH_QUEUE_KEY = "tgsentinel:auth_queue"
 AUTH_RESPONSE_HASH = "tgsentinel:auth_responses"
 AUTH_REQUEST_TIMEOUT_SECS = 90.0
 _HANDSHAKE_FINAL_STATES = {"worker_resumed", "timeout", "cancelled"}
+
+
+def reset_for_testing() -> None:
+    """Reset global state for test isolation.
+
+    This is a public API for tests to reset module-level state without
+    directly accessing private attributes.
+    """
+    global _is_initialized, redis_client, _cached_health, _cached_summary
+    _is_initialized = False
+    redis_client = None
+    _cached_health = None
+    _cached_summary = None
 
 
 def reload_config() -> None:
@@ -605,7 +618,7 @@ def _invalidate_session(session_path: str | None) -> Dict[str, Any]:
                     try:
                         pattern_keys = [
                             k.decode() if isinstance(k, bytes) else k
-                            for k in scan_iter(match=pattern)
+                            for k in scan_iter(match=pattern)  # type: ignore[misc]
                         ]
                     except Exception:
                         pattern_keys = []
@@ -2078,136 +2091,143 @@ def api_session_logout():
             }
         )
     except Exception as exc:
-        logger.error("Failed to logout session: %s", exc)
+        logger.error("[UI-AUTH] Logout failed: %s", exc, exc_info=True)
         return jsonify({"status": "error", "message": str(exc)}), 500
 
 
-@app.post("/api/session/upload")
+@app.post("/api/session/logout-complete")
 @_ensure_init
-def api_session_upload():
-    """Upload and restore a Telegram session file.
+def api_session_logout_complete():
+    """Complete system reset: nuke DB, Redis, session files, and config YML files.
 
-    Accepts a .session file upload, validates it, and installs it as the active session.
-    The sentinel worker will detect and use it on next connection check.
+    This is a destructive operation that removes:
+    - Database (sentinel.db)
+    - Redis data (flushall)
+    - Telegram session files (*.session*)
+    - Configuration YML files (config/*.yml)
+    - User avatars and cached data
     """
+    import shutil
+    import glob
+
+    result = {
+        "status": "ok",
+        "cleaned": {
+            "database": False,
+            "redis": False,
+            "session_files": [],
+            "config_files": [],
+            "data_files": [],
+        },
+        "errors": [],
+    }
+
     try:
-        # Check if file is in request
-        if "session_file" not in request.files:
-            return jsonify({"status": "error", "message": "No file provided"}), 400
-
-        file = request.files["session_file"]
-
-        if file.filename == "":
-            return jsonify({"status": "error", "message": "No file selected"}), 400
-
-        # Read file content
-        file_content = file.read()
-
-        # Validate the session file
-        is_valid, validation_msg = _validate_session_file(file_content)
-        if not is_valid:
-            logger.warning("[UI-AUTH] Invalid session upload: %s", validation_msg)
-            return jsonify({"status": "error", "message": validation_msg}), 400
-
-        handshake_id: str | None = None
-        handshake_active = False
+        # 1. Nuke database
         try:
-            handshake_id = _request_relogin_handshake(timeout=45.0)
-            if handshake_id:
-                handshake_active = True
-                logger.info(
-                    "[UI-AUTH] Worker detached for re-login (request_id=%s)",
-                    handshake_id,
-                )
-        except TimeoutError:
-            logger.warning(
-                "[UI-AUTH] Re-login handshake timed out; continuing best-effort"
-            )
-        except RuntimeError as handshake_exc:
-            logger.warning("[UI-AUTH] %s", handshake_exc)
-            return (
-                jsonify(
-                    {
-                        "status": "error",
-                        "message": "Another re-login operation is already in progress. Please wait for it to finish and try again.",
-                    }
-                ),
-                409,
-            )
-        except Exception as handshake_exc:
-            logger.warning(
-                "[UI-AUTH] Could not initiate re-login handshake: %s",
-                handshake_exc,
-            )
+            db_path = Path("/app/data/sentinel.db")
+            if db_path.exists():
+                db_path.unlink()
+                result["cleaned"]["database"] = True
+            # Also remove journal files
+            for journal in [
+                "/app/data/sentinel.db-journal",
+                "/app/data/sentinel.db-wal",
+                "/app/data/sentinel.db-shm",
+            ]:
+                jp = Path(journal)
+                if jp.exists():
+                    jp.unlink()
+        except Exception as e:
+            result["errors"].append(f"Database cleanup error: {str(e)}")
 
-        # Clear existing session first
-        session_path = _resolve_session_path()
-        try:
-            _invalidate_session(session_path)
-            # Write new session file
-            target_path = Path(session_path or "/app/data/tgsentinel.session")
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-
-            with open(target_path, "wb") as f:
-                f.write(file_content)
-
-            # Set proper permissions
-            os.chmod(target_path, 0o666)
+        # 2. Flush all Redis data
+        if redis_client:
             try:
-                os.chmod(target_path.parent, 0o777)
-            except Exception:
-                pass
+                redis_client.flushall()
+                result["cleaned"]["redis"] = True
+            except Exception as e:
+                result["errors"].append(f"Redis flush error: {str(e)}")
 
-            logger.info(
-                "[UI-AUTH] Session file uploaded: %s (%d bytes)",
-                target_path,
-                len(file_content),
-            )
+        # 3. Remove all session files in data/
+        try:
+            session_patterns = [
+                "/app/data/*.session",
+                "/app/data/*.session-journal",
+                "/app/data/tgsentinel.session*",
+            ]
+            for pattern in session_patterns:
+                for file_path in glob.glob(pattern):
+                    try:
+                        Path(file_path).unlink()
+                        result["cleaned"]["session_files"].append(file_path)
+                    except Exception as e:
+                        result["errors"].append(f"Session file {file_path}: {str(e)}")
+        except Exception as e:
+            result["errors"].append(f"Session cleanup error: {str(e)}")
 
-            if handshake_active and handshake_id:
-                logger.info(
-                    "[UI-AUTH] Signalling worker that new session is ready (request_id=%s)",
-                    handshake_id,
-                )
-                _finalize_relogin_handshake(handshake_id, "promotion_complete")
-            else:
+        # 4. Remove all YML config files
+        try:
+            config_patterns = [
+                "/app/config/*.yml",
+                "/app/config/*.yaml",
+            ]
+            for pattern in config_patterns:
+                for file_path in glob.glob(pattern):
+                    try:
+                        Path(file_path).unlink()
+                        result["cleaned"]["config_files"].append(file_path)
+                    except Exception as e:
+                        result["errors"].append(f"Config file {file_path}: {str(e)}")
+        except Exception as e:
+            result["errors"].append(f"Config cleanup error: {str(e)}")
+
+        # 5. Remove other data files (avatars, etc)
+        try:
+            data_files = [
+                "/app/data/user_avatar.jpg",
+                "/app/data/.reload_config",
+            ]
+            for file_path in data_files:
                 try:
-                    Path("/app/data/.reload_config").touch()
-                except Exception:
-                    pass
-        except Exception as file_exc:
-            if handshake_active and handshake_id:
-                _finalize_relogin_handshake(handshake_id, "cancelled")
-            raise
-        # Mark as authenticated in Flask session
-        session["telegram_authenticated"] = True
+                    fp = Path(file_path)
+                    if fp.exists():
+                        fp.unlink()
+                        result["cleaned"]["data_files"].append(file_path)
+                except Exception as e:
+                    result["errors"].append(f"Data file {file_path}: {str(e)}")
+        except Exception as e:
+            result["errors"].append(f"Data file cleanup error: {str(e)}")
 
-        # Wait for worker to validate the session
-        logger.info("[UI-AUTH] Waiting for worker to validate uploaded session...")
-        if _wait_for_worker_authorization(timeout=30.0):
-            return jsonify(
-                {
-                    "status": "ok",
-                    "message": "Session restored successfully",
-                    "validation": validation_msg,
-                }
-            )
-        else:
-            # Session file was valid SQLite but Telegram rejected it
-            logger.warning("[UI-AUTH] Uploaded session not authorized by Telegram")
-            return (
-                jsonify(
-                    {
-                        "status": "error",
-                        "message": "Session file is valid but not authorized. It may be expired or revoked.",
-                    }
-                ),
-                401,
-            )
+        # 6. Remove Redis data directory if exists
+        try:
+            redis_dir = Path("/app/data/redis")
+            if redis_dir.exists() and redis_dir.is_dir():
+                shutil.rmtree(redis_dir)
+                result["cleaned"]["data_files"].append("/app/data/redis/")
+        except Exception as e:
+            result["errors"].append(f"Redis directory cleanup error: {str(e)}")
+
+        # Clear Flask session
+        try:
+            session.clear()
+        except Exception:
+            pass
+
+        return jsonify(result)
 
     except Exception as exc:
-        logger.error("[UI-AUTH] Session upload failed: %s", exc, exc_info=True)
-        return jsonify({"status": "error", "message": str(exc)}), 500
+        logger.error("Failed to perform complete logout cleanup: %s", exc)
+        return (
+            jsonify(
+                {
+                    "status": "error",
+                    "message": str(exc),
+                    "cleaned": result.get("cleaned", {}),
+                }
+            ),
+            500,
+        )
 
 
 @app.get("/logout")
@@ -6101,7 +6121,6 @@ def main() -> None:
         app,
         host="0.0.0.0",
         port=int(os.getenv("UI_PORT", "5000")),
-        debug=True,
         allow_unsafe_werkzeug=True,  # For development/testing; use proper WSGI server in production
     )
 

@@ -192,6 +192,9 @@ def app():
     with patch("app.load_config", return_value=mock_config):
         import app as flask_app  # type: ignore[import-not-found]
 
+        # Reset module state for test isolation
+        flask_app.reset_for_testing()
+
         flask_app.app.config["TESTING"] = True
         flask_app.app.config["TGSENTINEL_CONFIG"] = mock_config
 

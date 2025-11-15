@@ -166,13 +166,10 @@ def app_with_test_data(test_db, test_redis):
     }
 
     with patch("app.load_config", return_value=mock_config):
-        import app as flask_app  # type: ignore[import-not-found]
+        import app as flask_app
 
-        # Force re-initialization by resetting the global state
-        flask_app._is_initialized = False
-        flask_app.redis_client = None
-        flask_app._cached_health = None  # Clear health cache
-        flask_app._cached_summary = None  # Clear summary cache
+        # Use public API to reset global state for testing
+        flask_app.reset_for_testing()
 
         with patch.object(flask_app.redis, "Redis", return_value=test_redis):
             flask_app.app.config["TESTING"] = True

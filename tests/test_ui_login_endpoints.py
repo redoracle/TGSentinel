@@ -2,9 +2,23 @@
 
 import json
 import os
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+
+@contextmanager
+def mock_redis_client(mock_client):
+    """Context manager to temporarily replace redis_client in the app module."""
+    import ui.app
+
+    original_redis = ui.app.redis_client
+    ui.app.redis_client = mock_client
+    try:
+        yield
+    finally:
+        ui.app.redis_client = original_redis
 
 
 def _make_app():
@@ -18,20 +32,37 @@ def _make_app():
 
     if "app" in sys.modules:
         del sys.modules["app"]
+    if "ui.app" in sys.modules:
+        del sys.modules["ui.app"]
 
     # Mock config to return test values
-    with patch("ui.app.load_config") as mock_load:
-        cfg = MagicMock()
-        cfg.channels = []
-        cfg.db_uri = "sqlite:///:memory:"
-        cfg.redis = {"host": "localhost", "port": 6379, "stream": "tgsentinel:messages"}
-        cfg.api_id = 123456
-        cfg.api_hash = "hash"
-        mock_load.return_value = cfg
+    cfg = MagicMock()
+    cfg.channels = []
+    cfg.db_uri = "sqlite:///:memory:"
+    cfg.redis = {"host": "localhost", "port": 6379, "stream": "tgsentinel:messages"}
+    cfg.api_id = 123456
+    cfg.api_hash = "hash"
+
+    # Patch Redis connection BEFORE importing/initializing the app
+    with (
+        patch("app.load_config", return_value=cfg),
+        patch("ui.app.redis") as mock_redis_module,
+    ):
+        # Create a mock Redis class that returns a working mock client
+        mock_redis_class = MagicMock()
+        mock_client = MagicMock()
+        mock_client.ping = MagicMock(return_value=True)
+        mock_redis_class.Redis.return_value = mock_client
+        mock_redis_module.Redis = mock_redis_class.Redis
 
         import app as flask_app  # type: ignore
 
+        # Reset module state for test isolation
+        flask_app.reset_for_testing()
         flask_app.init_app()
+
+        # Return the app for use outside the context manager
+        # Note: redis patches only apply during _make_app(), tests must patch redis_client separately
         return flask_app.app
 
 
@@ -43,17 +74,19 @@ def _mock_redis_for_auth(response_data, context_data=None):
     mock_redis.setex = MagicMock(return_value=True)
     mock_redis.delete = MagicMock(return_value=1)
 
-    # Mock hget for auth responses
-    mock_redis.hget = MagicMock(
-        return_value=json.dumps(response_data) if response_data else None
-    )
+    # Mock hget for auth responses - return bytes (what Redis client returns)
+    # For test simplicity, always return the response_data for any hget call
+    if response_data:
+        mock_redis.hget = MagicMock(return_value=json.dumps(response_data).encode())
+    else:
+        mock_redis.hget = MagicMock(return_value=None)
 
     # Mock get for login context
     def get_side_effect(key):
         if isinstance(key, bytes):
             key = key.decode()
         if "tgsentinel:login:phone:" in str(key) and context_data:
-            return json.dumps(context_data)
+            return json.dumps(context_data).encode()
         return None
 
     mock_redis.get = MagicMock(side_effect=get_side_effect)
@@ -69,14 +102,11 @@ def test_login_start_requires_phone(missing_field):
         payload.pop("phone")
 
     # Setup Redis mock to return proper auth response
-    mock_redis_instance = MagicMock()
-    mock_redis_instance.rpush = MagicMock(return_value=1)
-    mock_redis_instance.hget = MagicMock(
-        return_value=json.dumps({"status": "ok", "phone_code_hash": "abc"})
+    mock_redis_instance = _mock_redis_for_auth(
+        {"status": "ok", "phone_code_hash": "abc"}
     )
-    mock_redis_instance.hdel = MagicMock(return_value=1)
 
-    with patch("ui.app.redis_client", mock_redis_instance):
+    with mock_redis_client(mock_redis_instance):
         resp = client.post("/api/session/login/start", json=payload)
         assert resp.status_code == (400 if missing_field else 200)
         if missing_field:
@@ -96,7 +126,7 @@ def test_login_start_sends_code_and_stores_context():
         {"status": "ok", "phone_code_hash": "abc123", "timeout": 30}
     )
 
-    with patch("ui.app.redis_client", mock_redis):
+    with mock_redis_client(mock_redis):
         resp = client.post("/api/session/login/start", json={"phone": "+41 2600 0000"})
         assert resp.status_code == 200
         assert mock_redis.rpush.called
@@ -111,11 +141,13 @@ def test_login_verify_410_when_context_missing():
     app = _make_app()
     client = app.test_client()
 
+    mock_r = MagicMock()
+    mock_r.get.return_value = None
+
     with (
-        patch("ui.app.redis_client") as mock_r,
+        mock_redis_client(mock_r),
         patch("ui.app._submit_auth_request") as mock_submit,
     ):
-        mock_r.get.return_value = None
         resp = client.post(
             "/api/session/login/verify", json={"phone": "+15550100", "code": "12345"}
         )
@@ -134,7 +166,7 @@ def test_login_verify_success_sets_session_and_clears_context():
     )
 
     with (
-        patch("ui.app.redis_client", mock_redis),
+        mock_redis_client(mock_redis),
         patch("ui.app._wait_for_worker_authorization", return_value=True),
     ):
         resp = client.post(
@@ -168,8 +200,10 @@ def test_login_resend_requires_existing_context():
     app = _make_app()
     client = app.test_client()
 
-    with patch("ui.app.redis_client") as mock_r:
-        mock_r.get.return_value = None
+    mock_r = MagicMock()
+    mock_r.get.return_value = None
+
+    with mock_redis_client(mock_r):
         resp = client.post("/api/session/login/resend", json={"phone": "+15550100"})
         assert resp.status_code == 410
 
@@ -182,7 +216,7 @@ def test_login_resend_updates_context_via_sentinel():
         {"status": "ok", "phone_code_hash": "newhash"}, {"phone_code_hash": "oldhash"}
     )
 
-    with patch("ui.app.redis_client", mock_redis):
+    with mock_redis_client(mock_redis):
         resp = client.post("/api/session/login/resend", json={"phone": "+41 2600 0000"})
         assert resp.status_code == 200
         assert mock_redis.rpush.called
@@ -197,7 +231,7 @@ def test_login_start_handles_sentinel_error():
 
     mock_redis = _mock_redis_for_auth({"status": "error", "message": "failure"})
 
-    with patch("ui.app.redis_client", mock_redis):
+    with mock_redis_client(mock_redis):
         resp = client.post("/api/session/login/start", json={"phone": "+41 2600 0000"})
         assert resp.status_code == 502
         data = resp.get_json()
@@ -214,7 +248,10 @@ def test_login_start_handles_timeout():
     mock_redis.hdel = MagicMock(return_value=1)
     mock_redis.setex = MagicMock(return_value=True)
 
-    with patch("ui.app.redis_client", mock_redis):
+    with (
+        mock_redis_client(mock_redis),
+        patch("ui.app.AUTH_REQUEST_TIMEOUT_SECS", 0.1),  # Short timeout for testing
+    ):
         resp = client.post("/api/session/login/start", json={"phone": "+41 2600 0000"})
         assert resp.status_code == 503
 
@@ -227,17 +264,21 @@ def test_login_resend_handles_timeout():
     mock_redis.rpush = MagicMock(return_value=1)
     mock_redis.hget = MagicMock(return_value=None)  # Timeout - no response
     mock_redis.hdel = MagicMock(return_value=1)
+    mock_redis.setex = MagicMock(return_value=True)
 
     def get_side_effect(key):
         if isinstance(key, bytes):
             key = key.decode()
         if "tgsentinel:login:phone" in str(key):
-            return json.dumps({"phone_code_hash": "oldhash"})
+            return json.dumps({"phone_code_hash": "oldhash"}).encode()
         return None
 
     mock_redis.get = MagicMock(side_effect=get_side_effect)
 
-    with patch("ui.app.redis_client", mock_redis):
+    with (
+        mock_redis_client(mock_redis),
+        patch("ui.app.AUTH_REQUEST_TIMEOUT_SECS", 0.1),  # Short timeout for testing
+    ):
         resp = client.post("/api/session/login/resend", json={"phone": "+41 2600 0000"})
         assert resp.status_code == 503
 
@@ -251,7 +292,7 @@ def test_login_verify_propagates_sentinel_error():
     )
 
     with (
-        patch("ui.app.redis_client", mock_redis),
+        mock_redis_client(mock_redis),
         patch("ui.app._wait_for_worker_authorization", return_value=True),
     ):
         resp = client.post(
