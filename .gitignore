@@ -19,6 +19,7 @@ env/
 *.bak
 *.sqlite3
 *.db
+*.session
 /data/
 
 # Cache directories

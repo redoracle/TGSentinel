@@ -11,12 +11,14 @@ import logging
 import os
 import signal
 import sys
+from pathlib import Path
 from typing import Any, Dict
 from datetime import datetime, timedelta, timezone
 
 from redis import Redis
 from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError
+from telethon.sessions import SQLiteSession
 
 from .client import make_client, start_ingestion
 from .config import load_config
@@ -353,26 +355,97 @@ async def _run():
     engine = init_db(cfg.db_uri)
 
     client: TelegramClient = make_client(cfg)
+    session_file_path = Path(cfg.telegram_session or "/app/data/tgsentinel.session")
+
+    # Initialize Redis early so helpers can use it
+    r = Redis(host=cfg.redis["host"], port=cfg.redis["port"], decode_responses=True)
+
+    def _close_session_binding() -> None:
+        sess = getattr(client, "session", None)
+        closer = getattr(sess, "close", None)
+        if callable(closer):
+            try:
+                closer()
+                log.debug("Closed Telegram session binding")
+            except Exception as close_exc:
+                log.debug("Failed to close Telegram session binding: %s", close_exc)
+
+    def _rebind_session_binding() -> None:
+        """Reload session from disk by explicitly calling session.load().
+
+        This forces Telethon to re-read the auth_key from SQLite without
+        creating a new client instance.
+        """
+        try:
+            if hasattr(client.session, "load"):
+                client.session.load()  # type: ignore[attr-defined]
+                log.debug("Reloaded Telegram session from %s", session_file_path)
+            else:
+                log.warning("Session does not support reload; attempting reconnection")
+        except Exception as rebind_exc:
+            log.error("Failed to reload Telegram session: %s", rebind_exc)
+
+    async def _refresh_user_identity_cache(user_obj=None) -> None:
+        me = user_obj
+        if me is None:
+            try:
+                me = await client.get_me()  # type: ignore[misc]
+            except Exception as info_exc:
+                log.debug("Could not fetch user info for cache refresh: %s", info_exc)
+                return
+
+        if not me:
+            log.warning("get_me() returned None; skipping user cache refresh")
+            return
+
+        avatar_url = "/static/images/logo.png"
+        try:
+            photos = await client.get_profile_photos("me", limit=1)  # type: ignore[misc]
+            if photos:
+                avatar_filename = "user_avatar.jpg"
+                fs_path = Path("/app/data") / avatar_filename
+                try:
+                    await client.download_profile_photo("me", file=str(fs_path))  # type: ignore[misc]
+                    avatar_url = f"/data/{avatar_filename}"
+                except Exception as avatar_exc:
+                    log.debug("Could not download user avatar: %s", avatar_exc)
+        except Exception as photo_exc:
+            log.debug("Could not refresh profile photos: %s", photo_exc)
+
+        # Don't call _mark_authorized here as it would overwrite avatar with default
+        # Build and store complete user info with actual avatar path
+        try:
+            ui = {
+                "username": getattr(me, "username", None)
+                or getattr(me, "first_name", "Unknown"),
+                "first_name": getattr(me, "first_name", ""),
+                "last_name": getattr(me, "last_name", ""),
+                "phone": getattr(me, "phone", ""),
+                "user_id": getattr(me, "id", None),
+                "avatar": avatar_url,
+            }
+            r.set("tgsentinel:user_info", json.dumps(ui), ex=3600)  # 1 hour TTL
+            log.info("Stored user info in Redis after refresh: %s", ui.get("username"))
+        except Exception as cache_exc:
+            log.warning(
+                "Could not store refreshed user info: %s", cache_exc, exc_info=True
+            )
 
     # Ensure session file and directory have proper permissions for authentication
     try:
-        from pathlib import Path
-
-        session_path = Path(cfg.telegram_session or "/app/data/tgsentinel.session")
-        session_dir = session_path.parent
+        session_dir = session_file_path.parent
 
         # Ensure data directory exists and is writable
         session_dir.mkdir(parents=True, exist_ok=True)
         os.chmod(session_dir, 0o777)
 
         # If session file exists, make it writable
-        if session_path.exists():
-            os.chmod(session_path, 0o666)
-            log.info("Set session file permissions to 0o666: %s", session_path)
+        if session_file_path.exists():
+            os.chmod(session_file_path, 0o660)
+            log.info("Set session file permissions to 0o660: %s", session_file_path)
     except Exception as exc:
         log.warning("Failed to set initial session permissions: %s", exc)
 
-    r = Redis(host=cfg.redis["host"], port=cfg.redis["port"], decode_responses=True)
     handshake_gate = asyncio.Event()
     handshake_gate.set()
     client_lock = asyncio.Lock()
@@ -474,10 +547,12 @@ async def _run():
             return
         try:
             ui_info = {
-                "id": getattr(user, "id", None),
                 "username": getattr(user, "username", None)
                 or getattr(user, "first_name", "Analyst"),
+                "first_name": getattr(user, "first_name", ""),
+                "last_name": getattr(user, "last_name", ""),
                 "phone": getattr(user, "phone", None),
+                "user_id": getattr(user, "id", None),
                 "avatar": "/static/images/logo.png",
             }
             r.setex("tgsentinel:user_info", 3600, json.dumps(ui_info))
@@ -741,8 +816,6 @@ async def _run():
                 async with client_lock:
                     # Ensure session file is writable before sign_in (Telethon needs to write during auth)
                     try:
-                        from pathlib import Path
-
                         session_path = Path(
                             cfg.telegram_session or "/app/data/tgsentinel.session"
                         )
@@ -773,8 +846,6 @@ async def _run():
 
                         # Ensure permissions again before 2FA sign_in
                         try:
-                            from pathlib import Path
-
                             session_path = Path(
                                 cfg.telegram_session or "/app/data/tgsentinel.session"
                             )
@@ -789,8 +860,6 @@ async def _run():
 
                     # Fix permissions after successful sign_in
                     try:
-                        from pathlib import Path
-
                         session_path = Path(
                             cfg.telegram_session or "/app/data/tgsentinel.session"
                         )
@@ -815,8 +884,6 @@ async def _run():
                             log.info("[AUTH] Verify: session saved to disk")
 
                         # Verify session file exists and is readable
-                        from pathlib import Path
-
                         session_path = Path(
                             cfg.telegram_session or "/app/data/tgsentinel.session"
                         )
@@ -837,7 +904,21 @@ async def _run():
                             exc_info=True,
                         )
 
-                    _mark_authorized(me)
+                    # Refresh user identity cache to store avatar and full user info
+                    try:
+                        await _refresh_user_identity_cache(me)
+                        log.debug("[AUTH] Verify: cached user identity with avatar")
+                    except Exception as cache_exc:
+                        log.warning(
+                            "[AUTH] Verify: cache refresh failed: %s", cache_exc
+                        )
+                        # Fallback to basic auth marking (stores minimal user info)
+                        _mark_authorized(me)
+                    else:
+                        # Cache refresh succeeded – ensure worker advertises authorized
+                        # status without overwriting cached avatar/user_info.
+                        _mark_authorized()
+
                     _set_auth_response(
                         request_id,
                         {
@@ -921,6 +1002,291 @@ async def _run():
             await _handle_auth_request(data)
         log.info("[AUTH-WORKER] Auth queue worker stopped")
 
+    async def relogin_coordinator():
+        """Pause Telegram client while UI replaces the session file."""
+        nonlocal client  # Must declare at function start before any nested usage
+        key = "tgsentinel:relogin"
+        active_request_id: str | None = None
+        deadline: datetime | None = None
+
+        while True:
+            await asyncio.sleep(0.5)
+            try:
+                raw = r.get(key)
+            except Exception as redis_err:
+                log.debug("Could not read re-login marker: %s", redis_err)
+                continue
+
+            state = None
+            if raw:
+                try:
+                    if isinstance(raw, bytes):
+                        raw = raw.decode()
+                    state = json.loads(str(raw))
+                except Exception as parse_err:
+                    log.debug("Invalid re-login marker payload: %s", parse_err)
+                    state = None
+
+            if not state:
+                if (
+                    active_request_id
+                    and deadline
+                    and datetime.now(timezone.utc) > deadline
+                ):
+                    log.warning(
+                        "Re-login handshake %s timed out (marker disappeared); resuming worker",
+                        active_request_id,
+                    )
+                    try:
+                        await client.connect()
+                    except Exception as exc:
+                        log.debug("Reconnect after timeout failed: %s", exc)
+                    handshake_gate.set()
+                    active_request_id = None
+                    deadline = None
+                continue
+
+            status = state.get("status")
+            request_id = state.get("request_id")
+
+            if status == "request" and request_id:
+                if active_request_id and request_id != active_request_id:
+                    # Another request arrived while one is active - wait for completion
+                    continue
+                if active_request_id == request_id and not handshake_gate.is_set():
+                    # Already processing this request
+                    continue
+
+                active_request_id = request_id
+                deadline = datetime.now(timezone.utc) + timedelta(seconds=180)
+                handshake_gate.clear()
+                log.info(
+                    "Re-login handshake %s requested; disconnecting Telegram client",
+                    request_id,
+                )
+                try:
+                    # Explicitly save session before disconnect
+                    try:
+                        if hasattr(client, "session") and hasattr(client.session, "save"):  # type: ignore[misc]
+                            client.session.save()  # type: ignore[misc]
+                    except Exception:
+                        pass
+
+                    await client.disconnect()  # type: ignore[misc]
+                    _close_session_binding()
+                except Exception as exc:
+                    log.debug("Client disconnect during handshake failed: %s", exc)
+                try:
+                    r.set(
+                        key,
+                        json.dumps(
+                            {
+                                "status": "worker_detached",
+                                "request_id": request_id,
+                                "ts": datetime.now(timezone.utc).isoformat(),
+                            }
+                        ),
+                        ex=180,
+                    )
+                except Exception:
+                    pass
+                try:
+                    r.setex(
+                        "tgsentinel:worker_status",
+                        30,
+                        json.dumps(
+                            {
+                                "authorized": False,
+                                "status": "relogin_paused",
+                                "ts": datetime.now(timezone.utc).isoformat(),
+                            }
+                        ),
+                    )
+                except Exception:
+                    pass
+                continue
+
+            if (
+                active_request_id
+                and request_id == active_request_id
+                and status in {"promotion_complete", "cancelled"}
+            ):
+                log.info(
+                    "Re-login handshake %s acknowledged with status %s; reconnecting",
+                    request_id,
+                    status,
+                )
+                try:
+                    log.info("[RELOGIN] Step 1: Recreating client with new session")
+                    # Telethon caches session state in memory - we must create a new client
+                    # instance to pick up the newly written session file
+                    old_client = client
+                    try:
+                        await old_client.disconnect()  # type: ignore[misc]
+                        _close_session_binding()
+                        # Ensure session file locks are released
+                        await asyncio.sleep(0.5)
+                        log.debug(
+                            "[RELOGIN] Old client disconnected and session closed"
+                        )
+                    except Exception as disc_exc:
+                        log.debug("Disconnect during relogin: %s", disc_exc)
+
+                    # Explicitly delete old client reference to release resources
+                    del old_client
+                    await asyncio.sleep(0.3)  # Additional time for SQLite lock release
+
+                    # Create fresh client with updated session file
+                    log.debug("[RELOGIN] Creating new client instance")
+                    client = make_client(cfg)
+
+                    # Try connection with retries
+                    log.info("[RELOGIN] Step 2: Connecting to Telegram")
+                    connection_success = False
+                    for attempt in range(3):
+                        try:
+                            await asyncio.wait_for(client.connect(), timeout=30)
+                            log.info(
+                                "[RELOGIN] Step 2a: Connection established (attempt %d)",
+                                attempt + 1,
+                            )
+                            connection_success = True
+                            break
+                        except asyncio.TimeoutError:
+                            if attempt < 2:
+                                log.warning(
+                                    "[RELOGIN] Connection timeout (attempt %d/3), retrying...",
+                                    attempt + 1,
+                                )
+                                await asyncio.sleep(2)
+                            else:
+                                log.error(
+                                    "[RELOGIN] Connection failed after 3 attempts"
+                                )
+                        except Exception as conn_exc:
+                            log.warning(
+                                "[RELOGIN] Connection error (attempt %d/3): %s",
+                                attempt + 1,
+                                conn_exc,
+                            )
+                            if attempt < 2:
+                                await asyncio.sleep(2)
+
+                    if not connection_success:
+                        log.error(
+                            "[RELOGIN] Failed to connect after retries; handshake failed"
+                        )
+                        raise RuntimeError("Connection failed after retries")
+
+                    log.info("[RELOGIN] Step 3: Checking authorization")
+                    auth_check_success = False
+                    try:
+                        authorized = await asyncio.wait_for(
+                            client.is_user_authorized(), timeout=20
+                        )
+                        auth_check_success = True
+                        log.info(
+                            "[RELOGIN] Step 3a: Authorization check result: %s",
+                            authorized,
+                        )
+                    except asyncio.TimeoutError:
+                        log.warning(
+                            "[RELOGIN] Authorization check timed out, assuming not authorized"
+                        )
+                        authorized = False
+                    except Exception as auth_check_exc:
+                        log.warning(
+                            "[RELOGIN] Authorization check failed: %s", auth_check_exc
+                        )
+                        authorized = False
+
+                    if authorized:
+                        log.info("[RELOGIN] Step 4: Getting user info")
+                        try:
+                            me = await asyncio.wait_for(
+                                client.get_me(), timeout=20  # type: ignore[misc]
+                            )
+                            log.info(
+                                "[RELOGIN] Step 4a: Got user: %s",
+                                getattr(me, "username", None) if me else None,
+                            )
+                        except asyncio.TimeoutError:
+                            log.warning("[RELOGIN] get_me() timed out")
+                            me = None
+                        except Exception as getme_exc:
+                            log.warning("[RELOGIN] get_me() failed: %s", getme_exc)
+                            me = None
+
+                        log.info("[RELOGIN] Step 5: Refreshing identity cache")
+                        try:
+                            await _refresh_user_identity_cache(me)
+                            log.info("[RELOGIN] Step 5a: Cache refresh completed")
+                        except Exception as cache_exc:
+                            log.warning("[RELOGIN] Cache refresh failed: %s", cache_exc)
+
+                        # Mark authorized and trigger auth_event to unblock startup wait loop
+                        # Don't pass user object to avoid overwriting avatar with default
+                        log.info("[RELOGIN] Step 6: Marking as authorized")
+                        _mark_authorized()
+                        log.info(
+                            "Re-login handshake %s completed; client authorized and ready",
+                            request_id,
+                        )
+                    else:
+                        log.warning(
+                            "[RELOGIN] Client not authorized after session promotion"
+                        )
+                        log.info(
+                            "[RELOGIN] Session file may be invalid or expired - waiting for new auth"
+                        )
+                except Exception as exc:
+                    log.error("[RELOGIN] Reconnect failed: %s", exc, exc_info=True)
+                handshake_gate.set()
+                active_request_id = None
+                deadline = None
+                try:
+                    r.set(
+                        key,
+                        json.dumps(
+                            {
+                                "status": "worker_resumed",
+                                "request_id": request_id,
+                                "ts": datetime.now(timezone.utc).isoformat(),
+                            }
+                        ),
+                        ex=60,
+                    )
+                except Exception:
+                    pass
+                continue
+
+            if active_request_id and deadline and datetime.now(timezone.utc) > deadline:
+                log.warning(
+                    "Re-login handshake %s timed out waiting for completion; resuming worker",
+                    active_request_id,
+                )
+                try:
+                    await client.connect()
+                except Exception as exc:
+                    log.debug("Reconnect after handshake timeout failed: %s", exc)
+                handshake_gate.set()
+                try:
+                    r.set(
+                        key,
+                        json.dumps(
+                            {
+                                "status": "timeout",
+                                "request_id": active_request_id,
+                                "ts": datetime.now(timezone.utc).isoformat(),
+                            }
+                        ),
+                        ex=60,
+                    )
+                except Exception:
+                    pass
+                active_request_id = None
+                deadline = None
+
     # Setup graceful shutdown: disconnect client to flush session state
     loop = asyncio.get_running_loop()
     shutdown_event = asyncio.Event()
@@ -976,20 +1342,35 @@ async def _run():
             log.debug("[AUTH] Cleared stale auth responses hash")
         except Exception:
             pass
+
+        # Clear any stale relogin handshake markers from previous sessions
+        relogin_key = "tgsentinel:relogin"
+        try:
+            stale = r.get(relogin_key)
+            if stale:
+                r.delete(relogin_key)
+                log.info("[STARTUP] Cleared stale relogin handshake marker")
+        except Exception:
+            pass
     except Exception as exc:
         log.warning("[AUTH] Failed to clear stale auth queue: %s", exc)
 
+    # Start auth_worker early so UI can trigger auth requests
     auth_worker_task = asyncio.create_task(auth_queue_worker())
+    log.info("[STARTUP] Auth queue worker started")
 
     # Non-interactive startup: do not prompt for phone in headless envs
     log.info("[STARTUP] Connecting to Telegram...")
     await client.connect()  # type: ignore[misc]
     log.info("[STARTUP] Connected to Telegram")
 
+    # Now start relogin_coordinator after initial connection is established
+    # This prevents race conditions during the initial connect phase
+    relogin_coordinator_task = asyncio.create_task(relogin_coordinator())
+    log.info("[STARTUP] Relogin coordinator started")
+
     # Fix session file permissions after connect (Telethon may create it here)
     try:
-        from pathlib import Path
-
         session_path = Path(cfg.telegram_session or "/app/data/tgsentinel.session")
         if session_path.exists():
             size = session_path.stat().st_size
@@ -1009,7 +1390,9 @@ async def _run():
         # This forces Telethon to deserialize the auth key from SQLite
         log.info("[STARTUP] Checking existing session...")
         try:
-            me = await client.get_me()  # type: ignore[misc]
+            me = await asyncio.wait_for(
+                client.get_me(), timeout=15  # type: ignore[misc]
+            )
             user_id = getattr(me, "id", None) if me else None
             username = getattr(me, "username", None) if me else None
 
@@ -1025,16 +1408,44 @@ async def _run():
                     "[STARTUP] get_me() returned None - session file exists but not authorized"
                 )
                 authorized = False
+        except asyncio.TimeoutError:
+            log.warning(
+                "[STARTUP] get_me() timed out after 15s, checking authorization..."
+            )
+            try:
+                authorized = await asyncio.wait_for(
+                    client.is_user_authorized(), timeout=10  # type: ignore[misc]
+                )
+                if authorized:
+                    log.info("[STARTUP] ✓ Client is authorized (direct check)")
+                    _mark_authorized()
+                else:
+                    log.info("[STARTUP] ✗ Client is not authorized")
+            except asyncio.TimeoutError:
+                log.warning("[STARTUP] Authorization check timed out")
+                authorized = False
+            except Exception as auth_exc:
+                log.warning("[STARTUP] Authorization check failed: %s", auth_exc)
+                authorized = False
         except Exception as getme_err:
             # Not authorized, check directly
             log.info("[STARTUP] get_me() failed: %s", getme_err)
             log.info("[STARTUP] Checking authorization status directly...")
-            authorized = await client.is_user_authorized()  # type: ignore[misc]
-            if authorized:
-                log.info("[STARTUP] ✓ Client is authorized (direct check)")
-                _mark_authorized()
-            else:
-                log.info("[STARTUP] ✗ Client is not authorized")
+            try:
+                authorized = await asyncio.wait_for(
+                    client.is_user_authorized(), timeout=10  # type: ignore[misc]
+                )
+                if authorized:
+                    log.info("[STARTUP] ✓ Client is authorized (direct check)")
+                    _mark_authorized()
+                else:
+                    log.info("[STARTUP] ✗ Client is not authorized")
+            except asyncio.TimeoutError:
+                log.warning("[STARTUP] Authorization check timed out")
+                authorized = False
+            except Exception as auth_exc:
+                log.warning("[STARTUP] Authorization check failed: %s", auth_exc)
+                authorized = False
     except Exception as auth_exc:
         log.error("[STARTUP] Authorization check failed: %s", auth_exc, exc_info=True)
         authorized = False
@@ -1098,35 +1509,13 @@ async def _run():
     # Get and store current user info in Redis for UI access
     try:
         me = await client.get_me()  # type: ignore[misc]
-
-        # Download user avatar if available
-        avatar_path = None
-        try:
-            photos = await client.get_profile_photos("me", limit=1)  # type: ignore[misc]
-            if photos:
-                avatar_filename = "user_avatar.jpg"
-                # Save to shared data directory that both containers can access
-                avatar_path = f"/app/data/{avatar_filename}"
-                await client.download_profile_photo("me", file=avatar_path)  # type: ignore[misc]
-                log.info("Downloaded user avatar to %s", avatar_path)
-                # Store relative path for UI (will be served from /data endpoint)
-                avatar_path = f"/data/{avatar_filename}"
-        except Exception as avatar_err:
-            log.warning("Could not download user avatar: %s", avatar_err)
-
-        user_info = {
-            "username": getattr(me, "username", None)
-            or getattr(me, "first_name", "Unknown"),
-            "first_name": getattr(me, "first_name", ""),
-            "last_name": getattr(me, "last_name", ""),
-            "phone": getattr(me, "phone", ""),
-            "user_id": getattr(me, "id", None),
-            "avatar": avatar_path or "/static/images/logo.png",
-        }
-        r.set("tgsentinel:user_info", json.dumps(user_info))
-        log.info("Stored user info in Redis: %s", user_info.get("username"))
-        # Worker status is already set by _mark_authorized() with 1-hour TTL
-        # and will be refreshed by worker_status_refresher() every 10 minutes
+        if me:
+            await _refresh_user_identity_cache(me)
+        else:
+            log.warning("get_me() returned None during startup cache refresh")
+    except asyncio.CancelledError:
+        # Relogin coordinator may disconnect during this operation; that's okay
+        log.debug("User info cache refresh cancelled (likely due to relogin)")
     except Exception as e:
         log.warning("Failed to fetch/store user info: %s", e)
 
@@ -1667,176 +2056,6 @@ async def _run():
                 log.error("[USERS-HANDLER] Handler error: %s", e, exc_info=True)
                 await asyncio.sleep(5)
 
-    async def relogin_coordinator():
-        """Pause Telegram client while UI replaces the session file."""
-        key = "tgsentinel:relogin"
-        active_request_id: str | None = None
-        deadline: datetime | None = None
-
-        while True:
-            await asyncio.sleep(0.5)
-            try:
-                raw = r.get(key)
-            except Exception as redis_err:
-                log.debug("Could not read re-login marker: %s", redis_err)
-                continue
-
-            state = None
-            if raw:
-                try:
-                    if isinstance(raw, bytes):
-                        raw = raw.decode()
-                    state = json.loads(str(raw))
-                except Exception as parse_err:
-                    log.debug("Invalid re-login marker payload: %s", parse_err)
-                    state = None
-
-            if not state:
-                if (
-                    active_request_id
-                    and deadline
-                    and datetime.now(timezone.utc) > deadline
-                ):
-                    log.warning(
-                        "Re-login handshake %s timed out (marker disappeared); resuming worker",
-                        active_request_id,
-                    )
-                    try:
-                        await client.connect()
-                    except Exception as exc:
-                        log.debug("Reconnect after timeout failed: %s", exc)
-                    handshake_gate.set()
-                    active_request_id = None
-                    deadline = None
-                continue
-
-            status = state.get("status")
-            request_id = state.get("request_id")
-
-            if status == "request" and request_id:
-                if active_request_id and request_id != active_request_id:
-                    # Another request arrived while one is active - wait for completion
-                    continue
-                if active_request_id == request_id and not handshake_gate.is_set():
-                    # Already processing this request
-                    continue
-
-                active_request_id = request_id
-                deadline = datetime.now(timezone.utc) + timedelta(seconds=180)
-                handshake_gate.clear()
-                log.info(
-                    "Re-login handshake %s requested; disconnecting Telegram client",
-                    request_id,
-                )
-                try:
-                    # Explicitly save session before disconnect
-                    try:
-                        if hasattr(client, "session") and hasattr(client.session, "save"):  # type: ignore[misc]
-                            client.session.save()  # type: ignore[misc]
-                    except Exception:
-                        pass
-
-                    await client.disconnect()  # type: ignore[misc]
-                except Exception as exc:
-                    log.debug("Client disconnect during handshake failed: %s", exc)
-                try:
-                    r.set(
-                        key,
-                        json.dumps(
-                            {
-                                "status": "worker_detached",
-                                "request_id": request_id,
-                                "ts": datetime.now(timezone.utc).isoformat(),
-                            }
-                        ),
-                        ex=180,
-                    )
-                except Exception:
-                    pass
-                try:
-                    r.setex(
-                        "tgsentinel:worker_status",
-                        30,
-                        json.dumps(
-                            {
-                                "authorized": False,
-                                "status": "relogin_paused",
-                                "ts": datetime.now(timezone.utc).isoformat(),
-                            }
-                        ),
-                    )
-                except Exception:
-                    pass
-                continue
-
-            if (
-                active_request_id
-                and request_id == active_request_id
-                and status in {"promotion_complete", "cancelled"}
-            ):
-                log.info(
-                    "Re-login handshake %s acknowledged with status %s; reconnecting",
-                    request_id,
-                    status,
-                )
-                try:
-                    await client.connect()
-                    try:
-                        authorized = await client.is_user_authorized()
-                    except Exception:
-                        authorized = False
-                    if not authorized:
-                        log.warning(
-                            "Client unauthorized after re-login promotion; waiting for session",
-                        )
-                except Exception as exc:
-                    log.error("Reconnect after re-login failed: %s", exc)
-                handshake_gate.set()
-                active_request_id = None
-                deadline = None
-                try:
-                    r.set(
-                        key,
-                        json.dumps(
-                            {
-                                "status": "worker_resumed",
-                                "request_id": request_id,
-                                "ts": datetime.now(timezone.utc).isoformat(),
-                            }
-                        ),
-                        ex=60,
-                    )
-                except Exception:
-                    pass
-                continue
-
-            if active_request_id and deadline and datetime.now(timezone.utc) > deadline:
-                log.warning(
-                    "Re-login handshake %s timed out waiting for completion; resuming worker",
-                    active_request_id,
-                )
-                try:
-                    await client.connect()
-                except Exception as exc:
-                    log.debug("Reconnect after handshake timeout failed: %s", exc)
-                handshake_gate.set()
-                try:
-                    r.set(
-                        key,
-                        json.dumps(
-                            {
-                                "status": "timeout",
-                                "request_id": active_request_id,
-                                "ts": datetime.now(timezone.utc).isoformat(),
-                            }
-                        ),
-                        ex=60,
-                    )
-                except Exception:
-                    pass
-                active_request_id = None
-                deadline = None
-
     async def session_persistence_handler():
         """Periodically save session to disk for durability.
 
@@ -1870,6 +2089,7 @@ async def _run():
     log.info("Starting all handlers with asyncio.gather...")
 
     # Create a task for all the background workers
+    # Note: auth_queue_worker and relogin_coordinator are already started early
     async def run_workers():
         worker_names = [
             "worker",
@@ -1881,7 +2101,6 @@ async def _run():
             "telegram_chats_handler",
             "telegram_dialogs_handler",
             "telegram_users_handler",
-            "relogin_coordinator",
             "session_persistence_handler",
         ]
 
@@ -1895,7 +2114,6 @@ async def _run():
             telegram_chats_handler(),
             telegram_dialogs_handler(),
             telegram_users_handler(),
-            relogin_coordinator(),
             session_persistence_handler(),
             return_exceptions=True,
         )
@@ -1925,8 +2143,19 @@ async def _run():
     if shutdown_task in done:
         log.info("Shutdown signal received, cancelling workers...")
         workers_task.cancel()
+        # Also cancel early-started background tasks
+        auth_worker_task.cancel()
+        relogin_coordinator_task.cancel()
         try:
             await workers_task
+        except asyncio.CancelledError:
+            pass
+        try:
+            await auth_worker_task
+        except asyncio.CancelledError:
+            pass
+        try:
+            await relogin_coordinator_task
         except asyncio.CancelledError:
             pass
         await _graceful_shutdown()

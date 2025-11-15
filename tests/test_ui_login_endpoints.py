@@ -8,12 +8,18 @@ import pytest
 
 
 def _make_app():
-    os.environ.setdefault("UI_SECRET_KEY", "test-secret")
-    os.environ.setdefault("TG_API_ID", "123456")
-    os.environ.setdefault("TG_API_HASH", "hash")
-    os.environ.setdefault("DB_URI", "sqlite:///:memory:")
+    os.environ["UI_SECRET_KEY"] = "test-secret"
+    os.environ["TG_API_ID"] = "123456"
+    os.environ["TG_API_HASH"] = "hash"
+    os.environ["DB_URI"] = "sqlite:///:memory:"
 
-    # Mock config
+    # Clear any cached module
+    import sys
+
+    if "app" in sys.modules:
+        del sys.modules["app"]
+
+    # Mock config to return test values
     with patch("ui.app.load_config") as mock_load:
         cfg = MagicMock()
         cfg.channels = []
@@ -22,12 +28,6 @@ def _make_app():
         cfg.api_id = 123456
         cfg.api_hash = "hash"
         mock_load.return_value = cfg
-
-        # Clear any cached module
-        import sys
-
-        if "app" in sys.modules:
-            del sys.modules["app"]
 
         import app as flask_app  # type: ignore
 

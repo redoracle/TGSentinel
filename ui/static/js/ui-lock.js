@@ -106,18 +106,25 @@
 
   document.addEventListener('DOMContentLoaded', async () => {
     const btnLock = document.getElementById('btn-ui-lock');
+    const btnLockMobile = document.getElementById('btn-ui-lock-mobile');
+    
+    const handleLock = async (ev) => {
+      ev.stopPropagation();
+      try{ 
+        await lockUI();
+        // Only show modal if lock succeeded (though reload typically prevents this)
+        showUnlockModal();
+      }catch(e){
+        console.error('Failed to lock UI:', e);
+        // Don't show unlock modal if lock failed - client/server state would drift
+      }
+    };
+    
     if (btnLock){
-      btnLock.addEventListener('click', async (ev) => {
-        ev.stopPropagation();
-        try{ 
-          await lockUI();
-          // Only show modal if lock succeeded (though reload typically prevents this)
-          showUnlockModal();
-        }catch(e){
-          console.error('Failed to lock UI:', e);
-          // Don't show unlock modal if lock failed - client/server state would drift
-        }
-      }, true);
+      btnLock.addEventListener('click', handleLock, true);
+    }
+    if (btnLockMobile){
+      btnLockMobile.addEventListener('click', handleLock, true);
     }
 
     const btnUnlockNow = document.getElementById('btnUnlockNow');

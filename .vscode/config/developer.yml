@@ -1,0 +1,2 @@
+prometheus_port: 9090
+metrics_enabled: true

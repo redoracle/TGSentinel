@@ -161,7 +161,7 @@ except Exception:  # pragma: no cover - optional dependency
         def run(self, app: Flask, *args: Any, **kwargs: Any) -> None:
             host = kwargs.get("host", "0.0.0.0")
             port = kwargs.get("port", 5000)
-            app.run(host=host, port=port)
+            app.run(host=host, port=port, debug=True)
 
         def emit(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401
             return None
@@ -268,6 +268,16 @@ def _normalize_phone(raw: str) -> str:
     return s
 
 
+def _format_display_phone(phone: str | None) -> str | None:
+    """Return a UI-friendly phone value with a single leading + when possible."""
+    if not phone:
+        return None
+    normalized = _normalize_phone(str(phone))
+    if not normalized:
+        return None
+    return normalized if normalized.startswith("+") else f"+{normalized}"
+
+
 def _ctx_file_for_phone(phone: str) -> Path:
     """Return a filesystem path for storing login ctx for the phone (safe name)."""
     norm = _normalize_phone(phone)
@@ -351,6 +361,19 @@ def init_app() -> None:
                     stream_cfg.get("port", 6379),
                     stream_cfg.get("db", 0),
                 )
+
+                # Clear any stale relogin handshake from previous UI sessions
+                try:
+                    stale = redis_client.get(RELOGIN_KEY)
+                    if stale:
+                        redis_client.delete(RELOGIN_KEY)
+                        logger.info(
+                            "[UI-STARTUP] Cleared stale relogin handshake marker"
+                        )
+                except Exception as cleanup_exc:
+                    logger.debug(
+                        "[UI-STARTUP] Could not clean stale handshake: %s", cleanup_exc
+                    )
             except (
                 Exception
             ) as exc:  # pragma: no cover - telemetry still works without redis
@@ -563,13 +586,47 @@ def _invalidate_session(session_path: str | None) -> Dict[str, Any]:
                 "tgsentinel:user_info",
                 "tgsentinel:telegram_users_cache",
                 "tgsentinel:chats_cache",
+                RELOGIN_KEY,  # Clear any active relogin handshake on logout
             ]
             for k in keys:
                 try:
-                    redis_client.delete(k)
-                    result["cache_keys_deleted"].append(k)
+                    deleted = redis_client.delete(k)
+                    if deleted:
+                        result["cache_keys_deleted"].append(k)
                 except Exception:
-                    pass
+                    continue
+
+            # Remove any cached avatar objects for the signed-in user(s)
+            avatar_pattern = "tgsentinel:user_avatar:*"
+            for pattern in [avatar_pattern]:
+                pattern_keys: List[str] = []
+                scan_iter = getattr(redis_client, "scan_iter", None)
+                if callable(scan_iter):
+                    try:
+                        pattern_keys = [
+                            k.decode() if isinstance(k, bytes) else k
+                            for k in scan_iter(match=pattern)
+                        ]
+                    except Exception:
+                        pattern_keys = []
+                else:
+                    try:
+                        raw = redis_client.keys(pattern)  # type: ignore[attr-defined]
+                        if raw:
+                            pattern_keys = [
+                                k.decode() if isinstance(k, bytes) else k for k in raw
+                            ]
+                    except Exception:
+                        pattern_keys = []
+
+                if not pattern_keys:
+                    continue
+
+                try:
+                    redis_client.delete(*pattern_keys)
+                    result["cache_keys_deleted"].extend(pattern_keys)
+                except Exception:
+                    continue
         except Exception as exc:
             logger.debug("Could not clear cache keys: %s", exc)
     return result
@@ -611,7 +668,22 @@ def _request_relogin_handshake(timeout: float = 45.0) -> str | None:
     # Do not stomp over an active handshake initiated elsewhere.
     existing = _read_handshake_state()
     if existing and existing.get("status") not in _HANDSHAKE_FINAL_STATES:
-        raise RuntimeError("Another re-login operation is already in progress")
+        # Check if the existing handshake is stale (older than 60 seconds)
+        existing_ts = existing.get("ts", 0)
+        age = time.time() - existing_ts
+        if age < 60:
+            raise RuntimeError("Another re-login operation is already in progress")
+        else:
+            logger.warning(
+                "[UI-AUTH] Found stale handshake (status=%s, age=%.1fs); replacing it",
+                existing.get("status"),
+                age,
+            )
+            # Delete stale marker and proceed with new handshake
+            try:
+                redis_client.delete(RELOGIN_KEY)
+            except Exception:
+                pass
 
     request_id = uuid.uuid4().hex
     payload = {
@@ -897,6 +969,10 @@ def _wait_for_worker_authorization(timeout: float = 60.0) -> bool:
                     "[UI-AUTH] Worker authorization confirmed after %d polls",
                     poll_count,
                 )
+                if not _wait_for_cached_user_info(timeout=10.0):
+                    logger.debug(
+                        "[UI-AUTH] Worker authorized but user info not yet cached"
+                    )
                 return True
         time.sleep(poll_interval)
     logger.warning(
@@ -904,6 +980,20 @@ def _wait_for_worker_authorization(timeout: float = 60.0) -> bool:
         poll_count,
         timeout,
     )
+    return False
+
+
+def _wait_for_cached_user_info(timeout: float = 10.0) -> bool:
+    """Ensure the worker stored the current user info so the UI can display it."""
+    if not redis_client:
+        return False
+
+    deadline = time.time() + timeout
+    poll_interval = 0.5
+    while time.time() < deadline:
+        if _load_cached_user_info():
+            return True
+        time.sleep(poll_interval)
     return False
 
 
@@ -940,6 +1030,31 @@ def _fallback_username() -> str:
 
 def _fallback_avatar() -> str:
     return "/static/images/logo.png"
+
+
+def _load_cached_user_info() -> Dict[str, Any] | None:
+    """Return cached Telegram account info stored by the worker in Redis."""
+    if not redis_client:
+        return None
+
+    try:
+        raw = redis_client.get("tgsentinel:user_info")
+        if not raw:
+            return None
+        if isinstance(raw, bytes):
+            raw = raw.decode()
+        info = json.loads(str(raw))
+        if not isinstance(info, dict):  # Defensive check
+            return None
+
+        phone = info.get("phone")
+        if phone:
+            formatted = _format_display_phone(str(phone))
+            info["phone"] = formatted if formatted else phone
+        return info
+    except Exception as exc:
+        logger.debug("Failed to load cached user info: %s", exc)
+        return None
 
 
 # ============================================================================
@@ -1044,6 +1159,11 @@ def _mask_phone(phone: str | None) -> str:
     if not phone:
         return "Not linked"
     digits = phone.strip()
+    if digits.startswith("+"):
+        digits = digits[1:]
+    digits = digits.replace(" ", "")
+    if not digits:
+        return "Not linked"
     if len(digits) <= 4:
         # Mask all but last 2 characters for short numbers
         return f"***{digits[-2:]}" if len(digits) >= 2 else "***"
@@ -1895,35 +2015,24 @@ def docs_view():
 @app.get("/api/session/info")
 @_ensure_init
 def api_session_info():
-    # Default to None - phone should come from authenticated session, not env
-    phone = None
     session_path = (
         getattr(config, "telegram_session", os.getenv("TG_SESSION_PATH"))
         if config
         else os.getenv("TG_SESSION_PATH")
     )
 
-    # Try to get actual username, avatar, and phone from Redis (stored by worker after auth)
-    username = _fallback_username()
-    avatar = _fallback_avatar()
-    if redis_client:
-        try:
-            user_info_str = redis_client.get("tgsentinel:user_info")
-            if user_info_str:
-                # Ensure we have a string
-                if isinstance(user_info_str, bytes):
-                    user_info_str = user_info_str.decode()
-                user_info = json.loads(str(user_info_str))
-                username = user_info.get("username") or username
-                avatar = user_info.get("avatar") or avatar
-                # Phone should ALWAYS come from authenticated session
-                phone = user_info.get("phone")
-        except Exception as exc:
-            logger.debug("Could not fetch user info from Redis: %s", exc)
+    user_info = _load_cached_user_info()
+    username = (
+        (user_info.get("username") if user_info else None)
+        or (user_info.get("first_name") if user_info else None)
+        or _fallback_username()
+    )
+    avatar = (user_info.get("avatar") if user_info else None) or _fallback_avatar()
 
-    # Fallback to env only if Redis is completely unavailable (dev/test scenarios)
+    phone = user_info.get("phone") if user_info else None
     if not phone:
-        phone = os.getenv("TG_PHONE")
+        env_phone = os.getenv("TG_PHONE")
+        phone = _format_display_phone(env_phone) if env_phone else None
 
     return jsonify(
         {
@@ -2000,38 +2109,78 @@ def api_session_upload():
             logger.warning("[UI-AUTH] Invalid session upload: %s", validation_msg)
             return jsonify({"status": "error", "message": validation_msg}), 400
 
+        handshake_id: str | None = None
+        handshake_active = False
+        try:
+            handshake_id = _request_relogin_handshake(timeout=45.0)
+            if handshake_id:
+                handshake_active = True
+                logger.info(
+                    "[UI-AUTH] Worker detached for re-login (request_id=%s)",
+                    handshake_id,
+                )
+        except TimeoutError:
+            logger.warning(
+                "[UI-AUTH] Re-login handshake timed out; continuing best-effort"
+            )
+        except RuntimeError as handshake_exc:
+            logger.warning("[UI-AUTH] %s", handshake_exc)
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Another re-login operation is already in progress. Please wait for it to finish and try again.",
+                    }
+                ),
+                409,
+            )
+        except Exception as handshake_exc:
+            logger.warning(
+                "[UI-AUTH] Could not initiate re-login handshake: %s",
+                handshake_exc,
+            )
+
         # Clear existing session first
         session_path = _resolve_session_path()
-        _invalidate_session(session_path)
-
-        # Write new session file
-        target_path = Path(session_path or "/app/data/tgsentinel.session")
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-
-        with open(target_path, "wb") as f:
-            f.write(file_content)
-
-        # Set proper permissions
-        os.chmod(target_path, 0o666)
         try:
-            os.chmod(target_path.parent, 0o777)
-        except Exception:
-            pass
+            _invalidate_session(session_path)
+            # Write new session file
+            target_path = Path(session_path or "/app/data/tgsentinel.session")
+            target_path.parent.mkdir(parents=True, exist_ok=True)
 
-        logger.info(
-            "[UI-AUTH] Session file uploaded: %s (%d bytes)",
-            target_path,
-            len(file_content),
-        )
+            with open(target_path, "wb") as f:
+                f.write(file_content)
 
+            # Set proper permissions
+            os.chmod(target_path, 0o666)
+            try:
+                os.chmod(target_path.parent, 0o777)
+            except Exception:
+                pass
+
+            logger.info(
+                "[UI-AUTH] Session file uploaded: %s (%d bytes)",
+                target_path,
+                len(file_content),
+            )
+
+            if handshake_active and handshake_id:
+                logger.info(
+                    "[UI-AUTH] Signalling worker that new session is ready (request_id=%s)",
+                    handshake_id,
+                )
+                _finalize_relogin_handshake(handshake_id, "promotion_complete")
+            else:
+                try:
+                    Path("/app/data/.reload_config").touch()
+                except Exception:
+                    pass
+        except Exception as file_exc:
+            if handshake_active and handshake_id:
+                _finalize_relogin_handshake(handshake_id, "cancelled")
+            raise
         # Mark as authenticated in Flask session
         session["telegram_authenticated"] = True
-
-        # Trigger sentinel to reload and check session
-        try:
-            Path("/app/data/.reload_config").touch()
-        except Exception:
-            pass
 
         # Wait for worker to validate the session
         logger.info("[UI-AUTH] Waiting for worker to validate uploaded session...")
@@ -3271,9 +3420,20 @@ def api_config_current():
     telegram_cfg = {
         "api_id": os.getenv("TG_API_ID", ""),
         "api_hash": os.getenv("TG_API_HASH", ""),
-        "phone_number": os.getenv("TG_PHONE", ""),
+        "phone_number": _format_display_phone(os.getenv("TG_PHONE", "")),
         "session": getattr(config, "telegram_session", "") if config else "",
     }
+
+    cached_user = _load_cached_user_info()
+    if cached_user:
+        if cached_user.get("phone"):
+            telegram_cfg["phone_number"] = cached_user["phone"]
+        if cached_user.get("username"):
+            telegram_cfg["username"] = cached_user["username"]
+        if cached_user.get("avatar"):
+            telegram_cfg["avatar"] = cached_user["avatar"]
+        if cached_user.get("user_id"):
+            telegram_cfg["user_id"] = cached_user["user_id"]
 
     # Get alerts config with proper None checking
     alerts = getattr(config, "alerts", None) if config else None
@@ -5941,6 +6101,7 @@ def main() -> None:
         app,
         host="0.0.0.0",
         port=int(os.getenv("UI_PORT", "5000")),
+        debug=True,
         allow_unsafe_werkzeug=True,  # For development/testing; use proper WSGI server in production
     )
 

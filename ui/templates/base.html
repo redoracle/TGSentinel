@@ -18,77 +18,91 @@
 	{% block extra_head %}{% endblock %}
 </head>
 <body>
-	<nav class="navbar navbar-expand-lg sticky-top" aria-label="Primary navigation">
-		<div class="container-fluid align-items-center">
-            <a class="navbar-brand" href="{{ url_for('dashboard_view') }}">
-                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="TG Sentinel" class="navbar-logo" height="56" width="56">
-                <div class="ms-2">
-                    <div class="navbar-brand-text">TG Sentinel</div>
-                    <div class="navbar-brand-subtitle">Intelligent Telegram Activity Sentinel</div>
-                </div>
-            </a>
-			
-		<!-- Status and User Identity Block -->
-		<div class="navbar-status-user d-none d-lg-flex align-items-center gap-3 ms-3">
-			{% if auth_bypass %}
-			<span class="badge bg-warning text-dark" title="UI auth bypass is enabled via UI_SKIP_AUTH">Auth Bypass</span>
-			{% endif %}
-			<div class="d-flex flex-column align-items-center gap-1">
-				<img id="user-avatar" src="{{ url_for('static', filename='images/logo.png') }}" alt="User avatar" class="rounded-circle navbar-avatar">
-				<span id="status-indicator" class="badge status-offline" role="status" aria-live="polite" title="System status">Offline</span>
-			</div>
-			<div class="navbar-user-info">
-				<div class="navbar-user-details">
-					<span id="username-label" class="text-white small">loading...</span>
-					<span class="text-white mx-2"> </span>
-					<span id="phone-mask" class="text-white small">pending</span>
+		<nav class="navbar navbar-expand-lg sticky-top" aria-label="Primary navigation">
+			<div class="container-fluid">
+				<!-- Row 1: Brand & Auth Actions -->
+				<div class="ts-header-top">
+					<div class="ts-brand">
+						<a class="navbar-brand" href="{{ url_for('dashboard_view') }}">
+							<img src="{{ url_for('static', filename='images/logo.png') }}" alt="TG Sentinel" class="navbar-logo" height="56" width="56">
+							<div>
+								<div class="navbar-brand-text">TG Sentinel</div>
+								<div class="navbar-brand-subtitle">Intelligent Telegram Activity Sentinel</div>
+							</div>
+						</a>
+					</div>
+
+					<div class="ts-auth-actions">
+						<a class="btn btn-outline-primary btn-sm" href="/logout" id="btn-logout" aria-label="Logout">Logout</a>
+						<button class="btn btn-outline-primary btn-sm btn-lock me-5" type="button" id="btn-ui-lock" title="Lock UI" aria-label="Lock UI">
+							<i class="bi bi-lock-fill icon-lg"></i>
+						</button>
+						<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#primaryNav" aria-controls="primaryNav" aria-expanded="false" aria-label="Toggle navigation">
+							<span class="navbar-toggler-icon"></span>
+						</button>
+					</div>
+				</div>
+
+				<!-- Row 2: User Block & Navigation Menu -->
+				<div class="collapse navbar-collapse" id="primaryNav">
+					<div class="ts-header-bottom">
+						<div class="ts-user-block ms-30 me-5">
+							<img id="user-avatar" src="{{ url_for('static', filename='images/logo.png') }}" alt="User avatar" class="rounded-circle ts-avatar">
+							<div class="ts-user-text">
+								<div class="ts-username-row">
+									<span id="username-label" class="ts-username">loading...</span>
+									<span id="status-indicator" class="badge status-offline ts-status-badge" role="status" aria-live="polite" title="System status">Offline</span>
+									{% if auth_bypass %}
+									<span class="badge bg-warning text-dark ts-auth-badge" title="UI auth bypass is enabled via UI_SKIP_AUTH">Auth Bypass</span>
+									{% endif %}
+								</div>
+								<div id="phone-mask" class="ts-phone">pending</div>
+							</div>
+						</div>
+
+						<ul class="navbar-nav ts-main-menu me-5">
+							<li class="nav-item">
+								<a class="nav-link {% if request.endpoint == 'dashboard_view' %}active{% endif %}" href="{{ url_for('dashboard_view') }}">Dashboard</a>
+							</li>
+							<li class="nav-item">
+								<a class="nav-link {% if request.endpoint == 'alerts_view' %}active{% endif %}" href="{{ url_for('alerts_view') }}">Alerts</a>
+							</li>
+							<li class="nav-item dropdown">
+								<a class="nav-link dropdown-toggle {% if request.endpoint in ['config_view', 'profiles_view'] %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+									Configuration
+								</a>
+								<ul class="dropdown-menu">
+									<li><a class="dropdown-item {% if request.endpoint == 'config_view' %}active{% endif %}" href="{{ url_for('config_view') }}">Settings</a></li>
+									<li><a class="dropdown-item {% if request.endpoint == 'profiles_view' %}active{% endif %}" href="{{ url_for('profiles_view') }}">Profiles</a></li>
+								</ul>
+							</li>
+							<li class="nav-item">
+								<a class="nav-link {% if request.endpoint == 'analytics_view' %}active{% endif %}" href="{{ url_for('analytics_view') }}">Analytics</a>
+							</li>
+							<li class="nav-item dropdown">
+								<a class="nav-link dropdown-toggle {% if request.endpoint in ['developer_view', 'docs_view', 'console_view'] %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+									Developer
+								</a>
+								<ul class="dropdown-menu">
+									<li><a class="dropdown-item {% if request.endpoint == 'developer_view' %}active{% endif %}" href="{{ url_for('developer_view') }}">Overview</a></li>
+									<li><a class="dropdown-item {% if request.endpoint == 'docs_view' %}active{% endif %}" href="{{ url_for('docs_view') }}">API Docs</a></li>
+									<li><a class="dropdown-item {% if request.endpoint == 'console_view' %}active{% endif %}" href="{{ url_for('console_view') }}">Console</a></li>
+								</ul>
+							</li>
+						</ul>
+
+						<!-- Mobile Auth Actions -->
+						<div class="ts-mobile-auth-actions">
+							<a class="btn btn-outline-primary btn-sm w-100 mb-2" href="/logout" id="btn-logout-mobile" aria-label="Logout">
+								<i class="bi bi-box-arrow-right me-2"></i>Logout
+							</a>
+							<button class="btn btn-outline-primary btn-sm w-100 btn-lock" type="button" id="btn-ui-lock-mobile" title="Lock UI" aria-label="Lock UI">
+								<i class="bi bi-lock-fill me-2"></i>Lock UI
+							</button>
+						</div>
+					</div>
 				</div>
 			</div>
-		</div>			<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#primaryNav" aria-controls="primaryNav" aria-expanded="false" aria-label="Toggle navigation">
-				<span class="navbar-toggler-icon"></span>
-			</button>
-			
-			<div class="collapse navbar-collapse" id="primaryNav">
-				<ul class="navbar-nav ms-auto mb-2 mb-lg-0">
-					<li class="nav-item">
-						<a class="nav-link {% if request.endpoint == 'dashboard_view' %}active{% endif %}" href="{{ url_for('dashboard_view') }}">Dashboard</a>
-					</li>
-					<li class="nav-item">
-						<a class="nav-link {% if request.endpoint == 'alerts_view' %}active{% endif %}" href="{{ url_for('alerts_view') }}">Alerts</a>
-					</li>
-					<li class="nav-item dropdown">
-						<a class="nav-link dropdown-toggle {% if request.endpoint in ['config_view', 'profiles_view'] %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-							Configuration
-						</a>
-						<ul class="dropdown-menu">
-							<li><a class="dropdown-item {% if request.endpoint == 'config_view' %}active{% endif %}" href="{{ url_for('config_view') }}">Settings</a></li>
-							<li><a class="dropdown-item {% if request.endpoint == 'profiles_view' %}active{% endif %}" href="{{ url_for('profiles_view') }}">Profiles</a></li>
-						</ul>
-					</li>
-					<li class="nav-item">
-						<a class="nav-link {% if request.endpoint == 'analytics_view' %}active{% endif %}" href="{{ url_for('analytics_view') }}">Analytics</a>
-					</li>
-					<li class="nav-item dropdown">
-						<a class="nav-link dropdown-toggle {% if request.endpoint in ['developer_view', 'docs_view', 'console_view'] %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-							Developer
-						</a>
-						<ul class="dropdown-menu">
-							<li><a class="dropdown-item {% if request.endpoint == 'developer_view' %}active{% endif %}" href="{{ url_for('developer_view') }}">Overview</a></li>
-							<li><a class="dropdown-item {% if request.endpoint == 'docs_view' %}active{% endif %}" href="{{ url_for('docs_view') }}">API Docs</a></li>
-							<li><a class="dropdown-item {% if request.endpoint == 'console_view' %}active{% endif %}" href="{{ url_for('console_view') }}">Console</a></li>
-						</ul>
-					</li>
-				</ul>
-				
-				<!-- Logout and Lock Controls -->
-				<div class="d-flex align-items-center gap-2 ms-lg-3">
-					<a class="btn btn-outline-primary btn-sm" href="/logout" id="btn-logout" aria-label="Logout">Logout</a>
-					<button class="btn btn-ghost btn-sm btn-lock" type="button" id="btn-ui-lock" title="Lock UI" aria-label="Lock UI">
-						<i class="bi bi-lock-fill icon-lg"></i>
-					</button>
-				</div>
-			</div>
-		</div>
 	</nav>
 
 	<main class="container-fluid py-4">
@@ -375,19 +389,26 @@
 
 		// Logout button shows confirmation modal with glass effect
 		const logoutBtn = document.getElementById("btn-logout");
-		if (logoutBtn) {
-			logoutBtn.addEventListener("click", (ev) => {
-				ev.preventDefault();
-				try {
-					const modalEl = document.getElementById('logoutModal');
-					if (modalEl) {
-						const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl, { backdrop: 'static', keyboard: false });
-						modal.show();
-					}
-				} catch (e) {
-					console.error('Failed to show logout modal:', e);
+		const logoutBtnMobile = document.getElementById("btn-logout-mobile");
+		
+		const handleLogout = (ev) => {
+			ev.preventDefault();
+			try {
+				const modalEl = document.getElementById('logoutModal');
+				if (modalEl) {
+					const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl, { backdrop: 'static', keyboard: false });
+					modal.show();
 				}
-			});
+			} catch (e) {
+				console.error("Failed to show logout modal", e);
+			}
+		};
+		
+		if (logoutBtn) {
+			logoutBtn.addEventListener("click", handleLogout);
+		}
+		if (logoutBtnMobile) {
+			logoutBtnMobile.addEventListener("click", handleLogout);
 		}
 
 		// Confirm logout button performs actual logout
