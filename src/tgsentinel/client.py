@@ -7,12 +7,100 @@ from redis import Redis
 from telethon import TelegramClient, events
 
 from .config import AppCfg
+from pathlib import Path
 
 log = logging.getLogger(__name__)
 
 
+def _resolve_session_path(cfg: AppCfg) -> str:
+    """Resolve a usable session file path for the worker.
+
+    Priority:
+    - TG_SESSION_PATH env (validated for writable parent directory)
+    - /app/data/tgsentinel.session (shared volume in containers, if parent dir exists)
+    - repo data fallback: ../data/tgsentinel.session (if it exists)
+    - cfg.telegram_session
+    """
+    # Env override - validate parent directory exists and is writable
+    env_path = os.getenv("TG_SESSION_PATH")
+    if env_path:
+        # Expand and normalize the path
+        normalized_path = os.path.abspath(os.path.expanduser(env_path))
+        parent_dir = os.path.dirname(normalized_path)
+
+        # Validate parent directory exists and is writable
+        if not os.path.exists(parent_dir):
+            log.error(
+                "TG_SESSION_PATH parent directory does not exist: %s (falling back to container path)",
+                parent_dir,
+            )
+        elif not os.access(parent_dir, os.W_OK):
+            log.error(
+                "TG_SESSION_PATH parent directory is not writable: %s (falling back to container path)",
+                parent_dir,
+            )
+        else:
+            # Valid path with writable parent directory
+            return normalized_path
+
+    # Common container path (prefer this if parent directory exists)
+    container_path = "/app/data/tgsentinel.session"
+    container_dir = os.path.dirname(container_path)
+    if os.path.exists(container_dir):
+        return container_path
+
+    # Repo data fallback (when running locally)
+    try:
+        repo_fallback = (
+            Path(__file__).resolve().parents[2] / "data" / "tgsentinel.session"
+        )
+        if os.path.exists(os.path.dirname(str(repo_fallback))):
+            return str(repo_fallback)
+    except IndexError as exc:
+        # parents[2] might not exist if __file__ path is too shallow
+        log.debug(
+            "Could not resolve repo fallback path (insufficient parent directories): %s",
+            exc,
+        )
+    except (OSError, TypeError) as exc:
+        # Filesystem or path type errors
+        log.debug(
+            "Could not resolve repo fallback path (filesystem or type error): %s",
+            exc,
+        )
+    except Exception as exc:
+        # Catch-all for unexpected issues
+        log.debug(
+            "Unexpected error resolving repo fallback path: %s",
+            exc,
+        )
+
+    return cfg.telegram_session
+
+
+_logged_session_once = False
+
+
 def make_client(cfg: AppCfg) -> TelegramClient:
-    client = TelegramClient(cfg.telegram_session, cfg.api_id, cfg.api_hash)
+    session_path = _resolve_session_path(cfg)
+    global _logged_session_once
+
+    if not _logged_session_once:
+        log.info("Using session file: %s | api_id=%s", session_path, cfg.api_id)
+        _logged_session_once = True
+    else:
+        log.debug("Using session file: %s | api_id=%s", session_path, cfg.api_id)
+
+    client = TelegramClient(session_path, cfg.api_id, cfg.api_hash)
+
+    # Ensure session file has correct permissions for multi-container access
+    try:
+        session_file = Path(session_path)
+        if session_file.exists():
+            os.chmod(session_file, 0o660)
+    except Exception:
+        pass
+
     return client
 
 

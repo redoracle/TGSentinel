@@ -559,17 +559,25 @@
         }
     }
 
-    document.addEventListener("DOMContentLoaded", () => {
+    // ============================================================================
+    // INITIALIZATION HELPER FUNCTIONS
+    // ============================================================================
+    
+    function initializeConfigHandlers() {
         // Load current configuration
         loadCurrentConfig();
         
+        // Similarity threshold slider
         document.getElementById("similarity-threshold")?.addEventListener("input", (event) => {
             document.getElementById("similarity-value").textContent = Number(event.target.value).toFixed(2);
         });
+        
+        // Reauthentication button
         document.getElementById("btn-reauth")?.addEventListener("click", () => {
             showToast("Reauthentication initiated. Monitor logs for instructions.", "info");
         });
-        // TEST RULES: call backend and show a concise summary
+        
+        // Test rules button
         document.getElementById("btn-test-rules")?.addEventListener("click", async () => {
             try {
                 const resp = await fetch("/api/config/rules/test", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({}) });
@@ -704,7 +712,7 @@
                 button.innerHTML = originalText;
             }
         });
-    });
+    }
     
     async function loadCurrentConfig() {
         try {
@@ -825,7 +833,7 @@
     let existingUserIds = new Set();
     let usersDataLoaded = false; // Track if users have been loaded
     
-    document.addEventListener("DOMContentLoaded", () => {
+    function initializeModalHandlers() {
         const addChannelsModal = document.getElementById("addChannelsModal");
         
         // Handle tab switching to show/hide appropriate "Add Selected" button
@@ -853,18 +861,71 @@
         }
         
         if (addChannelsModal) {
-            // Apply glass backdrop effect
-            const addGlassClass = () => {
-                setTimeout(() => {
-                    const backdrop = document.querySelector('.modal-backdrop');
-                    if (backdrop && !backdrop.classList.contains('glass-backdrop')) {
-                        backdrop.classList.add('glass-backdrop');
-                    }
-                }, 50);
+            // Apply glass backdrop effect with MutationObserver fallback
+            let backdropObserver = null;
+            
+            const applyGlassBackdrop = () => {
+                const backdrop = document.querySelector('.modal-backdrop');
+                if (backdrop && !backdrop.classList.contains('glass-backdrop')) {
+                    backdrop.classList.add('glass-backdrop');
+                    return true;
+                }
+                return false;
             };
             
-            addChannelsModal.addEventListener('shown.bs.modal', addGlassClass);
-            addChannelsModal.addEventListener('show.bs.modal', addGlassClass);
+            const startBackdropObserver = () => {
+                if (backdropObserver) return; // Already observing
+                
+                backdropObserver = new MutationObserver((mutations) => {
+                    for (const mutation of mutations) {
+                        if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                            for (const node of mutation.addedNodes) {
+                                if (node.nodeType === 1 && node.classList && node.classList.contains('modal-backdrop')) {
+                                    node.classList.add('glass-backdrop');
+                                    // Stop observing once we've applied the class
+                                    if (backdropObserver) {
+                                        backdropObserver.disconnect();
+                                        backdropObserver = null;
+                                    }
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                });
+                
+                backdropObserver.observe(document.body, {
+                    childList: true,
+                    subtree: false
+                });
+            };
+            
+            const stopBackdropObserver = () => {
+                if (backdropObserver) {
+                    backdropObserver.disconnect();
+                    backdropObserver = null;
+                }
+            };
+            
+            addChannelsModal.addEventListener('shown.bs.modal', () => {
+                // Apply class after modal is fully rendered
+                if (!applyGlassBackdrop()) {
+                    // Fallback: if backdrop not found, start observing
+                    startBackdropObserver();
+                } else {
+                    // Successfully applied, ensure observer is stopped
+                    stopBackdropObserver();
+                }
+            });
+            
+            addChannelsModal.addEventListener('hidden.bs.modal', () => {
+                // Clean up observer to prevent leaks
+                stopBackdropObserver();
+                
+                // Remove glass class from any remaining backdrop
+                const backdrop = document.querySelector('.modal-backdrop');
+                if (backdrop) backdrop.classList.remove('glass-backdrop');
+            });
             
             // On hide, blur focused element inside to prevent aria-hidden focus conflicts
             addChannelsModal.addEventListener("hide.bs.modal", () => {
@@ -1039,7 +1100,7 @@
                 showToast(error.message || "Could not update channels", "error");
             }
         });
-    });
+    }
     
     function renderChannelCheckboxes(chats, existingIds) {
         const container = document.getElementById("channels-checkboxes");
@@ -1053,21 +1114,11 @@
         sortedChats.forEach(chat => {
             const div = document.createElement("div");
             div.className = "list-group-item";
+            div.style.display = "flex";
+            div.style.justifyContent = "space-between";
+            div.style.alignItems = "center";
             
             const isExisting = existingIds.has(chat.id);
-            
-            const checkbox = document.createElement("input");
-            checkbox.type = "checkbox";
-            checkbox.className = "form-check-input me-2";
-            checkbox.id = `chat-${chat.id}`;
-            checkbox.value = chat.id;
-            checkbox.checked = isExisting;  // Pre-select existing channels
-            checkbox.dataset.existing = isExisting ? "true" : "false";  // Track if existing
-            
-            const label = document.createElement("label");
-            label.className = "form-check-label d-flex justify-content-between align-items-center w-100";
-            label.htmlFor = `chat-${chat.id}`;
-            label.style.cursor = "pointer";
             
             // Add visual styling for already-configured items
             if (isExisting) {
@@ -1075,37 +1126,105 @@
                 div.style.borderLeft = "3px solid #198754";  // Green left border
             }
             
+            // Left side container: checkbox + avatar + name
+            const leftSide = document.createElement("div");
+            leftSide.className = "d-flex align-items-center";
+            leftSide.style.gap = "0.75rem";
+            leftSide.style.flex = "1";
+            leftSide.style.minWidth = "0"; // Allow text truncation
+            
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.className = "form-check-input";
+            checkbox.id = `chat-${chat.id}`;
+            checkbox.value = chat.id;
+            checkbox.checked = isExisting;  // Pre-select existing channels
+            checkbox.dataset.existing = isExisting ? "true" : "false";  // Track if existing
+            checkbox.style.flexShrink = "0"; // Don't shrink checkbox
+            
+            // Avatar
+            const avatar = document.createElement("div");
+            avatar.style.width = "28px";
+            avatar.style.height = "28px";
+            avatar.style.borderRadius = "50%";
+            avatar.style.flexShrink = "0";
+            avatar.style.display = "flex";
+            avatar.style.alignItems = "center";
+            avatar.style.justifyContent = "center";
+            avatar.style.fontSize = "0.75rem";
+            avatar.style.fontWeight = "600";
+            avatar.style.color = "white";
+            
+            // Try to load avatar from cache, otherwise use initials
+            const avatarUrl = `/data/chat_avatar_${Math.abs(chat.id)}.jpg`;
+            const avatarImg = document.createElement("img");
+            avatarImg.src = avatarUrl;
+            avatarImg.alt = chat.name;
+            avatarImg.style.width = "100%";
+            avatarImg.style.height = "100%";
+            avatarImg.style.borderRadius = "50%";
+            avatarImg.style.objectFit = "cover";
+            
+            // Fallback to initials if image fails to load
+            avatarImg.onerror = function() {
+                this.style.display = 'none';
+                const initials = chat.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+                avatar.textContent = initials || chat.name[0]?.toUpperCase() || '?';
+                // Color based on chat type
+                if (chat.type === 'channel') {
+                    avatar.style.backgroundColor = '#0d6efd'; // primary blue
+                } else if (chat.type === 'supergroup') {
+                    avatar.style.backgroundColor = '#0dcaf0'; // info cyan
+                } else {
+                    avatar.style.backgroundColor = '#6c757d'; // secondary gray
+                }
+            };
+            avatar.appendChild(avatarImg);
+            
+            // Name and badge wrapper
             const nameWrapper = document.createElement("div");
-            nameWrapper.className = "d-flex align-items-center gap-2";
+            nameWrapper.className = "d-flex align-items-center gap-2 flex-grow-1";
+            nameWrapper.style.minWidth = "0"; // Allow text truncation
             
-            const nameSpan = document.createElement("span");
-            nameSpan.textContent = chat.name;
+            const label = document.createElement("label");
+            label.htmlFor = `chat-${chat.id}`;
+            label.style.cursor = "pointer";
+            label.style.margin = "0";
+            label.style.flex = "1";
+            label.style.minWidth = "0";
+            label.textContent = chat.name;
+            label.style.overflow = "hidden";
+            label.style.textOverflow = "ellipsis";
+            label.style.whiteSpace = "nowrap";
             
-            nameWrapper.appendChild(nameSpan);
+            nameWrapper.appendChild(label);
             
             if (isExisting) {
                 const checkmark = document.createElement("span");
                 checkmark.className = "badge bg-success";
+                checkmark.style.flexShrink = "0";
                 checkmark.innerHTML = '<i class="bi bi-check-circle me-1"></i>Monitored';
                 checkmark.title = "Uncheck to remove from monitoring";
                 nameWrapper.appendChild(checkmark);
             }
             
+            leftSide.appendChild(checkbox);
+            leftSide.appendChild(avatar);
+            leftSide.appendChild(nameWrapper);
+            
+            // Right side: type badge
             const badgeSpan = document.createElement("span");
             badgeSpan.className = `badge bg-${chat.type === 'channel' ? 'primary' : chat.type === 'supergroup' ? 'info' : 'secondary'}`;
+            badgeSpan.style.flexShrink = "0";
             badgeSpan.textContent = chat.type;
             
-            label.appendChild(nameWrapper);
-            label.appendChild(badgeSpan);
-            
-            div.appendChild(checkbox);
-            div.appendChild(label);
+            div.appendChild(leftSide);
+            div.appendChild(badgeSpan);
             container.appendChild(div);
         });
     }
     
-    // Handle channels search filter
-    document.addEventListener("DOMContentLoaded", () => {
+    function initializeChannelSearchHandler() {
         const channelsSearch = document.getElementById("channels-search");
         if (channelsSearch) {
             channelsSearch.addEventListener("input", (e) => {
@@ -1124,10 +1243,9 @@
                 });
             });
         }
-    });
+    }
     
-    // Handle copy chat ID to clipboard
-    document.addEventListener("DOMContentLoaded", () => {
+    function initializeCopyChannelIdHandler() {
         document.body.addEventListener("click", (e) => {
             const copyButton = e.target.closest(".copy-chat-id");
             if (copyButton) {
@@ -1176,10 +1294,9 @@
                 }
             }
         });
-    });
+    }
     
-    // Handle delete channel
-    document.addEventListener("DOMContentLoaded", () => {
+    function initializeDeleteChannelHandler() {
         document.body.addEventListener("click", (e) => {
             const deleteButton = e.target.closest(".delete-channel");
             if (deleteButton) {
@@ -1229,27 +1346,28 @@
                 }
             }
         });
-    });
+    }
     
-    // Handle Select All Channels button
-    document.getElementById("btn-select-all-channels")?.addEventListener("click", () => {
-        const checkboxes = document.querySelectorAll("#channels-checkboxes input[type='checkbox']");
-        const allChecked = Array.from(checkboxes).every(cb => cb.checked);
-        
-        checkboxes.forEach(cb => {
-            cb.checked = !allChecked;
+    function initializeSelectAllChannelsHandler() {
+        document.getElementById("btn-select-all-channels")?.addEventListener("click", () => {
+            const checkboxes = document.querySelectorAll("#channels-checkboxes input[type='checkbox']");
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            
+            checkboxes.forEach(cb => {
+                cb.checked = !allChecked;
+            });
+            
+            // Trigger change event to update button state
+            const event = new Event("change", { bubbles: true });
+            document.getElementById("channels-checkboxes").dispatchEvent(event);
+            
+            // Update button text
+            const btn = document.getElementById("btn-select-all-channels");
+            btn.innerHTML = allChecked ? 
+                '<i class="bi bi-check-square me-1"></i>Select All' : 
+                '<i class="bi bi-square me-1"></i>Deselect All';
         });
-        
-        // Trigger change event to update button state
-        const event = new Event("change", { bubbles: true });
-        document.getElementById("channels-checkboxes").dispatchEvent(event);
-        
-        // Update button text
-        const btn = document.getElementById("btn-select-all-channels");
-        btn.innerHTML = allChecked ? 
-            '<i class="bi bi-check-square me-1"></i>Select All' : 
-            '<i class="bi bi-square me-1"></i>Deselect All';
-    });
+    }
     
     // Function to load users data (reusable for both modal and tab)
     async function loadUsersData() {
@@ -1279,9 +1397,12 @@
             const response = await fetch("{{ url_for('api_telegram_users') }}");
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
-                const error = new Error(errorData.message || "Failed to fetch users");
-                error.status = response.status; // Attach HTTP status code
-                throw error;
+                // Throw a rich error payload instead of mutating Error object
+                throw {
+                    status: response.status,
+                    message: errorData.message || "Failed to fetch users",
+                    name: "FetchError"
+                };
             }
             
             const data = await response.json();
@@ -1316,22 +1437,26 @@
             const errorDiv = document.getElementById("users-error");
             errorDiv.className = "alert alert-danger"; // Use danger style for actual errors
             
+            // Read status and message from error payload
+            const status = error.status || (error.response && error.response.status);
+            const message = error.message || "Could not load users from Telegram";
+            
             // Check if it's a timeout error (504 Gateway Timeout or AbortError)
-            if (error.status === 504 || error.name === "AbortError") {
+            if (status === 504 || error.name === "AbortError") {
                 errorDiv.innerHTML = `
                     <i class="bi bi-exclamation-triangle me-2"></i>
                     <strong>Connection timeout.</strong><br>
                     Please ensure the Telegram client is connected and running. Try again in a few moments.
                 `;
             } else {
-                errorDiv.textContent = error.message || "Could not load users from Telegram";
+                errorDiv.textContent = message;
             }
             errorDiv.classList.remove("d-none");
             // Don't mark as loaded on error so user can retry by switching tabs
         }
     }
     
-    document.addEventListener("DOMContentLoaded", () => {
+    function initializeUserHandlers() {
         // Handle checkbox changes for users
         document.getElementById("users-checkboxes")?.addEventListener("change", () => {
             // Check if any changes were made (checked non-existing or unchecked existing)
@@ -1460,7 +1585,7 @@
                 showToast(error.message || "Could not add users", "error");
             }
         });
-    });
+    }
     
     function renderUserCheckboxes(users, existingIds) {
         const container = document.getElementById("users-checkboxes");
@@ -1474,21 +1599,11 @@
         sortedUsers.forEach(user => {
             const div = document.createElement("div");
             div.className = "list-group-item";
+            div.style.display = "flex";
+            div.style.justifyContent = "space-between";
+            div.style.alignItems = "center";
             
             const isExisting = existingIds.has(user.id);
-            
-            const checkbox = document.createElement("input");
-            checkbox.type = "checkbox";
-            checkbox.className = "form-check-input me-2";
-            checkbox.id = `user-${user.id}`;
-            checkbox.value = user.id;
-            checkbox.checked = isExisting;  // Pre-select existing users
-            checkbox.dataset.existing = isExisting ? "true" : "false";  // Track if existing
-            
-            const label = document.createElement("label");
-            label.className = "form-check-label d-flex justify-content-between align-items-center w-100";
-            label.htmlFor = `user-${user.id}`;
-            label.style.cursor = "pointer";
             
             // Add visual styling for already-monitored users
             if (isExisting) {
@@ -1496,35 +1611,95 @@
                 div.style.borderLeft = "3px solid #198754";  // Green left border
             }
             
-            const nameWrapper = document.createElement("div");
-            nameWrapper.className = "d-flex align-items-center gap-2";
+            // Left side container: checkbox + avatar + name
+            const leftSide = document.createElement("div");
+            leftSide.className = "d-flex align-items-center";
+            leftSide.style.gap = "0.75rem";
+            leftSide.style.flex = "1";
+            leftSide.style.minWidth = "0"; // Allow text truncation
             
-            const nameSpan = document.createElement("span");
-            nameSpan.textContent = user.name;
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.className = "form-check-input";
+            checkbox.id = `user-${user.id}`;
+            checkbox.value = user.id;
+            checkbox.checked = isExisting;  // Pre-select existing users
+            checkbox.dataset.existing = isExisting ? "true" : "false";  // Track if existing
+            checkbox.style.flexShrink = "0"; // Don't shrink checkbox
+            
+            // Avatar
+            const avatar = document.createElement("div");
+            avatar.style.width = "28px";
+            avatar.style.height = "28px";
+            avatar.style.borderRadius = "50%";
+            avatar.style.flexShrink = "0";
+            avatar.style.display = "flex";
+            avatar.style.alignItems = "center";
+            avatar.style.justifyContent = "center";
+            avatar.style.fontSize = "0.75rem";
+            avatar.style.fontWeight = "600";
+            avatar.style.color = "white";
+            avatar.style.backgroundColor = "#6f42c1"; // Purple for users
+            
+            // Try to load avatar from cache
+            const avatarUrl = `/data/user_avatar_${user.id}.jpg`;
+            const avatarImg = document.createElement("img");
+            avatarImg.src = avatarUrl;
+            avatarImg.alt = user.name;
+            avatarImg.style.width = "100%";
+            avatarImg.style.height = "100%";
+            avatarImg.style.borderRadius = "50%";
+            avatarImg.style.objectFit = "cover";
+            
+            // Fallback to initials if image fails to load
+            avatarImg.onerror = function() {
+                this.style.display = 'none';
+                const initials = user.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+                avatar.textContent = initials || user.name[0]?.toUpperCase() || '?';
+            };
+            avatar.appendChild(avatarImg);
+            
+            // Name and badge wrapper
+            const nameWrapper = document.createElement("div");
+            nameWrapper.className = "d-flex align-items-center gap-2 flex-grow-1";
+            nameWrapper.style.minWidth = "0"; // Allow text truncation
+            
+            const label = document.createElement("label");
+            label.htmlFor = `user-${user.id}`;
+            label.style.cursor = "pointer";
+            label.style.margin = "0";
+            label.style.flex = "1";
+            label.style.minWidth = "0";
+            label.style.overflow = "hidden";
+            label.style.textOverflow = "ellipsis";
+            label.style.whiteSpace = "nowrap";
+            
+            label.textContent = user.name;
             if (user.username) {
-                nameSpan.textContent += ` (@${user.username})`;
+                label.textContent += ` (@${user.username})`;
             }
             
-            nameWrapper.appendChild(nameSpan);
+            nameWrapper.appendChild(label);
             
             if (isExisting) {
                 const checkmark = document.createElement("span");
                 checkmark.className = "badge bg-success";
+                checkmark.style.flexShrink = "0";
                 checkmark.innerHTML = '<i class="bi bi-check-circle me-1"></i>Monitored';
                 checkmark.title = "Uncheck to remove from monitoring";
                 nameWrapper.appendChild(checkmark);
             }
             
-            label.appendChild(nameWrapper);
+            leftSide.appendChild(checkbox);
+            leftSide.appendChild(avatar);
+            leftSide.appendChild(nameWrapper);
             
-            div.appendChild(checkbox);
-            div.appendChild(label);
+            div.appendChild(leftSide);
             container.appendChild(div);
         });
     }
     
-    // Handle users search filter
-    document.addEventListener("DOMContentLoaded", () => {
+    function initializeUsersSearchHandler() {
         const usersSearch = document.getElementById("users-search");
         if (usersSearch) {
             usersSearch.addEventListener("input", (e) => {
@@ -1543,10 +1718,9 @@
                 });
             });
         }
-    });
+    }
     
-    // Handle copy user ID to clipboard
-    document.addEventListener("DOMContentLoaded", () => {
+    function initializeCopyUserIdHandler() {
         document.body.addEventListener("click", (e) => {
             const copyButton = e.target.closest(".copy-user-id");
             if (copyButton) {
@@ -1592,10 +1766,9 @@
                 }
             }
         });
-    });
+    }
     
-    // Handle delete user
-    document.addEventListener("DOMContentLoaded", () => {
+    function initializeDeleteUserHandler() {
         document.body.addEventListener("click", (e) => {
             const deleteButton = e.target.closest(".delete-user-btn");
             if (deleteButton) {
@@ -1637,71 +1810,97 @@
                 }
             }
         });
-    });
+    }
     
-    // Handle Clean DB button
-    document.getElementById("btn-clean-db")?.addEventListener("click", async () => {
-        // Confirm with strong warning
-        const confirmation = confirm(
-            "⚠️ WARNING: This will permanently delete ALL data!\n\n" +
-            "This includes:\n" +
-            "• All message records (database)\n" +
-            "• All alerts history\n" +
-            "• All feedback data\n" +
-            "• All analytics history\n" +
-            "• Live activity feed (Redis stream)\n" +
-            "• Cached participant info\n\n" +
-            "This action CANNOT be undone!\n\n" +
-            "Are you absolutely sure you want to continue?"
-        );
-        
-        if (!confirmation) {
-            return;
-        }
-        
-        // Double confirmation with input validation
-        const doubleConfirm = prompt(
-            "⚠️ FINAL CONFIRMATION\n\n" +
-            "Type 'DELETE ALL' (in caps) to proceed:\n\n" +
-            "This is your last chance to cancel!"
-        );
-        
-        if (doubleConfirm !== "DELETE ALL") {
-            if (doubleConfirm !== null) showToast("Confirmation cancelled", "info");
-            return;
-        }
-        
-        const button = document.getElementById("btn-clean-db");
-        const originalText = button.innerHTML;
-        
-        try {
-            button.disabled = true;
-            button.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Cleaning...';
+    function initializeCleanDbHandler() {
+        document.getElementById("btn-clean-db")?.addEventListener("click", async () => {
+            // Confirm with strong warning
+            const confirmation = confirm(
+                "⚠️ WARNING: This will permanently delete ALL data!\n\n" +
+                "This includes:\n" +
+                "• All message records (database)\n" +
+                "• All alerts history\n" +
+                "• All feedback data\n" +
+                "• All analytics history\n" +
+                "• Live activity feed (Redis stream)\n" +
+                "• Cached participant info\n\n" +
+                "This action CANNOT be undone!\n\n" +
+                "Are you absolutely sure you want to continue?"
+            );
             
-            const response = await fetch("{{ url_for('api_clean_database') }}", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-            });
-            
-            if (!response.ok) {
-                const data = await response.json();
-                throw new Error(data.message || "Failed to clean database");
+            if (!confirmation) {
+                return;
             }
             
-            const result = await response.json();
-            showToast(`Environment cleaned successfully! Removed ${result.deleted || 0} DB records and ${result.redis_cleared || 0} Redis items.`, "success");
+            // Double confirmation with input validation
+            const doubleConfirm = prompt(
+                "⚠️ FINAL CONFIRMATION\n\n" +
+                "Type 'DELETE ALL' (in caps) to proceed:\n\n" +
+                "This is your last chance to cancel!"
+            );
             
-            // Reload page after short delay to show fresh state
-            setTimeout(() => {
-                window.location.reload();
-            }, 2000);
+            if (doubleConfirm !== "DELETE ALL") {
+                if (doubleConfirm !== null) showToast("Confirmation cancelled", "info");
+                return;
+            }
             
-        } catch (error) {
-            console.error("Clean DB error:", error);
-            showToast(error.message || "Failed to clean database", "error");
-            button.disabled = false;
-            button.innerHTML = originalText;
-        }
+            const button = document.getElementById("btn-clean-db");
+            const originalText = button.innerHTML;
+            
+            try {
+                button.disabled = true;
+                button.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Cleaning...';
+                
+                const response = await fetch("{{ url_for('api_clean_database') }}", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                });
+                
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.message || "Failed to clean database");
+                }
+                
+                const result = await response.json();
+                showToast(`Environment cleaned successfully! Removed ${result.deleted || 0} DB records and ${result.redis_cleared || 0} Redis items.`, "success");
+                
+                // Reload page after short delay to show fresh state
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
+                
+            } catch (error) {
+                console.error("Clean DB error:", error);
+                showToast(error.message || "Failed to clean database", "error");
+                button.disabled = false;
+                button.innerHTML = originalText;
+            }
+        });
+    }
+    
+    // ============================================================================
+    // CONSOLIDATED DOM INITIALIZATION
+    // ============================================================================
+    document.addEventListener("DOMContentLoaded", () => {
+        // Initialize all handlers in predictable order
+        initializeConfigHandlers();
+        initializeModalHandlers();
+        initializeChannelSearchHandler();
+        initializeCopyChannelIdHandler();
+        initializeDeleteChannelHandler();
+        initializeSelectAllChannelsHandler();
+        initializeUserHandlers();
+        initializeUsersSearchHandler();
+        initializeCopyUserIdHandler();
+        initializeDeleteUserHandler();
+        initializeCleanDbHandler();
+        
+        // Initialize Bootstrap tooltips
+        const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+        const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+        
+        // Attach form submit handler
+        form?.addEventListener("submit", submitConfig);
     });
 </script>
 {% endblock %}

@@ -233,22 +233,23 @@ make docker-logs       # Follow logs
 
 All settings can be overridden via environment variables:
 
-| Variable               | Default                           | Description                                        |
-| ---------------------- | --------------------------------- | -------------------------------------------------- |
-| `TG_API_ID`            | _(required)_                      | Telegram API ID from my.telegram.org               |
-| `TG_API_HASH`          | _(required)_                      | Telegram API hash                                  |
-| `ALERT_MODE`           | `dm`                              | Alert destination: `dm`, `channel`, or `both`      |
-| `ALERT_CHANNEL`        | `""`                              | Target channel/bot username (e.g., `@kit_red_bot`) |
-| `HOURLY_DIGEST`        | `true`                            | Enable hourly digest                               |
-| `DAILY_DIGEST`         | `true`                            | Enable daily digest                                |
-| `DIGEST_TOP_N`         | `10`                              | Number of top messages in digest                   |
-| `EMBEDDINGS_MODEL`     | `all-MiniLM-L6-v2`                | Sentence transformer model (empty to disable)      |
-| `SIMILARITY_THRESHOLD` | `0.42`                            | Semantic similarity threshold (0-1)                |
-| `REDIS_HOST`           | `redis`                           | Redis hostname                                     |
-| `REDIS_PORT`           | `6379`                            | Redis port                                         |
-| `DB_URI`               | `sqlite:////app/data/sentinel.db` | Database connection string                         |
-| `UI_LOCK_PASSWORD`     | `""`                             | Optional UI lock password (empty disables password check) |
-| `UI_LOCK_TIMEOUT`      | `900`                             | Idle timeout in seconds before UI auto-locks       |
+| Variable               | Default                           | Description                                               |
+| ---------------------- | --------------------------------- | --------------------------------------------------------- |
+| `TG_API_ID`            | _(required)_                      | Telegram API ID from my.telegram.org                      |
+| `TG_API_HASH`          | _(required)_                      | Telegram API hash                                         |
+| `ALERT_MODE`           | `dm`                              | Alert destination: `dm`, `channel`, or `both`             |
+| `ALERT_CHANNEL`        | `""`                              | Target channel/bot username (e.g., `@kit_red_bot`)        |
+| `HOURLY_DIGEST`        | `true`                            | Enable hourly digest                                      |
+| `DAILY_DIGEST`         | `true`                            | Enable daily digest                                       |
+| `DIGEST_TOP_N`         | `10`                              | Number of top messages in digest                          |
+| `EMBEDDINGS_MODEL`     | `all-MiniLM-L6-v2`                | Sentence transformer model (empty to disable)             |
+| `SIMILARITY_THRESHOLD` | `0.42`                            | Semantic similarity threshold (0-1)                       |
+| `REDIS_HOST`           | `redis`                           | Redis hostname                                            |
+| `REDIS_PORT`           | `6379`                            | Redis port                                                |
+| `DB_URI`               | `sqlite:////app/data/sentinel.db` | Database connection string                                |
+| `UI_SKIP_AUTH`         | `""`                              | DEV ONLY: when set to `true`, UI gating is disabled       |
+| `UI_LOCK_PASSWORD`     | `""`                              | Optional UI lock password (empty disables password check) |
+| `UI_LOCK_TIMEOUT`      | `900`                             | Idle timeout in seconds before UI auto-locks              |
 
 ### YAML Configuration
 
@@ -451,3 +452,12 @@ Comprehensive guides are available in the `docs/` directory:
 - **[USAGE.md](docs/USAGE.md)** - Deployment with Docker, web UI setup, configuration reload, tools & maintenance
 - **[ENGINEERING_GUIDELINES.md](docs/ENGINEERING_GUIDELINES.md)** - Architecture, data flow, unified profiles system, extension points
 - **[CONFIGURATION.md](docs/CONFIGURATION.md)** - Environment variables, YAML config reference, database queries, performance tuning
+
+### 🔧 Utility Tools
+
+See **[tools/README.md](tools/README.md)** for development and session management utilities:
+
+- **`generate_session.py`** - Generate portable Telegram session files for UI upload (avoid SMS codes)
+- **`check_rate_limit.py`** - Check Telegram rate limit status
+- **`run_tests.py`** - Run the full test suite
+- And more...

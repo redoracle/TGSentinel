@@ -1193,24 +1193,19 @@ main.container-fluid {
 /* Progressive enhancement for browsers with backdrop-filter support */
 @supports (backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px)) {
   .modal-content {
+    /* Increased transparency when backdrop-filter is supported on backdrop */
     background: rgba(22, 33, 62, 0.85);
-    -webkit-backdrop-filter: blur(20px) saturate(120%);
-    backdrop-filter: blur(20px) saturate(120%);
   }
 }
 
 .modal-header {
   background: rgba(102, 126, 234, 0.1);
   border-bottom: 1px solid var(--border-color);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
 }
 
 .modal-footer {
   background: rgba(0, 0, 0, 0.2);
   border-top: 1px solid var(--border-color);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
 }
 
 /* Profile Card */
@@ -1676,8 +1671,8 @@ main.container-fluid {
 /* Sticky navigation in docs */
 .sticky-nav {
   position: sticky;
-  top: 1rem;
-  max-height: 80vh;
+  top: calc(var(--navbar-height, 76px) + 1rem);
+  max-height: calc(100vh - var(--navbar-height, 76px) - 2rem);
   overflow-y: auto;
 }
 
@@ -1685,6 +1680,25 @@ main.container-fluid {
   .sticky-nav {
     position: static;
     max-height: none;
+  }
+}
+
+/* Sticky header section for docs page */
+.sticky-header {
+  position: sticky;
+  top: var(--navbar-height, 76px);
+  background: var(--bg-primary);
+  z-index: 100;
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+  margin-top: -1rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+@media (max-width: 991.98px) {
+  .sticky-header {
+    position: static;
   }
 }
 
@@ -2751,22 +2765,44 @@ body.dropdown-open .dropdown-toggle {
   text-transform: uppercase;
 }
 
+/* Fallback styles for browsers without color-mix support */
 .method-get {
-  background-color: color-mix(in srgb, var(--info-color, #4facfe) 20%, white);
-  color: color-mix(in srgb, var(--info-color, #4facfe) 80%, black);
-  border: 1px solid var(--info-color, #4facfe);
+  background-color: #e3f2fd;
+  color: #1976d2;
+  border: 1px solid #4facfe;
 }
 
 .method-post {
-  background-color: color-mix(in srgb, var(--success-color, #00f2fe) 20%, white);
-  color: color-mix(in srgb, var(--success-color, #00f2fe) 80%, black);
-  border: 1px solid var(--success-color, #00f2fe);
+  background-color: #e0f7fa;
+  color: #00838f;
+  border: 1px solid #00f2fe;
 }
 
 .method-delete {
-  background-color: color-mix(in srgb, var(--danger-color, #f5576c) 20%, white);
-  color: color-mix(in srgb, var(--danger-color, #f5576c) 80%, black);
-  border: 1px solid var(--danger-color, #f5576c);
+  background-color: #ffebee;
+  color: #c62828;
+  border: 1px solid #f5576c;
+}
+
+/* Enhanced styles for browsers with color-mix support */
+@supports (color: color-mix(in srgb, black 0%, white)) {
+  .method-get {
+    background-color: color-mix(in srgb, var(--info-color, #4facfe) 20%, white);
+    color: color-mix(in srgb, var(--info-color, #4facfe) 80%, black);
+    border: 1px solid var(--info-color, #4facfe);
+  }
+
+  .method-post {
+    background-color: color-mix(in srgb, var(--success-color, #00f2fe) 20%, white);
+    color: color-mix(in srgb, var(--success-color, #00f2fe) 80%, black);
+    border: 1px solid var(--success-color, #00f2fe);
+  }
+
+  .method-delete {
+    background-color: color-mix(in srgb, var(--danger-color, #f5576c) 20%, white);
+    color: color-mix(in srgb, var(--danger-color, #f5576c) 80%, black);
+    border: 1px solid var(--danger-color, #f5576c);
+  }
 }
 
 /* Code Blocks */
@@ -2808,4 +2844,43 @@ pre.code-block code {
 
 .section-url {
   color: #dee2e6;
+}
+
+/* Modal Logo Styling */
+.modal-logo {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  animation: modal-logo-pulse 2s ease-in-out infinite;
+}
+
+/* Dashboard User Avatar with Glow */
+#user-avatar {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  animation: avatar-pulse 2s ease-in-out infinite;
+}
+
+@keyframes modal-logo-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 4px rgba(102, 126, 234, 0.5)) drop-shadow(0 0 8px rgba(118, 75, 162, 0.3));
+    transform: scale(1);
+  }
+  50% {
+    filter: drop-shadow(0 0 8px rgba(102, 126, 234, 0.7)) drop-shadow(0 0 12px rgba(118, 75, 162, 0.5));
+    transform: scale(1.05);
+  }
+}
+
+@keyframes avatar-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 4px rgba(102, 126, 234, 0.5)) drop-shadow(0 0 8px rgba(118, 75, 162, 0.3));
+    transform: scale(1);
+  }
+  50% {
+    filter: drop-shadow(0 0 8px rgba(102, 126, 234, 0.7)) drop-shadow(0 0 12px rgba(118, 75, 162, 0.5));
+    transform: scale(1.05);
+  }
 }

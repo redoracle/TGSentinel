@@ -21,15 +21,19 @@
   }
 
   async function lockUI(){
-    try{
-      await fetch('/api/ui/lock', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'lock' })
-      });
-      // Force a reload so server-side gating renders locked UI
-      try { window.location.reload(true); } catch(e) { window.location.href = window.location.href; }
-    }catch(e){ /* ignore */ }
+    const resp = await fetch('/api/ui/lock', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'lock' })
+    });
+    
+    if (!resp.ok) {
+      throw new Error(`Lock failed: HTTP ${resp.status}`);
+    }
+    
+    // Force a reload so server-side gating renders locked UI
+    try { window.location.reload(true); } catch(e) { window.location.href = window.location.href; }
+    return true;
   }
 
   async function unlockUI(){
@@ -67,8 +71,12 @@
     idleTimer = setTimeout(async () => {
       try{
         await lockUI();
+        // Only show modal if lock succeeded (though reload typically prevents this)
         showUnlockModal();
-      }catch(e){}
+      }catch(e){
+        console.error('Failed to lock UI on idle timeout:', e);
+        // Don't show unlock modal if lock failed - client/server state would drift
+      }
     }, timeoutSec * 1000);
   }
 
@@ -101,8 +109,14 @@
     if (btnLock){
       btnLock.addEventListener('click', async (ev) => {
         ev.stopPropagation();
-        try{ await lockUI(); }catch(e){}
-        showUnlockModal();
+        try{ 
+          await lockUI();
+          // Only show modal if lock succeeded (though reload typically prevents this)
+          showUnlockModal();
+        }catch(e){
+          console.error('Failed to lock UI:', e);
+          // Don't show unlock modal if lock failed - client/server state would drift
+        }
       }, true);
     }
 
@@ -119,6 +133,7 @@
       const resp = await fetch('/api/ui/lock/status');
       const data = await resp.json().catch(()=>({}));
       if (resp.ok && data && data.locked){
+        setLockedState(true);
         showUnlockModal();
       }
     }catch(e){}

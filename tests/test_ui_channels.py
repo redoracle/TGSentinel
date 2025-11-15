@@ -89,144 +89,135 @@ class TestTelegramChatsEndpoint:
     """Tests for /api/telegram/chats endpoint."""
 
     def test_get_telegram_chats_success(self, app_client, mock_config):
-        """Test successful retrieval of Telegram chats."""
-        # Mock environment variables
-        with patch.dict(os.environ, {"TG_API_ID": "12345", "TG_API_HASH": "test_hash"}):
-            # Mock session path exists
-            with patch("pathlib.Path.exists", return_value=True):
-                # Mock the entire get_dialogs functionality
-                from telethon.tl.types import Channel
+        """Test successful retrieval of Telegram chats via Redis delegation."""
+        with app_client.session_transaction() as sess:
+            sess["telegram_authenticated"] = True
 
-                channel_entity = MagicMock(spec=Channel)
-                channel_entity.id = -1001111111111
-                channel_entity.title = "Test Channel"
-                channel_entity.broadcast = True
-                channel_entity.megagroup = False
-                channel_entity.username = "testchannel"
+        with patch("app.redis_client") as mock_redis:
+            # Mock Redis request/response pattern
+            response_data = json.dumps(
+                {
+                    "status": "ok",
+                    "chats": [
+                        {
+                            "id": -1001111111111,
+                            "name": "Test Channel",
+                            "type": "channel",
+                            "username": "testchannel",
+                        }
+                    ],
+                }
+            )
 
-                mock_dialog = MagicMock()
-                mock_dialog.entity = channel_entity
+            # Mock get() to return response on second call (first is cache check)
+            mock_redis.get.side_effect = [None, response_data]
+            mock_redis.setex.return_value = True
+            mock_redis.delete.return_value = True
 
-                with patch("telethon.TelegramClient") as mock_tg:
-                    mock_client_instance = MagicMock()
-
-                    # Mock async methods
-                    async def mock_connect():
-                        return None
-
-                    async def mock_is_authorized():
-                        return True
-
-                    async def mock_get_dialogs():
-                        return [mock_dialog]
-
-                    mock_client_instance.connect = mock_connect
-                    mock_client_instance.is_user_authorized = mock_is_authorized
-                    mock_client_instance.get_dialogs = mock_get_dialogs
-                    mock_client_instance.disconnect = MagicMock()
-
-                    mock_tg.return_value = mock_client_instance
-
-                    response = app_client.get("/api/telegram/chats")
-
-                    assert response.status_code == 200
-                    data = json.loads(response.data)
-                    assert "chats" in data
-                    assert len(data["chats"]) == 1
-                    assert data["chats"][0]["id"] == -1001111111111
-                    assert data["chats"][0]["name"] == "Test Channel"
-                    assert isinstance(data["chats"], list)
-
-    def test_get_telegram_chats_missing_api_credentials(self, app_client, mock_config):
-        """Test error when API credentials are missing."""
-        with patch.dict(os.environ, {"TG_API_ID": "", "TG_API_HASH": ""}, clear=True):
             response = app_client.get("/api/telegram/chats")
 
-            assert response.status_code == 400
+            assert response.status_code == 200
             data = json.loads(response.data)
-            assert data["status"] == "error"
-            assert "TG_API_ID and TG_API_HASH are required" in data["message"]
+            assert "chats" in data
+            assert len(data["chats"]) == 1
+            assert data["chats"][0]["id"] == -1001111111111
+            assert data["chats"][0]["name"] == "Test Channel"
+            assert isinstance(data["chats"], list)
 
-    def test_get_telegram_chats_invalid_api_id(self, app_client, mock_config):
-        """Test error when API ID is not numeric."""
-        with patch.dict(
-            os.environ, {"TG_API_ID": "not_a_number", "TG_API_HASH": "test_hash"}
-        ):
+    def test_get_telegram_chats_redis_unavailable(self, app_client, mock_config):
+        """Test error when Redis is not available."""
+        with app_client.session_transaction() as sess:
+            sess["telegram_authenticated"] = True
+
+        with patch("app.redis_client", None):
             response = app_client.get("/api/telegram/chats")
 
-            assert response.status_code == 400
+            assert response.status_code == 503
             data = json.loads(response.data)
             assert data["status"] == "error"
-            assert "must be numeric" in data["message"]
+            assert "Redis not available" in data["message"]
+
+    def test_get_telegram_chats_sentinel_timeout(self, app_client, mock_config):
+        """Test timeout when sentinel does not respond."""
+        with app_client.session_transaction() as sess:
+            sess["telegram_authenticated"] = True
+
+        with patch("app.redis_client") as mock_redis:
+            # Mock no response from sentinel (timeout scenario)
+            mock_redis.get.return_value = None
+            mock_redis.setex.return_value = True
+            mock_redis.delete.return_value = True
+
+            response = app_client.get("/api/telegram/chats")
+
+            assert response.status_code == 504
+            data = json.loads(response.data)
+            assert data["status"] == "error"
+            assert "did not respond in time" in data["message"].lower()
 
     def test_get_telegram_chats_session_not_found(self, app_client, mock_config):
-        """Test error when session file doesn't exist."""
-        with patch.dict(os.environ, {"TG_API_ID": "12345", "TG_API_HASH": "test_hash"}):
-            with patch("pathlib.Path.exists", return_value=False):
-                response = app_client.get("/api/telegram/chats")
+        """Test error response from sentinel."""
+        with app_client.session_transaction() as sess:
+            sess["telegram_authenticated"] = True
 
-                assert response.status_code == 404
-                data = json.loads(response.data)
-                assert data["status"] == "error"
-                assert "session not found" in data["message"].lower()
+        with patch("app.redis_client") as mock_redis:
+            # Mock error response from sentinel
+            error_data = json.dumps(
+                {"status": "error", "error": "Failed to fetch dialogs"}
+            )
+
+            mock_redis.get.side_effect = [None, error_data]
+            mock_redis.setex.return_value = True
+            mock_redis.delete.return_value = True
+
+            response = app_client.get("/api/telegram/chats")
+
+            assert response.status_code == 500
+            data = json.loads(response.data)
+            assert data["status"] == "error"
+            assert "Failed to fetch" in data["message"]
 
     def test_get_telegram_chats_multiple_types(self, app_client, mock_config):
-        """Test retrieval of different chat types."""
-        with patch.dict(os.environ, {"TG_API_ID": "12345", "TG_API_HASH": "test_hash"}):
-            with patch("pathlib.Path.exists", return_value=True):
-                # Create mocks for different chat types
-                from telethon.tl.types import Channel
+        """Test retrieval of different chat types via Redis delegation."""
+        with app_client.session_transaction() as sess:
+            sess["telegram_authenticated"] = True
 
-                channel_entity = MagicMock(spec=Channel)
-                channel_entity.id = -1001111111111
-                channel_entity.title = "Broadcast Channel"
-                channel_entity.broadcast = True
-                channel_entity.megagroup = False
-                channel_entity.username = None
+        with patch("app.redis_client") as mock_redis:
+            # Mock Redis response with multiple chat types
+            response_data = json.dumps(
+                {
+                    "status": "ok",
+                    "chats": [
+                        {
+                            "id": -1001111111111,
+                            "name": "Broadcast Channel",
+                            "type": "channel",
+                            "username": None,
+                        },
+                        {
+                            "id": -1002222222222,
+                            "name": "Supergroup",
+                            "type": "supergroup",
+                            "username": "testsupergroup",
+                        },
+                    ],
+                }
+            )
 
-                supergroup_entity = MagicMock(spec=Channel)
-                supergroup_entity.id = -1002222222222
-                supergroup_entity.title = "Supergroup"
-                supergroup_entity.broadcast = False
-                supergroup_entity.megagroup = True
-                supergroup_entity.username = "testsupergroup"
+            mock_redis.get.side_effect = [None, response_data]
+            mock_redis.setex.return_value = True
+            mock_redis.delete.return_value = True
 
-                mock_dialogs = []
-                for entity in [channel_entity, supergroup_entity]:
-                    dialog = MagicMock()
-                    dialog.entity = entity
-                    mock_dialogs.append(dialog)
+            response = app_client.get("/api/telegram/chats")
 
-                with patch("telethon.TelegramClient") as mock_tg:
-                    mock_client_instance = MagicMock()
-
-                    # Mock async methods
-                    async def mock_connect():
-                        return None
-
-                    async def mock_is_authorized():
-                        return True
-
-                    async def mock_get_dialogs():
-                        return mock_dialogs
-
-                    mock_client_instance.connect = mock_connect
-                    mock_client_instance.is_user_authorized = mock_is_authorized
-                    mock_client_instance.get_dialogs = mock_get_dialogs
-                    mock_client_instance.disconnect = MagicMock()
-
-                    mock_tg.return_value = mock_client_instance
-
-                    response = app_client.get("/api/telegram/chats")
-
-                    assert response.status_code == 200
-                    data = json.loads(response.data)
-                    assert len(data["chats"]) == 2
-                    # Both are channels but with different properties
-                    assert all(
-                        chat["type"] in ["channel", "supergroup", "group"]
-                        for chat in data["chats"]
-                    )
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert len(data["chats"]) == 2
+            # Both are channels but with different properties
+            assert all(
+                chat["type"] in ["channel", "supergroup", "group"]
+                for chat in data["chats"]
+            )
 
 
 class TestAddChannelsEndpoint:

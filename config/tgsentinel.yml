@@ -1,5 +1,5 @@
 telegram:
-  session: /tmp/tgsentinel.session
+  session: /app/data/tgsentinel.session
 alerts:
   mode: dm
   target_channel: '@kit_red_bot'
@@ -7,7 +7,10 @@ alerts:
     hourly: true
     daily: false
     top_n: 10
-monitored_users: []
+monitored_users:
+- id: 6580125920
+  name: Vincenzo Ventrella
+  username: ''
 channels:
 - id: -100123456789
   name: Algorand Dev
@@ -454,6 +457,13 @@ channels:
   prioritize_pinned: true
   prioritize_admin: true
   detect_polls: true
+- id: 1193248583
+  name: Algorand Announcements
+  vip_senders: []
+  keywords: []
+  reaction_threshold: 5
+  reply_threshold: 3
+  rate_limit_per_hour: 10
 interests:
 - algorand core development
 - blockchain security advisories

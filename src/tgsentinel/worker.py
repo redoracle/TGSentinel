@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Tuple, cast
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from redis import Redis
 from telethon import TelegramClient
@@ -48,6 +48,7 @@ async def process_stream_message(
     engine,
     rules: Dict[int, ChannelRule],
     payload: Dict[str, Any],
+    our_user_id: int | None = None,
 ) -> bool:
     rid = _to_int(payload["chat_id"])
     rule = rules.get(rid)
@@ -60,7 +61,7 @@ async def process_stream_message(
     is_reply_to_user = False
 
     # Check if this is a reply to one of our messages
-    if payload.get("is_reply") and payload.get("reply_to_msg_id"):
+    if payload.get("is_reply") and payload.get("reply_to_msg_id") and our_user_id:
         try:
             # Fetch the replied-to message to check if it was sent by us
             reply_to_msg_id = _to_int(payload.get("reply_to_msg_id"))
@@ -71,16 +72,12 @@ async def process_stream_message(
                 replied_msg = replied_msg[0] if replied_msg else None
 
             if replied_msg:
-                # Get our user ID
-                me = await client.get_me()  # type: ignore[misc]
-                our_user_id = getattr(me, "id", None)
-
-                # Check if the replied-to message was sent by us
+                # Check if the replied-to message was sent by us (using cached our_user_id)
                 replied_sender_id = getattr(replied_msg, "sender_id", None) or getattr(
                     getattr(replied_msg, "sender", None), "id", None
                 )
 
-                if our_user_id and replied_sender_id == our_user_id:
+                if replied_sender_id == our_user_id:
                     is_reply_to_user = True
 
         except Exception as e:
@@ -174,11 +171,30 @@ async def process_stream_message(
     return important
 
 
-async def process_loop(cfg: AppCfg, client: TelegramClient, engine):
+async def process_loop(
+    cfg: AppCfg,
+    client: TelegramClient,
+    engine,
+    handshake_gate: Optional[asyncio.Event] = None,
+):
     r = Redis(host=cfg.redis["host"], port=cfg.redis["port"], decode_responses=True)
     stream = cfg.redis["stream"]
     group = cfg.redis["group"]
     consumer = cfg.redis["consumer"]
+
+    async def _wait_ready():
+        """Wait for handshake gate to be set before processing.
+
+        This gate is used for pause/resume semantics during re-login operations.
+        When a re-login handshake is initiated, the gate is cleared to pause
+        message processing, then set again once the handshake completes.
+
+        This check must remain in the main loop to support dynamic pausing.
+        When the gate is set, wait() returns immediately with no blocking overhead.
+        """
+        if handshake_gate is None:
+            return
+        await handshake_gate.wait()
 
     try:
         r.xgroup_create(stream, group, id="$", mkstream=True)
@@ -188,11 +204,25 @@ async def process_loop(cfg: AppCfg, client: TelegramClient, engine):
     rules = load_rules(cfg)
     load_interests(cfg.interests)
 
+    # Cache our user ID once at startup to avoid calling get_me() per message
+    our_user_id: int | None = None
+    try:
+        me = await client.get_me()  # type: ignore[misc]
+        our_user_id = getattr(me, "id", None)
+        if our_user_id:
+            log.debug("Cached our user ID: %s", our_user_id)
+        else:
+            log.warning("Could not determine our user ID")
+    except Exception as e:
+        log.warning("Failed to fetch our user ID at startup: %s", e)
+
     reload_marker = Path("/app/data/.reload_config")
     last_cfg_check = 0
     cfg_check_interval = 5  # Check every 5 seconds
 
     while True:
+        # Pause message processing during re-login handshakes (gate cleared/set dynamically)
+        await _wait_ready()
         # Check for config reload marker periodically
         current_time = asyncio.get_event_loop().time()
         if current_time - last_cfg_check > cfg_check_interval:
@@ -226,6 +256,17 @@ async def process_loop(cfg: AppCfg, client: TelegramClient, engine):
                         # Refresh user info + avatar for UI
                         try:
                             me = await client.get_me()  # type: ignore[misc]
+                            # Update cached our_user_id after reconnect
+                            our_user_id = getattr(me, "id", None)
+                            if our_user_id:
+                                log.debug(
+                                    "Refreshed our_user_id after reconnect: %s",
+                                    our_user_id,
+                                )
+                            else:
+                                log.warning(
+                                    "Could not determine our_user_id after reconnect"
+                                )
                             # Download user avatar if available
                             avatar_path = None
                             try:
@@ -282,7 +323,7 @@ async def process_loop(cfg: AppCfg, client: TelegramClient, engine):
                 try:
                     payload = json.loads(fields["json"])
                     important = await process_stream_message(
-                        cfg, client, engine, rules, payload
+                        cfg, client, engine, rules, payload, our_user_id
                     )
                     r.xack(stream, group, msg_id)
                     inc("processed_total", important=important)

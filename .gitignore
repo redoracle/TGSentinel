@@ -28,3 +28,5 @@ env/
 # OS junk
 .DS_Store
 Thumbs.db
+
+!data/plugins/README.md

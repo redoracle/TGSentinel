@@ -377,11 +377,9 @@ def run_heuristics(
         score += 0.5  # Increased from 0.4
 
     # === LEGACY: Custom Keywords ===
-    if keywords and text:
-        rx = re.compile(r"|".join(map(re.escape, keywords)), re.I)
-        if rx.search(text):
-            reasons.append("keywords")
-            score += 0.8  # Increased from 0.6
+    if keywords and _check_keywords(text, keywords):
+        reasons.append("keywords")
+        score += 0.8  # Increased from 0.6
 
     # === CATEGORY 7: Personal Context (Rare Senders) ===
     # This would require tracking message frequency per sender

@@ -4,6 +4,22 @@
 {% block extra_head %}
 <!-- Highlight.js for syntax highlighting -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" integrity="sha512-rO+olRTkcf304DQBxSWxln8JXCzTHlKnIdnMUwYvQa9/Jd4cQaNkItIUj6Z4nvW1dqK0SKXLbn9h4KwZTNtAyw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+<style>
+  /* Make header sticky on docs page */
+  header.container-fluid {
+    position: sticky;
+    top: var(--navbar-height, 76px);
+    background: var(--bg-primary);
+    z-index: 100;
+    border-bottom: 1px solid var(--border-color);
+  }
+  
+  @media (max-width: 991.98px) {
+    header.container-fluid {
+      position: static;
+    }
+  }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -475,7 +491,7 @@ curl -X GET {{ api_base_url }}/api/system/health \
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-start mb-2">
                         <div>
-                            <span class="method-badge" aria-label="HTTP GET method">GET</span>
+                            <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
                             <strong class="ms-2 section-url">/api/export_alerts</strong>
                         </div>
                     </div>
@@ -777,6 +793,12 @@ curl -X GET {{ api_base_url }}/api/system/health \
                     <pre class="code-block"><code class="language-json">{
   "command": "reauth"
 }</code></pre>
+                    
+                    <h6 class="alert alert-info">Response:</h6>
+                    <pre class="code-block"><code class="language-json">{
+  "status": "accepted",
+  "message": "Command queued"
+}</code></pre>
                 </div>
             </div>
 
@@ -985,6 +1007,76 @@ curl -X GET {{ api_base_url }}/api/system/health \
                     </div>
                     <p class="mb-2 alert-info">Return chat/user/participant details. Supports pending mode (202) with minimal info and re‑polling.</p>
                     <pre class="code-block"><code class="language-bash">curl "{{ api_base_url }}/api/participant/info?chat_id=-100123&user_id=42&pending=1"</code></pre>
+                    
+                    <p class="mt-3 mb-2"><strong>Example 200 response (success):</strong></p>
+                    <pre class="code-block"><code class="language-json">{
+  "chat_id": -100123,
+  "chat_title": "Tech Discussion Group",
+  "chat_type": "channel",
+  "chat_username": "techdiscussion",
+  "user_id": 42,
+  "user_first_name": "John",
+  "user_last_name": "Doe",
+  "user_username": "johndoe",
+  "user_phone": "+1234567890",
+  "user_is_bot": false,
+  "participant_status": "member",
+  "participant_role": "user",
+  "participant_joined_at": "2025-01-15T08:30:00Z",
+  "participant_is_admin": false,
+  "participant_is_creator": false,
+  "participant_can_post": true,
+  "created_at": "2025-11-14T10:00:00Z",
+  "metadata": {
+    "last_seen": "2025-11-14T09:55:00Z",
+    "message_count": 127
+  }
+}</code></pre>
+                    
+                    <p class="mt-3 mb-2"><strong>Example 202 pending response (data not yet available):</strong></p>
+                    <pre class="code-block"><code class="language-json">{
+  "chat_id": -100123,
+  "user_id": 42,
+  "status": "pending",
+  "message": "Participant information is being fetched. Please retry after a few seconds.",
+  "retry_after": 5
+}</code></pre>
+
+                    <h6 class="alert alert-info mt-3">Error Responses:</h6>
+                    <pre class="code-block"><code class="language-json">// 400 Bad Request (missing or invalid parameters)
+{
+  "status": "error",
+  "message": "Missing required parameters",
+  "details": "Both chat_id and user_id are required"
+}
+
+// 401 Unauthorized (authentication required)
+{
+  "status": "error",
+  "message": "Authentication required",
+  "details": "Please log in to access this endpoint"
+}
+
+// 404 Not Found (participant or chat not found)
+{
+  "status": "error",
+  "message": "Participant not found",
+  "details": "No participant record exists for the specified chat_id and user_id"
+}
+
+// 422 Unprocessable Entity (validation error)
+{
+  "status": "error",
+  "message": "Invalid parameter value",
+  "details": "chat_id must be a valid integer"
+}
+
+// 500 Internal Server Error
+{
+  "status": "error",
+  "message": "Internal server error",
+  "details": "An unexpected error occurred. Please try again later or contact support."
+}</code></pre>
                 </div>
             </div>
         </section>

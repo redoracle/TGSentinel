@@ -129,6 +129,13 @@ DB_URI=sqlite:////app/data/sentinel.db
 LOG_LEVEL=INFO                        # DEBUG | INFO | WARNING | ERROR
 ```
 
+### Session Coordination & Login Flow
+
+- **Single writer:** Only the UI container ever mutates `tgsentinel.session`. The worker container now waits for a Redis handshake before reconnecting, so shared volumes stay healthy even during account switches.
+- **Redis marker:** During a re-login the UI writes `tgsentinel:relogin`. The worker responds with `worker_detached`, disconnects from Telegram, and stays paused until the UI finishes promoting the new session file and marks the handshake as `promotion_complete`.
+- **Dedicated resend endpoint:** `POST /api/session/login/resend` now calls Telegram's resend API directly instead of re-running `/api/session/login/start`. The UI automatically switches the "Send" button into resend mode once a code has been issued.
+- **Credential parity:** Both containers publish a SHA-1 fingerprint of their `TG_API_ID/TG_API_HASH` to Redis. If they disagree, the worker refuses to start and surfaces a `credential_mismatch` worker status to prevent corrupt session files.
+
 ### Anomaly Detection
 
 Configure analytics anomaly detection thresholds:

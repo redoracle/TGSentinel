@@ -20,14 +20,18 @@
 <body>
 	<nav class="navbar navbar-expand-lg sticky-top" aria-label="Primary navigation">
 		<div class="container-fluid align-items-center">
-			<a class="navbar-brand" href="{{ url_for('dashboard_view') }}">
-				<img src="{{ url_for('static', filename='images/logo.png') }}" alt="TG Sentinel" class="navbar-logo" height="56" width="56">
-				<div class="ms-2">
-					<div class="navbar-brand-text">TG Sentinel</div>
-					<div class="navbar-brand-subtitle">Intelligent Telegram Activity Sentinel</div>
-				</div>
-				<span id="connection-indicator" class="badge status-offline ms-2" role="status" aria-live="polite">Offline</span>
-			</a>
+            <a class="navbar-brand" href="{{ url_for('dashboard_view') }}">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="TG Sentinel" class="navbar-logo" height="56" width="56">
+                <div class="ms-2">
+                    <div class="navbar-brand-text">TG Sentinel</div>
+                    <div class="navbar-brand-subtitle">Intelligent Telegram Activity Sentinel</div>
+                </div>
+                <span id="connection-indicator" class="badge status-offline ms-2" role="status" aria-live="polite">Offline</span>
+                <span id="worker-indicator" class="badge status-offline ms-2" role="status" aria-live="polite" title="Worker authorization status">Worker: Unknown</span>
+                {% if auth_bypass %}
+                <span class="badge bg-warning text-dark ms-2" title="UI auth bypass is enabled via UI_SKIP_AUTH">Auth Bypass</span>
+                {% endif %}
+            </a>
 			<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#primaryNav" aria-controls="primaryNav" aria-expanded="false" aria-label="Toggle navigation">
 				<span class="navbar-toggler-icon"></span>
 			</button>
@@ -69,9 +73,9 @@
 	<header class="container-fluid py-3">
 		<div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
 			<div class="d-flex align-items-center gap-3">
-				<img id="user-avatar" src="{{ url_for('static', filename='images/logo.png') }}" alt="User avatar" class="rounded-circle shadow-sm" width="64" height="64">
+				<img id="user-avatar" src="{{ url_for('static', filename='images/logo.png') }}" alt="User avatar" class="rounded-circle">
 				<div>
-					<p class="mb-1 fw-semibold" id="user-name">Analyst</p>
+					<p class="mb-1 fw-semibold" id="user-name">Loading...</p>
 					<p class="mb-0 text-muted small" id="username-label">Username: loading...</p>
 					<p class="mb-0 text-muted small" id="phone-mask">Phone: pending</p>
 				</div>
@@ -119,10 +123,27 @@
 		<div class="modal-dialog modal-dialog-centered">
 			<div class="modal-content">
 				<div class="modal-header">
+					<img src="{{ url_for('static', filename='images/logo.png') }}" alt="TG Sentinel" class="modal-logo me-3">
 					<h5 class="modal-title" id="loginModalLabel">Authenticate Telegram Session</h5>
 					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 				</div>
 				<div class="modal-body">
+					<!-- Login Method Toggle -->
+					<div class="mb-4">
+						<div class="btn-group w-100" role="group" aria-label="Login method selection">
+							<input type="radio" class="btn-check" name="loginMethod" id="methodPhone" autocomplete="off" checked>
+							<label class="btn btn-outline-primary" for="methodPhone">
+								<i class="bi bi-phone"></i> Phone Number
+							</label>
+							
+							<input type="radio" class="btn-check" name="loginMethod" id="methodUpload" autocomplete="off">
+							<label class="btn btn-outline-primary" for="methodUpload">
+								<i class="bi bi-upload"></i> Upload Session
+							</label>
+						</div>
+					</div>
+
+					<!-- Phone Login Form -->
 					<form id="loginForm" onsubmit="return false;">
 						<div class="mb-3">
 							<label for="loginPhone" class="form-label">Phone Number</label>
@@ -140,6 +161,19 @@
 							<div class="form-text">If two-factor authentication is enabled.</div>
 						</div>
 					</form>
+
+					<!-- Upload Session Form -->
+					<form id="uploadForm" class="d-none" enctype="multipart/form-data" onsubmit="return false;">
+						<div class="mb-3">
+							<label for="sessionFile" class="form-label">Session File</label>
+							<input type="file" class="form-control" id="sessionFile" accept=".session">
+							<div class="form-text">Upload a valid Telethon .session file. Files are portable across installations.</div>
+						</div>
+						<div class="alert alert-info small" role="alert">
+							<i class="bi bi-info-circle"></i> Session files contain your authorization key and can be used to restore access without SMS codes.
+						</div>
+					</form>
+
 					<div id="loginAlert" class="alert d-none" role="alert"></div>
 				</div>
                 <div class="modal-footer align-items-center">
@@ -147,6 +181,7 @@
                     <button type="button" id="btnSendCode" class="btn btn-outline-primary">Send Code</button>
                     <button type="button" id="btnVerifyCode" class="btn btn-primary d-none">Verify</button>
                     <button type="button" id="btnResendCode" class="btn btn-link d-none">Resend code</button>
+                    <button type="button" id="btnUploadSession" class="btn btn-primary d-none">Upload & Restore</button>
                     <span id="resendCountdown" class="text-muted small d-none" aria-live="polite"></span>
                 </div>
 			</div>
@@ -223,9 +258,9 @@
 		});
 	</script>
 	<script>
-		// UI Lock config from server
-		window.UI_LOCK_TIMEOUT = {{ ui_lock_timeout|int }};
-		window.UI_LOCK_ENABLED = {{ 'true' if ui_lock_enabled else 'false' }};
+		// UI Lock config from server (values injected via Jinja; wrap in strings for linting)
+		window.UI_LOCK_TIMEOUT = Number('{{ ui_lock_timeout|default(0, true)|int }}');
+		window.UI_LOCK_ENABLED = JSON.parse('{{ ui_lock_enabled|default(false, true)|tojson }}');
 	</script>
 	<script>
 		const toastContainer = document.getElementById("toast-container");
@@ -266,36 +301,68 @@
 
 		window.showToast = showToast;
 
-		function updateConnectionIndicator(payload) {
-			const indicator = document.getElementById("connection-indicator");
-			if (!indicator) {
-				return;
-			}
-			const { connected } = payload;
-			indicator.classList.remove("status-online", "status-offline");
-			indicator.classList.add(connected ? "status-online" : "status-offline");
-			indicator.textContent = connected ? "Online" : "Offline";
-			indicator.setAttribute("aria-label", connected ? "Connection status: online" : "Connection status: offline");
+        function updateConnectionIndicator(payload) {
+            const indicator = document.getElementById("connection-indicator");
+            if (!indicator) {
+                return;
+            }
+            const { connected } = payload;
+            indicator.classList.remove("status-online", "status-offline");
+            indicator.classList.add(connected ? "status-online" : "status-offline");
+            indicator.textContent = connected ? "Online" : "Offline";
+            indicator.setAttribute("aria-label", connected ? "Connection status: online" : "Connection status: offline");
+        }
+
+        async function refreshWorkerStatus(){
+            const badge = document.getElementById('worker-indicator');
+            if (!badge) return;
+            try{
+                const resp = await fetch('/api/worker/status');
+                const data = await resp.json();
+                const auth = data && Object.prototype.hasOwnProperty.call(data,'authorized') ? data.authorized : null;
+                badge.classList.remove('status-online','status-offline');
+                if (auth === true){
+                    badge.classList.add('status-online');
+                    badge.textContent = 'Worker: Authorized';
+                    badge.setAttribute('aria-label','Worker authorized');
+                } else if (auth === false){
+                    badge.classList.add('status-offline');
+                    const statusText = (data && data.status) || 'waiting';
+                    badge.textContent = statusText === 'waiting' ? 'Worker: Waiting' : 'Worker: Unauthorized';
+                    badge.setAttribute('aria-label','Worker not authorized');
+                } else {
+                    badge.classList.add('status-offline');
+                    badge.textContent = 'Worker: Unknown';
+                    badge.setAttribute('aria-label','Worker status unknown');
+                }
+            }catch(e){
+                badge.classList.remove('status-online');
+                badge.classList.add('status-offline');
+                badge.textContent = 'Worker: Unknown';
+            }
+        }
+
+	function populateSessionInfo(data) {
+		const avatarEl = document.getElementById("user-avatar");
+		const nameEl = document.getElementById("user-name");
+		const usernameEl = document.getElementById("username-label");
+		const phoneEl = document.getElementById("phone-mask");
+
+		if (avatarEl && data.avatar) {
+			avatarEl.src = data.avatar;
 		}
-
-		function populateSessionInfo(data) {
-			const avatarEl = document.getElementById("user-avatar");
-			const usernameEl = document.getElementById("username-label");
-			const phoneEl = document.getElementById("phone-mask");
-
-			if (avatarEl && data.avatar) {
-				avatarEl.src = data.avatar;
-			}
-			if (usernameEl && data.username) {
-				usernameEl.textContent = `Username: ${data.username}`;
-			}
-			if (phoneEl && data.phone_masked) {
-				phoneEl.textContent = `Phone: ${data.phone_masked}`;
-			}
-			updateConnectionIndicator({ connected: Boolean(data.connected) });
+		if (nameEl && data.username) {
+			nameEl.textContent = data.username;
 		}
-
-		async function refreshSessionInfo() {
+		if (usernameEl && data.username) {
+			usernameEl.textContent = `Username: ${data.username}`;
+		}
+		if (phoneEl && data.phone_masked) {
+			phoneEl.textContent = `Phone: ${data.phone_masked}`;
+		}
+		updateConnectionIndicator({ connected: Boolean(data.connected) });
+	}		
+	async function refreshSessionInfo() {
 			try {
 				const response = await fetch("{{ url_for('api_session_info') }}");
 				if (!response.ok) {
@@ -309,8 +376,10 @@
 			}
 		}
 
-		document.addEventListener("DOMContentLoaded", () => {
-			refreshSessionInfo();
+        document.addEventListener("DOMContentLoaded", () => {
+            refreshSessionInfo();
+            refreshWorkerStatus();
+            setInterval(refreshWorkerStatus, 5000);
 
 		// Logout button shows confirmation modal with glass effect
 		const logoutBtn = document.getElementById("btn-logout");
@@ -1104,6 +1173,7 @@
             socket.on("dashboard:update", () => {
                 const event = new CustomEvent("tgsentinel:dashboard-update");
                 document.dispatchEvent(event);
+                try { refreshWorkerStatus(); } catch(e) {}
             });
 
             

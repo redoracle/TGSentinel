@@ -8,14 +8,18 @@ additional services.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
+import re
 import sys
+import tempfile
 import threading
+import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Tuple, cast
 
 
 def _format_timestamp(ts_str: str) -> str:
@@ -31,6 +35,69 @@ def _format_timestamp(ts_str: str) -> str:
         return ts_str
 
 
+def _validate_session_file(file_content: bytes) -> Tuple[bool, str]:
+    """Validate that uploaded content is a valid Telethon session file.
+
+    Returns: (is_valid, error_message)
+    """
+    import sqlite3
+
+    # Check size (reasonable limit: 10MB)
+    if len(file_content) > 10 * 1024 * 1024:
+        return False, "File too large (max 10MB)"
+
+    if len(file_content) < 100:
+        return False, "File too small to be a valid session"
+
+    # Check SQLite magic header
+    if not file_content.startswith(b"SQLite format 3\x00"):
+        return False, "Not a valid SQLite database file"
+
+    # Try to open as SQLite and verify Telethon structure
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".session") as tmp:
+            tmp.write(file_content)
+            tmp_path = tmp.name
+
+        try:
+            conn = sqlite3.connect(tmp_path)
+            cursor = conn.cursor()
+
+            # Check for Telethon tables
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            tables = {row[0] for row in cursor.fetchall()}
+
+            required_tables = {
+                "sessions",
+                "entities",
+                "sent_files",
+                "update_state",
+                "version",
+            }
+            if not required_tables.issubset(tables):
+                missing = required_tables - tables
+                return False, f"Missing required Telethon tables: {', '.join(missing)}"
+
+            # Check sessions table has auth key
+            cursor.execute("SELECT COUNT(*) FROM sessions WHERE auth_key IS NOT NULL")
+            if cursor.fetchone()[0] == 0:
+                return False, "No authorization key found in session"
+
+            conn.close()
+            return True, "Valid Telethon session file"
+
+        finally:
+            try:
+                Path(tmp_path).unlink(missing_ok=True)
+            except Exception:
+                pass
+
+    except sqlite3.Error as e:
+        return False, f"SQLite error: {str(e)}"
+    except Exception as e:
+        return False, f"Validation error: {str(e)}"
+
+
 try:  # Optional dependency for process metrics.
     import psutil  # type: ignore
 except Exception:  # pragma: no cover - psutil is optional
@@ -41,13 +108,11 @@ try:
 except Exception:  # pragma: no cover - redis is optional
     redis = None  # type: ignore
 
-# Expose TelegramClient at module level so tests can patch app.TelegramClient
-try:  # pragma: no cover - optional at runtime
-    from telethon import TelegramClient as _TelegramClient  # type: ignore
-except Exception:
-    _TelegramClient = None  # type: ignore
-TelegramClient = _TelegramClient  # type: ignore
+# TelegramClient should NOT be used in UI - sentinel is the sole session owner
+# Removing import to prevent accidental dual-writer violations
+TelegramClient = None  # type: ignore
 
+import gc
 import yaml
 import fcntl
 import shutil
@@ -170,6 +235,15 @@ _init_lock = threading.Lock()
 _is_initialized = False
 _login_ctx: Dict[str, Dict[str, Any]] = {}
 
+# Development helper: allow bypassing auth gating for UI review
+UI_SKIP_AUTH = os.getenv("UI_SKIP_AUTH", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+    "dev",
+}
+
 # UI Lock configuration (password-protected lock without logging out)
 UI_LOCK_PASSWORD = os.getenv("UI_LOCK_PASSWORD", "")
 try:
@@ -208,6 +282,12 @@ _cached_summary: Tuple[datetime, Dict[str, Any]] | None = None
 _cached_health: Tuple[datetime, Dict[str, Any]] | None = None
 
 STREAM_DEFAULT = "tgsentinel:messages"
+RELOGIN_KEY = "tgsentinel:relogin"
+CREDENTIALS_UI_KEY = "tgsentinel:credentials:ui"
+AUTH_QUEUE_KEY = "tgsentinel:auth_queue"
+AUTH_RESPONSE_HASH = "tgsentinel:auth_responses"
+AUTH_REQUEST_TIMEOUT_SECS = 90.0
+_HANDSHAKE_FINAL_STATES = {"worker_resumed", "timeout", "cancelled"}
 
 
 def reload_config() -> None:
@@ -277,6 +357,8 @@ def init_app() -> None:
         else:
             redis_client = None
 
+        _publish_ui_credentials()
+
         _is_initialized = True
 
 
@@ -287,49 +369,63 @@ def _ensure_init(func: Callable[..., Any]) -> Callable[..., Any]:
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         if not _is_initialized:
             init_app()
-        # Gate API endpoints when no session is present (allow session endpoints)
+        # Gate UI/API based on session existence, worker auth, and UI lock
         try:
             if not app.config.get("TESTING"):
+                # Skip gating completely when in auth bypass mode (dev only)
+                if UI_SKIP_AUTH:
+                    return func(*args, **kwargs)
                 from flask import request as _rq, render_template as _rt  # type: ignore
 
                 path = _rq.path
+
+                # Worker auth status from Redis
+                def _worker_authorized_flag() -> bool | None:
+                    try:
+                        if redis_client:
+                            raw = redis_client.get("tgsentinel:worker_status")
+                            if raw:
+                                if isinstance(raw, bytes):
+                                    raw = raw.decode()
+                                st = json.loads(str(raw))
+                                return True if st.get("authorized") is True else False
+                        return None
+                    except Exception:
+                        return None
+
+                is_session_missing = _session_missing()
+                worker_auth = _worker_authorized_flag()
+                is_locked = bool(session.get("ui_locked"))
+
                 if path.startswith("/api/"):
-                    # Gate when no session for all APIs except session/login endpoints
-                    if (not path.startswith("/api/session/")) and _session_missing():
+                    allowed = (
+                        path.startswith("/api/session/")
+                        or path.startswith("/api/ui/lock")
+                        or path.startswith("/api/worker/status")
+                    )
+                    # Require login if session missing or worker unauthorized
+                    if not allowed and (is_session_missing or (worker_auth is False)):
                         return (
                             jsonify({"status": "error", "message": "Login required"}),
                             401,
                         )
-                    # Gate when UI is locked for all APIs except ui lock and session endpoints
-                    if (
-                        session.get("ui_locked")
-                        and (not path.startswith("/api/ui/lock"))
-                        and (not path.startswith("/api/session/"))
-                    ):
+                    # Gate lock for other APIs
+                    if is_locked and not allowed:
                         return (
-                            jsonify(
-                                {
-                                    "status": "locked",
-                                    "message": "UI locked",
-                                }
-                            ),
+                            jsonify({"status": "locked", "message": "UI locked"}),
                             423,
                         )
                 else:
-                    # Gate non-API UI routes with minimal locked page (allow static/data)
-                    if _session_missing() and not (
+                    # Gate non-API UI routes unless static/data/favicon
+                    if not (
                         path.startswith("/static/")
                         or path.startswith("/data/")
                         or path == "/favicon.ico"
                     ):
-                        return _rt("locked.html"), 401
-                    # Gate UI lock state for non-API routes
-                    if session.get("ui_locked") and not (
-                        path.startswith("/static/")
-                        or path.startswith("/data/")
-                        or path == "/favicon.ico"
-                    ):
-                        return _rt("locked_ui.html"), 423
+                        if is_session_missing or (worker_auth is False):
+                            return _rt("locked.html"), 401
+                        if is_locked:
+                            return _rt("locked_ui.html"), 423
         except Exception:
             pass
         return func(*args, **kwargs)
@@ -479,38 +575,135 @@ def _invalidate_session(session_path: str | None) -> Dict[str, Any]:
 
 def _session_missing() -> bool:
     try:
-        # Check Flask session marker first (set after successful login)
+        # Check Flask session marker (set only after successful UI login)
         if session.get("telegram_authenticated"):
             return False
 
-        candidates = []
-        # Config-provided path
-        if config and getattr(config, "telegram_session", None):
-            candidates.append(str(getattr(config, "telegram_session")))
-        # Env-provided path
-        env_path = os.getenv("TG_SESSION_PATH")
-        if env_path:
-            candidates.append(env_path)
-        # Common defaults
-        candidates.append("/app/data/tgsentinel.session")
-        try:
-            candidates.append(
-                str((REPO_ROOT / "data" / "tgsentinel.session").resolve())
-            )
-        except Exception:
-            pass
-        # If any candidate exists, session is present
-        for p in candidates:
-            try:
-                if p and Path(p).exists():
-                    # Set session marker when we find a valid session file
-                    session["telegram_authenticated"] = True
-                    return False
-            except Exception:
-                continue
+        # Session marker not set - login is required
         return True
     except Exception:
         return True
+
+
+def _read_handshake_state() -> Dict[str, Any] | None:
+    if redis_client is None:
+        return None
+    try:
+        raw = redis_client.get(RELOGIN_KEY)
+        if not raw:
+            return None
+        if isinstance(raw, bytes):
+            raw = raw.decode()
+        return json.loads(str(raw))
+    except Exception:
+        return None
+
+
+def _request_relogin_handshake(timeout: float = 45.0) -> str | None:
+    """Coordinate with the worker before promoting a new session file."""
+
+    if redis_client is None:
+        logger.warning("Redis unavailable; proceeding without re-login handshake")
+        return None
+
+    # Do not stomp over an active handshake initiated elsewhere.
+    existing = _read_handshake_state()
+    if existing and existing.get("status") not in _HANDSHAKE_FINAL_STATES:
+        raise RuntimeError("Another re-login operation is already in progress")
+
+    request_id = uuid.uuid4().hex
+    payload = {
+        "status": "request",
+        "request_id": request_id,
+        "ts": time.time(),
+        "source": "ui",
+    }
+    redis_client.set(RELOGIN_KEY, json.dumps(payload), ex=120)
+
+    deadline = time.time() + timeout
+    poll_interval = 0.5
+    while time.time() < deadline:
+        state = _read_handshake_state()
+        if not state:
+            time.sleep(poll_interval)
+            continue
+        if state.get("request_id") != request_id:
+            # Another request replaced ours unexpectedly; abort.
+            raise RuntimeError("Re-login handshake was pre-empted by another request")
+        if state.get("status") == "worker_detached":
+            return request_id
+        time.sleep(poll_interval)
+
+    # Timeout reached - write final state to unblock future re-login attempts
+    try:
+        current_state = _read_handshake_state()
+        # Only write timeout state if our request_id is still current (not replaced)
+        if current_state and current_state.get("request_id") == request_id:
+            timeout_payload = {
+                "status": "timeout",
+                "request_id": request_id,
+                "ts": time.time(),
+                "source": "ui",
+            }
+            redis_client.set(RELOGIN_KEY, json.dumps(timeout_payload), ex=120)
+            logger.debug("Wrote timeout state for handshake request_id=%s", request_id)
+    except Exception as timeout_state_exc:
+        logger.warning("Could not write timeout state to Redis: %s", timeout_state_exc)
+
+    raise TimeoutError("Worker did not acknowledge re-login handshake in time")
+
+
+def _finalize_relogin_handshake(request_id: str | None, status: str) -> None:
+    if not request_id or redis_client is None:
+        return
+    payload = {
+        "status": status,
+        "request_id": request_id,
+        "ts": time.time(),
+        "source": "ui",
+    }
+    try:
+        redis_client.set(RELOGIN_KEY, json.dumps(payload), ex=120)
+    except Exception:
+        logger.debug("Failed to update re-login handshake status", exc_info=True)
+
+
+def _credential_fingerprint() -> Dict[str, str] | None:
+    api_id = None
+    api_hash = None
+    if config:
+        api_id = getattr(config, "api_id", None)
+        api_hash = getattr(config, "api_hash", None)
+    if api_id is None:
+        raw = os.getenv("TG_API_ID")
+        if raw:
+            try:
+                api_id = int(raw)
+            except Exception:
+                api_id = None
+    if not api_hash:
+        api_hash = os.getenv("TG_API_HASH")
+    if api_id is None or not api_hash:
+        return None
+    fingerprint = hashlib.sha256(api_hash.encode("utf-8")).hexdigest()
+    return {"api_id": str(api_id), "api_hash_sha256": fingerprint}
+
+
+def _publish_ui_credentials() -> None:
+    if redis_client is None:
+        return
+    fingerprint = _credential_fingerprint()
+    if not fingerprint:
+        return
+    payload = {
+        "fingerprint": fingerprint,
+        "source": "ui",
+        "ts": time.time(),
+    }
+    try:
+        redis_client.set(CREDENTIALS_UI_KEY, json.dumps(payload), ex=3600)
+    except Exception:
+        logger.debug("Failed to write credential fingerprint", exc_info=True)
 
 
 def _store_login_context(phone: str, data: Dict[str, Any]) -> None:
@@ -571,6 +764,145 @@ def _load_login_context(phone: str) -> Dict[str, Any] | None:
         _login_ctx.pop(_normalize_phone(phone), None)
         return None
     return data
+
+
+def _clear_login_context(phone: str) -> None:
+    """Remove stored login context for a phone number."""
+    normalized = _normalize_phone(phone)
+    try:
+        if redis_client is not None:
+            redis_client.delete(f"tgsentinel:login:phone:{normalized}")
+            return
+    except Exception:
+        pass
+    try:
+        fpath = _ctx_file_for_phone(normalized)
+        if fpath.exists():
+            fpath.unlink()
+            return
+    except Exception:
+        pass
+    _login_ctx.pop(normalized, None)
+
+
+def _submit_auth_request(
+    action: str, payload: Dict[str, Any], timeout: float = AUTH_REQUEST_TIMEOUT_SECS
+) -> Dict[str, Any]:
+    """Send an authentication request to the sentinel worker via Redis."""
+    if redis_client is None:
+        logger.error("[UI-AUTH] Redis connection not available for auth request")
+        raise RuntimeError("Redis connection not available for auth request")
+
+    request_id = uuid.uuid4().hex
+    message = {"action": action, "request_id": request_id}
+    message.update(payload)
+
+    logger.info(
+        "[UI-AUTH] Submitting %s request (request_id=%s) to sentinel via Redis",
+        action,
+        request_id,
+    )
+    logger.debug("[UI-AUTH] Request payload keys: %s", list(message.keys()))
+
+    try:
+        redis_client.rpush(AUTH_QUEUE_KEY, json.dumps(message))
+        logger.debug("[UI-AUTH] Request pushed to queue: %s", AUTH_QUEUE_KEY)
+    except Exception as exc:
+        logger.error("[UI-AUTH] Failed to enqueue auth request: %s", exc, exc_info=True)
+        raise RuntimeError(f"Failed to enqueue auth request: {exc}") from exc
+
+    logger.debug("[UI-AUTH] Waiting for response (timeout=%.1fs)...", timeout)
+    deadline = time.time() + timeout
+    poll_interval = 0.5
+    poll_count = 0
+    while time.time() < deadline:
+        poll_count += 1
+        try:
+            raw = redis_client.hget(AUTH_RESPONSE_HASH, request_id)
+        except Exception as exc:
+            logger.error(
+                "[UI-AUTH] Failed to read auth response: %s", exc, exc_info=True
+            )
+            raise RuntimeError(f"Failed to read auth response: {exc}") from exc
+
+        if raw:
+            logger.info(
+                "[UI-AUTH] Received response after %d polls (%.1fs elapsed)",
+                poll_count,
+                time.time() - (deadline - timeout),
+            )
+            try:
+                redis_client.hdel(AUTH_RESPONSE_HASH, request_id)
+            except Exception:
+                pass
+            if isinstance(raw, bytes):
+                raw = raw.decode()
+            try:
+                response = json.loads(str(raw))
+                logger.debug(
+                    "[UI-AUTH] Response parsed: status=%s", response.get("status")
+                )
+                return response
+            except Exception as exc:
+                logger.error(
+                    "[UI-AUTH] Invalid auth response payload: %s", exc, exc_info=True
+                )
+                raise RuntimeError(f"Invalid auth response payload: {exc}") from exc
+
+        time.sleep(poll_interval)
+
+    logger.warning(
+        "[UI-AUTH] Timeout waiting for sentinel response (%.1fs, %d polls)",
+        timeout,
+        poll_count,
+    )
+    raise TimeoutError("Sentinel did not respond to auth request in time")
+
+
+def _wait_for_worker_authorization(timeout: float = 60.0) -> bool:
+    """Wait for the sentinel worker to report an authorized state."""
+    logger.debug(
+        "[UI-AUTH] Waiting for worker authorization (timeout=%.1fs)...", timeout
+    )
+    if redis_client is None:
+        logger.error("[UI-AUTH] Redis client not available for authorization check")
+        return False
+
+    deadline = time.time() + timeout
+    poll_interval = 1.0
+    poll_count = 0
+    while time.time() < deadline:
+        poll_count += 1
+        try:
+            worker_status_raw = redis_client.get("tgsentinel:worker_status")
+        except Exception as exc:
+            logger.debug("[UI-AUTH] Failed to read worker status: %s", exc)
+            worker_status_raw = None
+        if worker_status_raw:
+            if isinstance(worker_status_raw, bytes):
+                worker_status_raw = worker_status_raw.decode()
+            try:
+                worker_status = json.loads(str(worker_status_raw))
+                logger.debug(
+                    "[UI-AUTH] Worker status poll %d: authorized=%s",
+                    poll_count,
+                    worker_status.get("authorized"),
+                )
+            except Exception:
+                worker_status = {}
+            if worker_status.get("authorized") is True:
+                logger.info(
+                    "[UI-AUTH] Worker authorization confirmed after %d polls",
+                    poll_count,
+                )
+                return True
+        time.sleep(poll_interval)
+    logger.warning(
+        "[UI-AUTH] Worker authorization timeout after %d polls (%.1fs)",
+        poll_count,
+        timeout,
+    )
+    return False
 
 
 def _execute(sql: str, **params: Any) -> None:
@@ -796,6 +1128,41 @@ def _compute_health() -> Dict[str, Any]:
             redis_online = True
         except Exception as exc:  # pragma: no cover - redis may be offline
             logger.debug("Redis depth unavailable: %s", exc)
+    # Fallback: if depth is still 0 or client missing, try a one-off connection using config.redis
+    try:
+        if (not redis_client or redis_depth == 0) and redis:
+            if config and getattr(config, "redis", None):
+                rcfg = config.redis
+                try:
+                    tmp = redis.Redis(
+                        host=rcfg.get("host", "localhost"),
+                        port=int(rcfg.get("port", 6379)),
+                        db=int(rcfg.get("db", 0)),
+                        decode_responses=True,
+                        socket_timeout=1.0,
+                    )
+                    # Try both stream names explicitly
+                    dv = 0
+                    for nm in [
+                        rcfg.get("stream", STREAM_DEFAULT),
+                        "sentinel:messages",
+                        "tgsentinel:messages",
+                    ]:
+                        try:
+                            xlen_result = tmp.xlen(nm)
+                            # Type cast: synchronous Redis client returns int | None, not awaitable
+                            val = int(cast(int, xlen_result)) if xlen_result else 0
+                            if val > dv:
+                                dv = val
+                        except Exception:
+                            continue
+                    if dv > redis_depth:
+                        redis_depth = dv
+                        redis_online = True
+                except Exception:
+                    pass
+    except Exception:
+        pass
 
     db_size_mb = 0.0
     db_path = None
@@ -1321,12 +1688,13 @@ def _write_config(payload: Dict[str, Any]) -> None:
 @app.context_processor
 def inject_now() -> Dict[str, Any]:
     return {
-        "now": datetime.utcnow,
+        "now": lambda: datetime.now(timezone.utc),
         "login_required": _session_missing(),
         "ui_lock_timeout": UI_LOCK_TIMEOUT,
         "ui_lock_enabled": (
             True if UI_LOCK_PASSWORD or os.getenv("UI_LOCK_TIMEOUT") else False
         ),
+        "auth_bypass": UI_SKIP_AUTH,
     }
 
 
@@ -1525,14 +1893,15 @@ def docs_view():
 @app.get("/api/session/info")
 @_ensure_init
 def api_session_info():
-    phone = os.getenv("TG_PHONE")
+    # Default to None - phone should come from authenticated session, not env
+    phone = None
     session_path = (
         getattr(config, "telegram_session", os.getenv("TG_SESSION_PATH"))
         if config
         else os.getenv("TG_SESSION_PATH")
     )
 
-    # Try to get actual username and avatar from Redis (stored by worker)
+    # Try to get actual username, avatar, and phone from Redis (stored by worker after auth)
     username = _fallback_username()
     avatar = _fallback_avatar()
     if redis_client:
@@ -1545,11 +1914,14 @@ def api_session_info():
                 user_info = json.loads(str(user_info_str))
                 username = user_info.get("username") or username
                 avatar = user_info.get("avatar") or avatar
-                # If phone is not in env, try to get it from user_info
-                if not phone:
-                    phone = user_info.get("phone")
+                # Phone should ALWAYS come from authenticated session
+                phone = user_info.get("phone")
         except Exception as exc:
             logger.debug("Could not fetch user info from Redis: %s", exc)
+
+    # Fallback to env only if Redis is completely unavailable (dev/test scenarios)
+    if not phone:
+        phone = os.getenv("TG_PHONE")
 
     return jsonify(
         {
@@ -1596,6 +1968,94 @@ def api_session_logout():
         )
     except Exception as exc:
         logger.error("Failed to logout session: %s", exc)
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@app.post("/api/session/upload")
+@_ensure_init
+def api_session_upload():
+    """Upload and restore a Telegram session file.
+
+    Accepts a .session file upload, validates it, and installs it as the active session.
+    The sentinel worker will detect and use it on next connection check.
+    """
+    try:
+        # Check if file is in request
+        if "session_file" not in request.files:
+            return jsonify({"status": "error", "message": "No file provided"}), 400
+
+        file = request.files["session_file"]
+
+        if file.filename == "":
+            return jsonify({"status": "error", "message": "No file selected"}), 400
+
+        # Read file content
+        file_content = file.read()
+
+        # Validate the session file
+        is_valid, validation_msg = _validate_session_file(file_content)
+        if not is_valid:
+            logger.warning("[UI-AUTH] Invalid session upload: %s", validation_msg)
+            return jsonify({"status": "error", "message": validation_msg}), 400
+
+        # Clear existing session first
+        session_path = _resolve_session_path()
+        _invalidate_session(session_path)
+
+        # Write new session file
+        target_path = Path(session_path or "/app/data/tgsentinel.session")
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(target_path, "wb") as f:
+            f.write(file_content)
+
+        # Set proper permissions
+        os.chmod(target_path, 0o666)
+        try:
+            os.chmod(target_path.parent, 0o777)
+        except Exception:
+            pass
+
+        logger.info(
+            "[UI-AUTH] Session file uploaded: %s (%d bytes)",
+            target_path,
+            len(file_content),
+        )
+
+        # Mark as authenticated in Flask session
+        session["telegram_authenticated"] = True
+
+        # Trigger sentinel to reload and check session
+        try:
+            Path("/app/data/.reload_config").touch()
+        except Exception:
+            pass
+
+        # Wait for worker to validate the session
+        logger.info("[UI-AUTH] Waiting for worker to validate uploaded session...")
+        if _wait_for_worker_authorization(timeout=30.0):
+            return jsonify(
+                {
+                    "status": "ok",
+                    "message": "Session restored successfully",
+                    "validation": validation_msg,
+                }
+            )
+        else:
+            # Session file was valid SQLite but Telegram rejected it
+            logger.warning("[UI-AUTH] Uploaded session not authorized by Telegram")
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Session file is valid but not authorized. It may be expired or revoked.",
+                    }
+                ),
+                401,
+            )
+
+    except Exception as exc:
+        logger.error("[UI-AUTH] Session upload failed: %s", exc, exc_info=True)
         return jsonify({"status": "error", "message": str(exc)}), 500
 
 
@@ -1652,71 +2112,173 @@ def api_session_login_start():
         phone = _normalize_phone(str(payload.get("phone", "")).strip())
         if not phone:
             return jsonify({"status": "error", "message": "Phone is required"}), 400
-
-        api_id_raw = os.getenv("TG_API_ID", "").strip()
-        api_hash = os.getenv("TG_API_HASH", "").strip()
-        if not api_id_raw or not api_hash:
+        try:
+            response = _submit_auth_request("start", {"phone": phone})
+        except TimeoutError:
+            logger.error("Sentinel did not respond to login start request in time")
             return (
                 jsonify(
-                    {"status": "error", "message": "Missing TG_API_ID / TG_API_HASH"}
+                    {
+                        "status": "error",
+                        "message": "Sentinel did not respond in time. Please retry shortly.",
+                    }
                 ),
-                400,
+                503,
             )
-        try:
-            api_id = int(api_id_raw)
-        except Exception:
-            return (
-                jsonify({"status": "error", "message": "TG_API_ID must be integer"}),
-                400,
-            )
-
-        # Use a temporary session path for re-login so current session stays active
-        active_session = _resolve_session_path() or str(
-            (Path(__file__).resolve().parents[1] / "data" / "tgsentinel.session")
-        )
-        session_path = str(
-            Path(active_session).with_suffix(Path(active_session).suffix + ".new")
-        )
-
-        # Lazy import to avoid hard dependency during tests
-        # Send code
-        async def _send_code():
-            client_cls = TelegramClient
-            if client_cls is None:
-                # No Telethon available - simulate success and store dummy code hash
-                _store_login_context(
-                    phone, {"phone_code_hash": "dummy", "session_path": session_path}
-                )
-                return
-            client = client_cls(session_path, api_id, api_hash)  # type: ignore[misc]
-            await client.connect()  # type: ignore[misc]
-            sent = await client.send_code_request(phone)  # type: ignore[misc]
-            # Persist phone_code_hash for verification
-            _store_login_context(
-                phone,
-                {
-                    "phone_code_hash": getattr(sent, "phone_code_hash", None),
-                    "session_path": session_path,
-                },
-            )
-            await client.disconnect()  # type: ignore[misc]
-
-        import asyncio as _asyncio
-
-        try:
-            _asyncio.run(_send_code())
         except Exception as send_exc:
-            # In tests or offline environments, simulate a sent code
-            logger.debug(
-                "Login start send_code failed (%s), simulating success", send_exc
-            )
-            _store_login_context(
-                phone, {"phone_code_hash": "dummy", "session_path": session_path}
+            logger.error("Login start failed to enqueue request: %s", send_exc)
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Failed to contact sentinel. Please try again.",
+                    }
+                ),
+                502,
             )
 
-        return jsonify({"status": "ok", "message": "Code sent"})
+        if response.get("status") != "ok":
+            message = response.get("message", "Failed to send code. Try again.")
+            reason = response.get("reason")
+            retry_after = response.get("retry_after")
+            logger.warning("Sentinel rejected login start request: %s", message)
+            if reason in {"flood_wait", "resend_unavailable"}:
+                payload = {"status": "error", "message": message, "reason": reason}
+                if retry_after is not None:
+                    payload["retry_after"] = retry_after
+                resp = jsonify(payload)
+                resp.status_code = 429
+                if retry_after is not None:
+                    resp.headers["Retry-After"] = str(retry_after)
+                return resp
+            return jsonify({"status": "error", "message": message}), 502
+
+        phone_code_hash = response.get("phone_code_hash")
+        if not phone_code_hash:
+            logger.warning("Sentinel response missing phone_code_hash for login start")
+            return (
+                jsonify(
+                    {"status": "error", "message": "Invalid response from sentinel"}
+                ),
+                502,
+            )
+
+        _store_login_context(
+            phone,
+            {
+                "phone_code_hash": phone_code_hash,
+                "timeout": response.get("timeout"),
+                "type": response.get("type"),
+            },
+        )
+
+        return jsonify(
+            {
+                "status": "ok",
+                "message": response.get("message", "Code sent"),
+                "timeout": response.get("timeout"),
+            }
+        )
     except Exception as exc:
         logger.error("Login start failed: %s", exc)
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@app.post("/api/session/login/resend")
+@_ensure_init
+def api_session_login_resend():
+    """Resend a login code using the existing temporary session context."""
+
+    try:
+        if not request.is_json:
+            return jsonify({"status": "error", "message": "JSON body required"}), 400
+        payload = request.get_json(silent=True) or {}
+        phone = _normalize_phone(str(payload.get("phone", "")).strip())
+        if not phone:
+            return jsonify({"status": "error", "message": "Phone is required"}), 400
+
+        ctx = _load_login_context(phone)
+        if not ctx:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "No active login session. Send a new code first.",
+                    }
+                ),
+                410,
+            )
+
+        previous_hash = ctx.get("phone_code_hash")
+        try:
+            response = _submit_auth_request("resend", {"phone": phone})
+        except TimeoutError:
+            logger.error("Sentinel did not respond to login resend request in time")
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Sentinel timeout while resending code. Please retry.",
+                    }
+                ),
+                503,
+            )
+        except Exception as resend_exc:
+            logger.error("Login resend enqueue failed: %s", resend_exc)
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Failed to contact sentinel. Please try again shortly.",
+                    }
+                ),
+                502,
+            )
+
+        if response.get("status") != "ok":
+            message = response.get("message", "Failed to resend code.")
+            reason = response.get("reason")
+            retry_after = response.get("retry_after")
+            logger.warning("Sentinel rejected login resend request: %s", message)
+            if reason in {"flood_wait", "resend_unavailable"}:
+                payload = {"status": "error", "message": message, "reason": reason}
+                if retry_after is not None:
+                    payload["retry_after"] = retry_after
+                resp = jsonify(payload)
+                resp.status_code = 429
+                if retry_after is not None:
+                    resp.headers["Retry-After"] = str(retry_after)
+                return resp
+            return jsonify({"status": "error", "message": message}), 502
+
+        new_hash = response.get("phone_code_hash") or previous_hash
+        if not new_hash:
+            logger.warning("Sentinel response missing phone_code_hash for resend")
+            return (
+                jsonify(
+                    {"status": "error", "message": "Invalid response from sentinel"}
+                ),
+                502,
+            )
+
+        _store_login_context(
+            phone,
+            {
+                "phone_code_hash": new_hash,
+                "timeout": response.get("timeout"),
+                "type": response.get("type"),
+            },
+        )
+
+        return jsonify(
+            {
+                "status": "ok",
+                "message": response.get("message", "Code resent"),
+                "timeout": response.get("timeout"),
+            }
+        )
+    except Exception as exc:
+        logger.error("Login resend failed: %s", exc)
         return jsonify({"status": "error", "message": str(exc)}), 500
 
 
@@ -1737,28 +2299,8 @@ def api_session_login_verify():
                 400,
             )
 
-        api_id_raw = os.getenv("TG_API_ID", "").strip()
-        api_hash = os.getenv("TG_API_HASH", "").strip()
-        if not api_id_raw or not api_hash:
-            return (
-                jsonify(
-                    {"status": "error", "message": "Missing TG_API_ID / TG_API_HASH"}
-                ),
-                400,
-            )
-        try:
-            api_id = int(api_id_raw)
-        except Exception:
-            return (
-                jsonify({"status": "error", "message": "TG_API_ID must be integer"}),
-                400,
-            )
-
         ctx = _load_login_context(phone) or {}
         phone_code_hash = ctx.get("phone_code_hash")
-        session_path = ctx.get("session_path") or str(
-            (Path(__file__).resolve().parents[1] / "data" / "tgsentinel.session.new")
-        )
 
         if not phone_code_hash:
             return (
@@ -1771,111 +2313,61 @@ def api_session_login_verify():
                 410,
             )
 
-        client_cls = TelegramClient
         try:
-            from telethon.errors import SessionPasswordNeededError  # type: ignore
-        except Exception:  # pragma: no cover - optional
-
-            class SessionPasswordNeededError(Exception):
-                pass
-
-        async def _verify():
-            if client_cls is None:
-                # Without Telethon we cannot verify; surface as expired to prompt resend
-                raise SessionPasswordNeededError("Telethon unavailable")
-            client = client_cls(session_path, api_id, api_hash)  # type: ignore[misc]
-            await client.connect()  # type: ignore[misc]
-            try:
-                if phone_code_hash:
-                    await client.sign_in(phone=phone, code=code, phone_code_hash=phone_code_hash)  # type: ignore[misc]
-                else:
-                    await client.sign_in(phone=phone, code=code)  # type: ignore[misc]
-            except SessionPasswordNeededError:
-                if not password:
-                    raise
-                await client.sign_in(password=password)  # type: ignore[misc]
-
-            me = await client.get_me()  # type: ignore[misc]
-
-            # Cache user info and try to download avatar for immediate UI refresh
-            try:
-                avatar_path = None
-                try:
-                    photos = await client.get_profile_photos("me", limit=1)  # type: ignore[misc]
-                    if photos:
-                        avatar_filename = "user_avatar.jpg"
-                        # Save into shared data directory
-                        avatar_file = f"/app/data/{avatar_filename}"
-                        await client.download_profile_photo("me", file=avatar_file)  # type: ignore[misc]
-                        avatar_path = f"/data/{avatar_filename}"
-                except Exception:
-                    avatar_path = None
-
-                ui = {
-                    "id": getattr(me, "id", None),
-                    "username": getattr(me, "username", None)
-                    or getattr(me, "first_name", "Analyst"),
-                    "phone": getattr(me, "phone", None),
-                    "avatar": avatar_path or "/static/images/logo.png",
-                }
-                if redis_client:
-                    redis_client.setex("tgsentinel:user_info", 3600, json.dumps(ui))
-            except Exception:
-                pass
-
-            await client.disconnect()  # type: ignore[misc]
-
-        import asyncio as _asyncio
-
-        _asyncio.run(_verify())
-
-        # Promote the new temporary session to active only after successful auth
-        try:
-            active_session = _resolve_session_path() or str(
-                (Path(__file__).resolve().parents[1] / "data" / "tgsentinel.session")
+            response = _submit_auth_request(
+                "verify",
+                {
+                    "phone": phone,
+                    "code": code,
+                    "phone_code_hash": phone_code_hash,
+                    "password": password if password else None,
+                },
+                timeout=AUTH_REQUEST_TIMEOUT_SECS,
             )
-            src = Path(session_path)
-            dst = Path(active_session)
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            backup = None
-            if dst.exists():
-                try:
-                    backup = dst.with_suffix(dst.suffix + ".bak")
-                    dst.replace(backup)
-                except Exception:
-                    backup = None
-            if src.exists():
-                src.replace(dst)
-            # Ensure future checks see this path immediately
-            try:
-                os.environ["TG_SESSION_PATH"] = str(dst)
-            except Exception:
-                pass
-            if backup and backup.exists():
-                try:
-                    backup.unlink()
-                except Exception:
-                    pass
-        except Exception as move_exc:
-            logger.warning("Could not promote new session: %s", move_exc)
-
-        # Success; refresh config in case session path changed
-        try:
-            reload_config()
-        except Exception:
-            pass
-
-        # Signal sentinel container to reload configuration/session
-        try:
-            reload_marker = Path("/app/data/.reload_config")
-            reload_marker.touch()
-            logger.info(
-                "Created reload marker after successful login to reload sentinel"
+        except TimeoutError:
+            logger.error("Sentinel did not respond to login verification in time")
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Sentinel timeout while verifying code.",
+                    }
+                ),
+                503,
             )
-        except Exception as marker_exc:
-            logger.debug(f"Could not create reload marker post-login: {marker_exc}")
+        except Exception as verify_exc:
+            logger.error(
+                "Login verification failed to contact sentinel: %s", verify_exc
+            )
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Failed to contact sentinel. Please retry.",
+                    }
+                ),
+                503,
+            )
 
-        # Mark this Flask session as authenticated
+        if response.get("status") != "ok":
+            message = response.get("message", "Verification failed.")
+            logger.warning("Sentinel reported login verification error: %s", message)
+            return jsonify({"status": "error", "message": message}), 400
+
+        _clear_login_context(phone)
+
+        if not _wait_for_worker_authorization(timeout=60.0):
+            logger.warning("Sentinel did not advertise authorized status after login")
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Sentinel did not become ready in time. Try again.",
+                    }
+                ),
+                503,
+            )
+
         session["telegram_authenticated"] = True
         session.permanent = True  # Persist across browser sessions
 
@@ -2731,6 +3223,43 @@ def api_restart_sentinel():
 @_ensure_init
 def api_config_channels():
     return jsonify({"channels": _serialize_channels()})
+
+
+@app.get("/api/worker/status")
+@_ensure_init
+def api_worker_status():
+    """Return worker authorization status as seen via Redis, if available."""
+    try:
+        status = None
+        if redis_client:
+            try:
+                raw = redis_client.get("tgsentinel:worker_status")
+                if raw:
+                    raw = raw.decode() if isinstance(raw, bytes) else raw
+                    status = json.loads(str(raw))
+            except Exception:
+                status = None
+        if not status:
+            return jsonify({"authorized": None, "status": "unknown"})
+        # Normalize fields and include rate limit info if present
+        response = {
+            "authorized": bool(status.get("authorized")),
+            "status": status.get("status", "unknown"),
+            "ts": status.get("ts"),
+        }
+
+        # Add rate limit information if present
+        if status.get("status") == "rate_limited":
+            response["rate_limit"] = {
+                "action": status.get("rate_limit_action"),
+                "wait_seconds": status.get("rate_limit_wait"),
+                "wait_until": status.get("rate_limit_until"),
+            }
+
+        return jsonify(response)
+    except Exception as exc:
+        logger.debug("Worker status error: %s", exc)
+        return jsonify({"authorized": None, "status": "unknown"})
 
 
 @app.route("/api/config/current", methods=["GET"])
@@ -4036,6 +4565,19 @@ def api_console_command():
         return jsonify({"status": "accepted", "command": command, "deleted": deleted})
 
     if command.lower().startswith("/purge") and "db" in command.lower():
+        # Require explicit confirmation before destructive database wipe
+        confirmation = payload.get("confirm")
+        if not confirmation or confirmation != "DELETE_ALL_DATA":
+            return (
+                jsonify(
+                    {
+                        "status": "confirmation_required",
+                        "message": "Database purge requires explicit confirmation. Send 'confirm': 'DELETE_ALL_DATA' to proceed.",
+                    }
+                ),
+                400,
+            )
+
         # Call the existing clean database endpoint logic
         try:
             result = api_clean_database()
@@ -4185,99 +4727,112 @@ def api_export_diagnostics():
 @app.get("/api/telegram/chats")
 @_ensure_init
 def api_telegram_chats():
-    """Return Telegram chats using direct Telethon access for tests/dev.
+    """Return Telegram chats using Redis delegation to sentinel.
 
-    This endpoint validates env credentials and session file presence and then
-    queries dialogs via Telethon. This behavior matches tests that stub
-    Telethon, and avoids Redis-based indirection in this code path.
+    This endpoint delegates to the sentinel process (sole session DB owner)
+    via Redis request/response pattern to maintain single-owner architecture.
     """
-    # Validate credentials
-    api_id_raw = os.getenv("TG_API_ID", "").strip()
-    api_hash = os.getenv("TG_API_HASH", "").strip()
-    if not api_id_raw or not api_hash:
+    logger.info("[UI-CHATS] Telegram chats request received")
+    if redis_client is None:
+        logger.error("[UI-CHATS] Redis client not available")
         return (
             jsonify(
-                {"status": "error", "message": "TG_API_ID and TG_API_HASH are required"}
+                {
+                    "status": "error",
+                    "message": "Redis not available. Cannot fetch chats.",
+                }
             ),
-            400,
+            503,
         )
+
     try:
-        api_id = int(api_id_raw)
-    except Exception:
-        return (
-            jsonify({"status": "error", "message": "TG_API_ID must be numeric"}),
-            400,
+        # Generate unique request ID
+        import uuid
+        import time as _time  # noqa: WPS433
+
+        request_id = str(uuid.uuid4())
+        request_key = f"tgsentinel:request:get_dialogs:{request_id}"
+
+        logger.info("[UI-CHATS] Creating request: request_id=%s", request_id)
+        logger.debug("[UI-CHATS] Request key: %s", request_key)
+
+        # Submit request to sentinel
+        request_data = {"request_id": request_id, "timestamp": _time.time()}
+        redis_client.setex(request_key, 60, json.dumps(request_data))
+        logger.info("[UI-CHATS] Request submitted, waiting for response (max 30s)...")
+        logger.debug(
+            "[UI-CHATS] Response key: tgsentinel:response:get_dialogs:%s", request_id
         )
 
-    # Validate session path (prefer freshly loaded config if missing)
-    session_path = getattr(config, "telegram_session", None) if config else None
-    if not session_path:
-        # Try Flask app-config injected config (used by tests)
-        try:
-            test_cfg = app.config.get("TGSENTINEL_CONFIG")  # type: ignore[attr-defined]
-            session_path = getattr(test_cfg, "telegram_session", None)
-        except Exception:
-            session_path = session_path
-    if not session_path:
-        try:
-            fresh_cfg = load_config()
-            session_path = getattr(fresh_cfg, "telegram_session", None)
-        except Exception:
-            session_path = session_path or os.getenv("TG_SESSION_PATH")
-    if not session_path or not Path(session_path).exists():
+        # Wait for response (max 30 seconds - dialog fetching can be slow)
+        response_key = f"tgsentinel:response:get_dialogs:{request_id}"
+        poll_count = 0
+        for _ in range(60):  # 60 * 0.5s = 30s timeout
+            poll_count += 1
+            _time.sleep(0.5)
+            response_data = redis_client.get(response_key)
+            if response_data:
+                logger.info("[UI-CHATS] Response received after %d polls", poll_count)
+                try:
+                    # Ensure response_data is a string
+                    if isinstance(response_data, bytes):
+                        response_data = response_data.decode()
+                    response = json.loads(str(response_data))
+                    logger.debug(
+                        "[UI-CHATS] Response status: %s", response.get("status")
+                    )
+
+                    # Clean up
+                    redis_client.delete(response_key)
+
+                    if response.get("status") == "error":
+                        logger.error(
+                            "[UI-CHATS] Sentinel returned error: %s",
+                            response.get("error"),
+                        )
+                        return (
+                            jsonify(
+                                {
+                                    "status": "error",
+                                    "message": response.get(
+                                        "error", "Failed to fetch chats"
+                                    ),
+                                }
+                            ),
+                            500,
+                        )
+
+                    chats = response.get("chats", [])
+                    logger.info("[UI-CHATS] Returning %d chats to client", len(chats))
+                    return jsonify({"chats": chats})
+                except json.JSONDecodeError as exc:
+                    logger.error("[UI-CHATS] Invalid JSON response: %s", exc)
+                    return (
+                        jsonify(
+                            {
+                                "status": "error",
+                                "message": "Invalid response from sentinel",
+                            }
+                        ),
+                        502,
+                    )
+
+        # Timeout - clean up request key
+        redis_client.delete(request_key)
+        logger.warning("[UI-CHATS] Request timed out after %d polls (30s)", poll_count)
         return (
-            jsonify({"status": "error", "message": "Telegram session not found"}),
-            404,
+            jsonify(
+                {
+                    "status": "error",
+                    "message": "Sentinel did not respond in time. Please retry.",
+                }
+            ),
+            504,
         )
 
-    # Import Telethon lazily
-    from telethon import TelegramClient
-    from telethon.tl.types import Channel, Chat as TgChat
-    import asyncio
-
-    def run(coro):
-        return asyncio.run(coro)
-
-    client = TelegramClient(session_path, api_id, api_hash)
-    try:
-        run(client.connect())
-        auth = run(client.is_user_authorized())
-        if not auth:
-            return jsonify({"status": "error", "message": "Unauthorized"}), 401
-
-        dialogs = run(client.get_dialogs())
-        chats = []
-        for d in dialogs:
-            entity = getattr(d, "entity", None)
-            if isinstance(entity, (Channel, TgChat)):
-                chat_type = "group"
-                if isinstance(entity, Channel):
-                    if getattr(entity, "broadcast", False):
-                        chat_type = "channel"
-                    elif getattr(entity, "megagroup", False):
-                        chat_type = "supergroup"
-                    else:
-                        chat_type = "group"
-                name = getattr(entity, "title", None) or getattr(
-                    entity, "first_name", "Unknown"
-                )
-                chats.append(
-                    {
-                        "id": getattr(entity, "id", 0),
-                        "name": name,
-                        "type": chat_type,
-                        "username": getattr(entity, "username", None),
-                    }
-                )
-        return jsonify({"chats": chats})
     except Exception as exc:
-        logger.error("Failed to list Telegram chats: %s", exc)
+        logger.error("Failed to fetch Telegram chats: %s", exc)
         return jsonify({"status": "error", "message": str(exc)}), 500
-    finally:
-        try:
-            run(client.disconnect())
-        except Exception:
-            pass
 
 
 @app.get("/api/telegram/users")
@@ -4325,18 +4880,12 @@ def api_telegram_users():
             # Do not fail cache shortcut path; continue to normal flow
             pass
 
-        # If app Redis client is absent and cache fallback didn't return,
-        # surface a Redis-not-available error for explicit error test.
+        # If app Redis client is absent, return empty users list for consistent behavior
         if redis_client is None:
-            return (
-                jsonify(
-                    {
-                        "status": "error",
-                        "message": "Redis not available. Cannot fetch Telegram users.",
-                    }
-                ),
-                503,
+            logger.warning(
+                "Redis not available for Telegram users fetch - returning empty list"
             )
+            return jsonify({"users": []})
 
         # Create request for sentinel to process (always fetch fresh data)
         request_id = f"{int(datetime.now(timezone.utc).timestamp() * 1000)}"
@@ -4344,26 +4893,38 @@ def api_telegram_users():
         request_data = {"request_id": request_id, "type": "users"}
 
         redis_client.setex(request_key, 60, json.dumps(request_data))
-        logger.debug("Created Telegram users request: %s", request_id)
+        logger.info("[UI-USERS] Created request: request_id=%s", request_id)
+        logger.debug("[UI-USERS] Request key: %s", request_key)
 
         # Wait for response (max 30 seconds - dialog fetching can be slow)
         response_key = f"tgsentinel:telegram_users_response:{request_id}"
         import time as _time  # noqa: WPS433
 
+        logger.info("[UI-USERS] Waiting for response (max 30s)...")
+        poll_count = 0
         for _ in range(60):  # 60 * 0.5s = 30s timeout
+            poll_count += 1
             _time.sleep(0.5)
             response_data = redis_client.get(response_key)
             if response_data:
+                logger.info("[UI-USERS] Response received after %d polls", poll_count)
                 try:
                     # Ensure response_data is a string
                     if isinstance(response_data, bytes):
                         response_data = response_data.decode()
                     response = json.loads(str(response_data))
+                    logger.debug(
+                        "[UI-USERS] Response status: %s", response.get("status")
+                    )
 
                     # Clean up
                     redis_client.delete(response_key)
 
                     if response.get("status") == "error":
+                        logger.error(
+                            "[UI-USERS] Sentinel returned error: %s",
+                            response.get("message"),
+                        )
                         return (
                             jsonify(
                                 {
@@ -4377,17 +4938,22 @@ def api_telegram_users():
                         )
 
                     users = response.get("users", [])
+                    logger.info("[UI-USERS] Returning %d users to client", len(users))
                     return jsonify({"users": users})
 
                 except Exception as parse_exc:
-                    logger.error("Failed to parse users response: %s", parse_exc)
+                    logger.error("[UI-USERS] Failed to parse response: %s", parse_exc)
                     redis_client.delete(response_key)
                     # Per tests, malformed response should fall back to empty, 200
                     return jsonify({"users": []})
 
         # Timeout - clean up
         redis_client.delete(request_key)
-        logger.warning("Telegram users request timed out: %s", request_id)
+        logger.warning(
+            "[UI-USERS] Request timed out after %d polls (30s): %s",
+            poll_count,
+            request_id,
+        )
         # Timeout → graceful fallback
         # If config has monitored users, return them; else return empty
         monitored_users_list = []

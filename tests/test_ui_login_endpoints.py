@@ -2,8 +2,7 @@
 
 import json
 import os
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -15,11 +14,13 @@ def _make_app():
     os.environ.setdefault("DB_URI", "sqlite:///:memory:")
 
     # Mock config
-    with patch("app.load_config") as mock_load:
+    with patch("ui.app.load_config") as mock_load:
         cfg = MagicMock()
         cfg.channels = []
         cfg.db_uri = "sqlite:///:memory:"
         cfg.redis = {"host": "localhost", "port": 6379, "stream": "tgsentinel:messages"}
+        cfg.api_id = 123456
+        cfg.api_hash = "hash"
         mock_load.return_value = cfg
 
         import app as flask_app  # type: ignore
@@ -35,128 +36,215 @@ def test_login_start_requires_phone(missing_field):
     payload = {"phone": "+15550100"}
     if missing_field:
         payload.pop("phone")
-    resp = client.post("/api/session/login/start", json=payload)
-    assert resp.status_code == (400 if missing_field else 200)
+    with (
+        patch("ui.app.redis_client") as mock_r,
+        patch("ui.app._submit_auth_request") as mock_submit,
+    ):
+        mock_r.setex = MagicMock(return_value=True)
+        mock_submit.return_value = {"status": "ok", "phone_code_hash": "abc"}
+        resp = client.post("/api/session/login/start", json=payload)
+        assert resp.status_code == (400 if missing_field else 200)
+        if missing_field:
+            mock_submit.assert_not_called()
+        else:
+            mock_submit.assert_called_once_with("start", {"phone": "+15550100"})
 
 
 def test_login_start_sends_code_and_stores_context():
     app = _make_app()
     client = app.test_client()
 
-    # Patch Redis and TelegramClient
-    with patch("app.redis_client") as mock_r, patch("app.TelegramClient") as mock_tg:
+    with (
+        patch("ui.app.redis_client") as mock_r,
+        patch("ui.app._submit_auth_request") as mock_submit,
+    ):
         mock_r.setex = MagicMock(return_value=True)
-
-        inst = MagicMock()
-        async def _connect():
-            return None
-        async def _disconnect():
-            return None
-        async def _send_code(phone):  # noqa: ARG001
-            resp = MagicMock()
-            resp.phone_code_hash = "abc123"
-            return resp
-        inst.connect = _connect
-        inst.disconnect = _disconnect
-        inst.send_code_request = _send_code
-        mock_tg.return_value = inst
+        mock_submit.return_value = {
+            "status": "ok",
+            "phone_code_hash": "abc123",
+            "timeout": 30,
+        }
 
         resp = client.post("/api/session/login/start", json={"phone": "+1 555-0100"})
         assert resp.status_code == 200
-        # Ensure context stored in Redis with normalized key
+        mock_submit.assert_called_once_with("start", {"phone": "+15550100"})
+
         assert mock_r.setex.called
         key = mock_r.setex.call_args[0][0]
         assert "tgsentinel:login:phone:" in key
+        stored = json.loads(mock_r.setex.call_args[0][2])
+        assert stored["phone_code_hash"] == "abc123"
 
 
 def test_login_verify_410_when_context_missing():
     app = _make_app()
     client = app.test_client()
 
-    with patch("app.redis_client") as mock_r:
+    with (
+        patch("ui.app.redis_client") as mock_r,
+        patch("ui.app._submit_auth_request") as mock_submit,
+    ):
         mock_r.get.return_value = None
-        resp = client.post("/api/session/login/verify", json={"phone": "+15550100", "code": "12345"})
+        resp = client.post(
+            "/api/session/login/verify", json={"phone": "+15550100", "code": "12345"}
+        )
         assert resp.status_code == 410
         data = resp.get_json()
         assert "expired" in data["message"].lower()
+        mock_submit.assert_not_called()
 
 
-def test_login_verify_success_updates_user_info_and_touches_reload_marker(tmp_path):
+def test_login_verify_success_sets_session_and_clears_context():
     app = _make_app()
     client = app.test_client()
 
-    # Redis get must return stored phone_code_hash
     def get_side_effect(key):  # noqa: ANN001
         if isinstance(key, bytes):
             key = key.decode()
         if "tgsentinel:login:phone:" in str(key):
-            return json.dumps({"phone_code_hash": "abc123", "session_path": str(tmp_path / "sess.session")})
+            return json.dumps({"phone_code_hash": "abc123"})
         return None
 
-    with patch("app.redis_client") as mock_r, patch("app.TelegramClient") as mock_tg, patch("app.Path") as mock_path:
+    with (
+        patch("ui.app.redis_client") as mock_r,
+        patch("ui.app._submit_auth_request") as mock_submit,
+        patch("ui.app._wait_for_worker_authorization", return_value=True),
+    ):
         mock_r.get.side_effect = get_side_effect
         mock_r.setex = MagicMock(return_value=True)
+        mock_r.delete = MagicMock(return_value=1)
+        mock_submit.return_value = {"status": "ok", "message": "Authenticated"}
 
-        # Mock Path touch for reload marker
-        path_instance = MagicMock()
-        mock_path.return_value = path_instance
-
-        # Telegram client behavior
-        inst = MagicMock()
-
-        async def _connect():
-            return None
-
-        async def _disconnect():
-            return None
-
-        async def _sign_in(**kwargs):  # noqa: ARG001
-            return None
-
-        async def _get_me():
-            m = MagicMock()
-            m.id = 42
-            m.username = "analyst"
-            m.phone = "+15550100"
-            m.first_name = "Ana"
-            m.last_name = "Lyst"
-            return m
-
-        async def _get_profile_photos(*args, **kwargs):  # noqa: ARG001, ANN001
-            return [object()]
-
-        async def _download_photo(*args, **kwargs):  # noqa: ARG001, ANN001
-            return None
-
-        inst.connect = _connect
-        inst.disconnect = _disconnect
-        inst.sign_in = _sign_in
-        inst.get_me = _get_me
-        inst.get_profile_photos = _get_profile_photos
-        inst.download_profile_photo = _download_photo
-        mock_tg.return_value = inst
-
-        resp = client.post("/api/session/login/verify", json={"phone": "+1 555 0100", "code": "12345"})
+        resp = client.post(
+            "/api/session/login/verify", json={"phone": "+1 555 0100", "code": "12345"}
+        )
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["status"] == "ok"
-        # Verify user_info was set
-        assert mock_r.setex.called
-        set_key = mock_r.setex.call_args[0][0]
-        assert set_key == "tgsentinel:user_info"
-        # Verify reload marker touch attempted
-        assert mock_path.called
-        assert path_instance.touch.called
+        mock_submit.assert_called_once()
+        mock_r.delete.assert_called_once()
+        with client.session_transaction() as sess:
+            assert sess.get("telegram_authenticated") is True
 
 
 def test_relogin_and_logout_ok():
     app = _make_app()
     client = app.test_client()
 
-    with patch("app._invalidate_session", return_value={"file_removed": True}) as inv:
+    with patch(
+        "ui.app._invalidate_session", return_value={"file_removed": True}
+    ) as inv:
         r1 = client.post("/api/session/relogin")
         assert r1.status_code == 200
         r2 = client.post("/api/session/logout")
         assert r2.status_code == 200
         assert inv.call_count == 2
 
+
+def test_login_resend_requires_existing_context():
+    app = _make_app()
+    client = app.test_client()
+
+    with patch("ui.app.redis_client") as mock_r:
+        mock_r.get.return_value = None
+        resp = client.post("/api/session/login/resend", json={"phone": "+15550100"})
+        assert resp.status_code == 410
+
+
+def test_login_resend_updates_context_via_sentinel():
+    app = _make_app()
+    client = app.test_client()
+
+    ctx_payload = {"phone_code_hash": "oldhash"}
+
+    def get_side_effect(key):  # noqa: ANN001
+        if isinstance(key, bytes):
+            key = key.decode()
+        if "tgsentinel:login:phone" in str(key):
+            return json.dumps(ctx_payload)
+        return None
+
+    with (
+        patch("ui.app.redis_client") as mock_r,
+        patch("ui.app._submit_auth_request") as mock_submit,
+    ):
+        mock_r.get.side_effect = get_side_effect
+        mock_r.setex = MagicMock(return_value=True)
+        mock_submit.return_value = {"status": "ok", "phone_code_hash": "newhash"}
+
+        resp = client.post("/api/session/login/resend", json={"phone": "+1 555 0100"})
+        assert resp.status_code == 200
+        mock_submit.assert_called_once_with("resend", {"phone": "+15550100"})
+        assert mock_r.setex.called
+        stored = json.loads(mock_r.setex.call_args[0][2])
+        assert stored["phone_code_hash"] == "newhash"
+
+
+def test_login_start_handles_sentinel_error():
+    app = _make_app()
+    client = app.test_client()
+
+    with (
+        patch("ui.app.redis_client") as mock_r,
+        patch("ui.app._submit_auth_request") as mock_submit,
+    ):
+        mock_r.setex = MagicMock(return_value=True)
+        mock_submit.return_value = {"status": "error", "message": "failure"}
+        resp = client.post("/api/session/login/start", json={"phone": "+1 555 0100"})
+        assert resp.status_code == 502
+        data = resp.get_json()
+        assert data["status"] == "error"
+
+
+def test_login_start_handles_timeout():
+    app = _make_app()
+    client = app.test_client()
+
+    with (
+        patch("ui.app.redis_client") as mock_r,
+        patch("ui.app._submit_auth_request", side_effect=TimeoutError),
+    ):
+        mock_r.setex = MagicMock(return_value=True)
+        resp = client.post("/api/session/login/start", json={"phone": "+1 555 0100"})
+        assert resp.status_code == 503
+
+
+def test_login_resend_handles_timeout():
+    app = _make_app()
+    client = app.test_client()
+
+    ctx_payload = {"phone_code_hash": "oldhash"}
+
+    def get_side_effect(key):  # noqa: ANN001
+        if isinstance(key, bytes):
+            key = key.decode()
+        if "tgsentinel:login:phone" in str(key):
+            return json.dumps(ctx_payload)
+        return None
+
+    with (
+        patch("ui.app.redis_client") as mock_r,
+        patch("ui.app._submit_auth_request", side_effect=TimeoutError),
+    ):
+        mock_r.get.side_effect = get_side_effect
+        resp = client.post("/api/session/login/resend", json={"phone": "+1 555 0100"})
+        assert resp.status_code == 503
+
+
+def test_login_verify_propagates_sentinel_error():
+    app = _make_app()
+    client = app.test_client()
+
+    with (
+        patch("ui.app.redis_client") as mock_r,
+        patch("ui.app._submit_auth_request") as mock_submit,
+        patch("ui.app._wait_for_worker_authorization", return_value=True),
+    ):
+        mock_r.get.return_value = json.dumps({"phone_code_hash": "abc"})
+        mock_submit.return_value = {"status": "error", "message": "bad code"}
+        resp = client.post(
+            "/api/session/login/verify", json={"phone": "+1 555 0100", "code": "99999"}
+        )
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert "bad code" in data["message"]

@@ -1,10 +1,22 @@
+# Set umask to ensure files created are world-readable/writable (for container multi-access)
+# MUST be at the very top before any imports or file operations
+import os as _os_early
+
+_os_early.umask(0o022)
+
 import asyncio
+import hashlib
 import json
 import logging
 import os
+import signal
+import sys
+from typing import Any, Dict
+from datetime import datetime, timedelta, timezone
 
 from redis import Redis
 from telethon import TelegramClient
+from telethon.errors import SessionPasswordNeededError
 
 from .client import make_client, start_ingestion
 from .config import load_config
@@ -13,6 +25,10 @@ from .logging_setup import setup_logging
 from .metrics import dump
 from .store import init_db
 from .worker import process_loop
+
+
+AUTH_QUEUE_KEY = "tgsentinel:auth_queue"
+AUTH_RESPONSE_HASH = "tgsentinel:auth_responses"
 
 
 def _extract_banned_rights(rights):
@@ -332,15 +348,752 @@ async def _fetch_participant_info(
 async def _run():
     setup_logging()
     log = logging.getLogger("tgsentinel")
+
     cfg = load_config()
     engine = init_db(cfg.db_uri)
 
-    client = make_client(cfg)
+    client: TelegramClient = make_client(cfg)
+
+    # Ensure session file and directory have proper permissions for authentication
+    try:
+        from pathlib import Path
+
+        session_path = Path(cfg.telegram_session or "/app/data/tgsentinel.session")
+        session_dir = session_path.parent
+
+        # Ensure data directory exists and is writable
+        session_dir.mkdir(parents=True, exist_ok=True)
+        os.chmod(session_dir, 0o777)
+
+        # If session file exists, make it writable
+        if session_path.exists():
+            os.chmod(session_path, 0o666)
+            log.info("Set session file permissions to 0o666: %s", session_path)
+    except Exception as exc:
+        log.warning("Failed to set initial session permissions: %s", exc)
+
     r = Redis(host=cfg.redis["host"], port=cfg.redis["port"], decode_responses=True)
+    handshake_gate = asyncio.Event()
+    handshake_gate.set()
+    client_lock = asyncio.Lock()
+    dialogs_cache: tuple[datetime, list] | None = None
+    dialogs_cache_lock = asyncio.Lock()
+    dialogs_cache_ttl = timedelta(seconds=45)
+    authorized = False
+    auth_event = asyncio.Event()
 
-    start_ingestion(cfg, client, r)
+    def _credential_fingerprint() -> dict[str, str] | None:
+        try:
+            api_id = str(cfg.api_id)
+            api_hash = cfg.api_hash
+            digest = hashlib.sha256(api_hash.encode("utf-8")).hexdigest()
+            return {"api_id": api_id, "api_hash_sha256": digest}
+        except Exception as exc:
+            log.warning("Could not compute credential fingerprint: %s", exc)
+            return None
 
-    await client.start()  # type: ignore[misc]  # interactive login on first run
+    def _publish_and_check_credentials() -> None:
+        fingerprint = _credential_fingerprint()
+        if not fingerprint:
+            return
+        payload = {
+            "fingerprint": fingerprint,
+            "source": "sentinel",
+            "ts": datetime.now(timezone.utc).isoformat(),
+        }
+        try:
+            r.set("tgsentinel:credentials:sentinel", json.dumps(payload), ex=3600)
+        except Exception as exc:
+            log.debug("Could not store sentinel credential fingerprint: %s", exc)
+            return
+        try:
+            raw = r.get("tgsentinel:credentials:ui")
+            if not raw:
+                log.warning(
+                    "UI credential fingerprint not found in Redis; ensure UI container is running"
+                )
+                return
+            if isinstance(raw, bytes):
+                raw = raw.decode()
+            ui_payload = json.loads(str(raw))
+            ui_fp = ui_payload.get("fingerprint") or {}
+            if ui_fp != fingerprint:
+                log.error(
+                    "TG credential mismatch detected. UI=%s sentinel=%s",
+                    ui_fp,
+                    fingerprint,
+                )
+                try:
+                    r.setex(
+                        "tgsentinel:worker_status",
+                        60,
+                        json.dumps(
+                            {
+                                "authorized": False,
+                                "status": "credential_mismatch",
+                                "ts": datetime.now(timezone.utc).isoformat(),
+                            }
+                        ),
+                    )
+                except Exception:
+                    pass
+                raise SystemExit("Credential mismatch between UI and sentinel")
+        except SystemExit:
+            raise
+        except Exception as exc:
+            log.warning("Could not verify credential parity: %s", exc)
+
+    _publish_and_check_credentials()
+
+    # Defer ingestion until after authorization
+
+    def _mark_authorized(user=None):
+        nonlocal authorized
+        authorized = True
+        auth_event.set()
+        log.info(
+            "[AUTH] Marking as authorized, user=%s",
+            getattr(user, "id", None) if user else "unknown",
+        )
+        try:
+            # Store with longer TTL (1 hour) so it persists across checks
+            r.setex(
+                "tgsentinel:worker_status",
+                3600,
+                json.dumps(
+                    {
+                        "authorized": True,
+                        "status": "authorized",
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }
+                ),
+            )
+        except Exception as exc:
+            log.warning("[AUTH] Failed to update worker status: %s", exc)
+        if not user:
+            return
+        try:
+            ui_info = {
+                "id": getattr(user, "id", None),
+                "username": getattr(user, "username", None)
+                or getattr(user, "first_name", "Analyst"),
+                "phone": getattr(user, "phone", None),
+                "avatar": "/static/images/logo.png",
+            }
+            r.setex("tgsentinel:user_info", 3600, json.dumps(ui_info))
+            log.debug("[AUTH] User info stored in Redis")
+        except Exception as exc:
+            log.warning("[AUTH] Failed to store user info: %s", exc)
+
+    async def _ensure_client_connected():
+        if not client.is_connected():  # type: ignore[misc]
+            await client.connect()  # type: ignore[misc]
+
+    def _set_auth_response(request_id: str, payload: Dict[str, Any]) -> None:
+        try:
+            r.hset(AUTH_RESPONSE_HASH, request_id, json.dumps(payload))
+            r.expire(AUTH_RESPONSE_HASH, 120)
+        except Exception as exc:
+            log.warning("Failed to store auth response: %s", exc)
+
+    async def _get_cached_dialogs(force_refresh: bool = False):
+        """Fetch dialogs once and reuse them to avoid duplicate Telethon calls."""
+
+        nonlocal dialogs_cache
+        async with dialogs_cache_lock:
+            now = datetime.now(timezone.utc)
+            if (
+                not force_refresh
+                and dialogs_cache
+                and now - dialogs_cache[0] < dialogs_cache_ttl
+            ):
+                cached_len = len(dialogs_cache[1]) if dialogs_cache[1] else 0
+                log.debug("Using cached dialogs (%d entries)", cached_len)
+                return dialogs_cache[1]
+
+            log.debug("Fetching dialogs from Telegram (cache expired)")
+            # Ensure client is connected before making API call
+            await _ensure_client_connected()
+            dialogs = await client.get_dialogs()  # type: ignore[misc]
+            dialogs_cache = (now, dialogs)
+            log.info("Fetched %d dialogs from Telegram", len(dialogs))
+            return dialogs
+
+    def _extract_retry_after_seconds(exc: Exception) -> int | None:
+        for attr in ("seconds", "wait_seconds", "retry_after", "duration"):
+            val = getattr(exc, attr, None)
+            if val is None:
+                continue
+            try:
+                return max(int(val), 0)
+            except Exception:
+                continue
+        msg = str(exc).lower()
+        # Heuristic: "wait of N seconds"
+        import re
+
+        m = re.search(r"wait of\s+(\d+)\s+seconds", msg)
+        if m:
+            try:
+                return max(int(m.group(1)), 0)
+            except Exception:
+                return None
+        return None
+
+    def _normalize_auth_error(exc: Exception) -> Dict[str, Any]:
+        msg = str(exc)
+        retry_after = _extract_retry_after_seconds(exc)
+        reason = "server_error"
+        # Flood or rate-limit
+        if retry_after and retry_after > 0:
+            reason = "flood_wait"
+        # Resend exhausted or unavailable
+        low = msg.lower()
+        if "resend" in low or "available options" in low:
+            reason = "resend_unavailable"
+            # Provide a small backoff even if server didn't supply one
+            if not retry_after:
+                retry_after = 60
+        payload: Dict[str, Any] = {
+            "status": "error",
+            "message": msg,
+            "reason": reason,
+        }
+        if retry_after is not None:
+            payload["retry_after"] = retry_after
+        return payload
+
+    def _check_rate_limit(action: str, phone: str | None = None) -> tuple[bool, int]:
+        """Check if action is rate limited. Returns (is_allowed, wait_seconds)."""
+        try:
+            # Check global rate limit key
+            rate_limit_key = f"tgsentinel:rate_limit:{action}"
+            if phone:
+                rate_limit_key += f":{phone}"
+
+            ttl = r.ttl(rate_limit_key)  # type: ignore[misc]
+            ttl_int = int(ttl) if ttl else 0  # type: ignore[arg-type]
+            if ttl_int > 0:
+                log.warning(
+                    "[AUTH] Rate limit active for %s: %d seconds remaining",
+                    action,
+                    ttl_int,
+                )
+                return False, ttl_int
+            return True, 0
+        except Exception as exc:
+            log.debug("[AUTH] Rate limit check failed: %s", exc)
+            return True, 0  # Allow on check failure
+
+    def _set_rate_limit(
+        action: str, wait_seconds: int, phone: str | None = None
+    ) -> None:
+        """Set rate limit for an action."""
+        try:
+            rate_limit_key = f"tgsentinel:rate_limit:{action}"
+            if phone:
+                rate_limit_key += f":{phone}"
+
+            r.setex(rate_limit_key, wait_seconds, "1")
+            log.warning(
+                "[AUTH] Rate limit set for %s: %d seconds", action, wait_seconds
+            )
+
+            # Also store in worker status for UI visibility
+            try:
+                r.setex(
+                    "tgsentinel:worker_status",
+                    min(wait_seconds, 3600),
+                    json.dumps(
+                        {
+                            "authorized": False,
+                            "status": "rate_limited",
+                            "rate_limit_action": action,
+                            "rate_limit_wait": wait_seconds,
+                            "rate_limit_until": (
+                                datetime.now(timezone.utc)
+                                + timedelta(seconds=wait_seconds)
+                            ).isoformat(),
+                            "ts": datetime.now(timezone.utc).isoformat(),
+                        }
+                    ),
+                )
+            except Exception:
+                pass
+        except Exception as exc:
+            log.error("[AUTH] Failed to set rate limit: %s", exc)
+
+    async def _handle_auth_request(data: Dict[str, Any]) -> None:
+        nonlocal authorized
+        action = data.get("action")
+        request_id = data.get("request_id")
+        log.info(
+            "[AUTH] Processing auth request: action=%s, request_id=%s, authorized=%s",
+            action,
+            request_id,
+            authorized,
+        )
+        if not request_id:
+            log.warning("[AUTH] Missing request_id in auth request data")
+            return
+        if authorized and action != "status":
+            log.warning("[AUTH] Rejecting %s request - already authorized", action)
+            _set_auth_response(
+                request_id,
+                {"status": "error", "message": "Already authorized"},
+            )
+            return
+
+        try:
+            if action == "start":
+                phone = str(data.get("phone", "")).strip()
+                if not phone:
+                    raise ValueError("Phone is required")
+
+                # Check rate limit before attempting
+                is_allowed, wait_seconds = _check_rate_limit("send_code", phone)
+                if not is_allowed:
+                    log.warning(
+                        "[AUTH] Start: rate limited, %d seconds remaining", wait_seconds
+                    )
+                    _set_auth_response(
+                        request_id,
+                        {
+                            "status": "error",
+                            "message": f"Rate limited. Please wait {wait_seconds} seconds before trying again.",
+                            "reason": "flood_wait",
+                            "retry_after": wait_seconds,
+                        },
+                    )
+                    return
+
+                log.info("[AUTH] Start: sending code to phone=%s", phone)
+                async with client_lock:
+                    await _ensure_client_connected()
+                    log.debug(
+                        "[AUTH] Start: client connected, calling send_code_request"
+                    )
+                    sent = await client.send_code_request(phone)  # type: ignore[misc]
+                    log.info(
+                        "[AUTH] Start: code sent successfully, phone_code_hash=%s",
+                        getattr(sent, "phone_code_hash", None),
+                    )
+                response = {
+                    "status": "ok",
+                    "message": "Code sent",
+                    "phone_code_hash": getattr(sent, "phone_code_hash", None),
+                    "timeout": getattr(sent, "timeout", None),
+                    "type": getattr(
+                        getattr(sent, "type", None), "__class__", type("", (), {})
+                    ).__name__,
+                }
+                _set_auth_response(request_id, response)
+                log.debug("[AUTH] Start: response sent to UI via Redis")
+
+            elif action == "resend":
+                phone = str(data.get("phone", "")).strip()
+                if not phone:
+                    raise ValueError("Phone is required")
+
+                # Check rate limit before resending
+                is_allowed, wait_seconds = _check_rate_limit("resend_code", phone)
+                if not is_allowed:
+                    log.warning(
+                        "[AUTH] Resend: rate limited, %d seconds remaining",
+                        wait_seconds,
+                    )
+                    _set_auth_response(
+                        request_id,
+                        {
+                            "status": "error",
+                            "message": f"Rate limited. Please wait {wait_seconds} seconds before trying again.",
+                            "reason": "flood_wait",
+                            "retry_after": wait_seconds,
+                        },
+                    )
+                    return
+                async with client_lock:
+                    await _ensure_client_connected()
+                    sent = await client.send_code_request(  # type: ignore[misc]
+                        phone, force_sms=True
+                    )
+                response = {
+                    "status": "ok",
+                    "message": "Code resent",
+                    "phone_code_hash": getattr(sent, "phone_code_hash", None),
+                    "timeout": getattr(sent, "timeout", None),
+                }
+                _set_auth_response(request_id, response)
+
+            elif action == "verify":
+                phone = str(data.get("phone", "")).strip()
+                code = str(data.get("code", "")).strip()
+                phone_code_hash = data.get("phone_code_hash")
+                password = data.get("password")
+                log.info(
+                    "[AUTH] Verify: phone=%s, code=%s, has_password=%s",
+                    phone,
+                    code[:2] + "***" if code else None,
+                    bool(password),
+                )
+                if not phone or not code:
+                    raise ValueError("Phone and code are required")
+                async with client_lock:
+                    # Ensure session file is writable before sign_in (Telethon needs to write during auth)
+                    try:
+                        from pathlib import Path
+
+                        session_path = Path(
+                            cfg.telegram_session or "/app/data/tgsentinel.session"
+                        )
+                        if session_path.exists():
+                            os.chmod(session_path, 0o666)
+                            log.debug(
+                                "[AUTH] Verify: session file permissions set to 0o666"
+                            )
+                    except Exception as perm_exc:
+                        log.warning(
+                            "[AUTH] Verify: failed to set session permissions: %s",
+                            perm_exc,
+                        )
+
+                    try:
+                        await _ensure_client_connected()
+                        log.debug("[AUTH] Verify: calling client.sign_in with code")
+                        await client.sign_in(  # type: ignore[misc]
+                            phone=phone,
+                            code=code,
+                            phone_code_hash=str(phone_code_hash or ""),
+                        )
+                        log.info("[AUTH] Verify: sign_in succeeded (no 2FA)")
+                    except SessionPasswordNeededError:
+                        log.info("[AUTH] Verify: 2FA password required")
+                        if not password:
+                            raise ValueError("Password required for 2FA")
+
+                        # Ensure permissions again before 2FA sign_in
+                        try:
+                            from pathlib import Path
+
+                            session_path = Path(
+                                cfg.telegram_session or "/app/data/tgsentinel.session"
+                            )
+                            if session_path.exists():
+                                os.chmod(session_path, 0o666)
+                        except Exception:
+                            pass
+
+                        log.debug("[AUTH] Verify: calling client.sign_in with password")
+                        await client.sign_in(password=password)  # type: ignore[misc]
+                        log.info("[AUTH] Verify: 2FA sign_in succeeded")
+
+                    # Fix permissions after successful sign_in
+                    try:
+                        from pathlib import Path
+
+                        session_path = Path(
+                            cfg.telegram_session or "/app/data/tgsentinel.session"
+                        )
+                        if session_path.exists():
+                            os.chmod(session_path, 0o666)
+                    except Exception:
+                        pass
+
+                log.debug("[AUTH] Verify: fetching user info with get_me()")
+                me = await client.get_me()  # type: ignore[misc]
+                if me:
+                    log.info(
+                        "[AUTH] Verify: authentication successful for user_id=%s, username=%s",
+                        getattr(me, "id", None),
+                        getattr(me, "username", None),
+                    )
+
+                    # Explicitly save session to ensure persistence
+                    try:
+                        if hasattr(client, "session") and hasattr(client.session, "save"):  # type: ignore[misc]
+                            client.session.save()  # type: ignore[misc]
+                            log.info("[AUTH] Verify: session saved to disk")
+
+                        # Verify session file exists and is readable
+                        from pathlib import Path
+
+                        session_path = Path(
+                            cfg.telegram_session or "/app/data/tgsentinel.session"
+                        )
+                        if session_path.exists():
+                            size = session_path.stat().st_size
+                            log.info(
+                                "[AUTH] Verify: session file confirmed, size=%d bytes",
+                                size,
+                            )
+                        else:
+                            log.warning(
+                                "[AUTH] Verify: session file not found after save!"
+                            )
+                    except Exception as save_exc:
+                        log.error(
+                            "[AUTH] Verify: failed to save session: %s",
+                            save_exc,
+                            exc_info=True,
+                        )
+
+                    _mark_authorized(me)
+                    _set_auth_response(
+                        request_id,
+                        {
+                            "status": "ok",
+                            "message": "Authenticated",
+                        },
+                    )
+                    log.debug("[AUTH] Verify: success response sent to UI")
+                else:
+                    log.error("[AUTH] Verify: get_me() returned None after sign_in")
+                    raise ValueError("Verification failed; account not authorized")
+
+            else:
+                _set_auth_response(
+                    request_id,
+                    {"status": "error", "message": f"Unknown action: {action}"},
+                )
+        except Exception as exc:
+            log.error(
+                "[AUTH] Request failed: action=%s, error=%s", action, exc, exc_info=True
+            )
+            error_response = _normalize_auth_error(exc)
+
+            # Store rate limit if present
+            retry_after = error_response.get("retry_after")
+            if retry_after and retry_after > 0:
+                phone = data.get("phone")
+                if action == "start":
+                    _set_rate_limit("send_code", retry_after, phone)
+                elif action == "resend":
+                    _set_rate_limit("resend_code", retry_after, phone)
+                elif action == "verify":
+                    _set_rate_limit("sign_in", retry_after, phone)
+
+                log.error(
+                    "[AUTH] Rate limit detected: action=%s, wait=%d seconds (~%.1f hours)",
+                    action,
+                    retry_after,
+                    retry_after / 3600.0,
+                )
+
+            log.debug("[AUTH] Sending error response: %s", error_response)
+            _set_auth_response(request_id, error_response)
+
+    async def auth_queue_worker():
+        log.info(
+            "[AUTH-WORKER] Starting auth queue worker (listening on %s)", AUTH_QUEUE_KEY
+        )
+        loop = asyncio.get_running_loop()
+        while not shutdown_event.is_set():
+            try:
+                result = await loop.run_in_executor(
+                    None, lambda: r.blpop([AUTH_QUEUE_KEY], timeout=5)
+                )
+            except Exception as exc:
+                log.debug("[AUTH-WORKER] Queue poll failed: %s", exc)
+                await asyncio.sleep(1)
+                continue
+
+            if not result:
+                continue
+
+            _, payload = result  # type: ignore[misc]
+            log.debug(
+                "[AUTH-WORKER] Received auth request from queue: %s bytes",
+                len(payload) if payload else 0,
+            )
+            try:
+                data = json.loads(
+                    payload.decode() if isinstance(payload, bytes) else payload
+                )
+                log.debug(
+                    "[AUTH-WORKER] Parsed request: action=%s, request_id=%s",
+                    data.get("action"),
+                    data.get("request_id"),
+                )
+            except Exception as exc:
+                log.warning("[AUTH-WORKER] Invalid auth queue payload: %s", exc)
+                continue
+
+            await _handle_auth_request(data)
+        log.info("[AUTH-WORKER] Auth queue worker stopped")
+
+    # Setup graceful shutdown: disconnect client to flush session state
+    loop = asyncio.get_running_loop()
+    shutdown_event = asyncio.Event()
+
+    async def _graceful_shutdown():
+        try:
+            log.info("Shutting down; disconnecting Telegram client to flush session...")
+            try:
+                # Explicitly save session before disconnect
+                try:
+                    if hasattr(client, "session") and hasattr(client.session, "save"):  # type: ignore[misc]
+                        client.session.save()  # type: ignore[misc]
+                except Exception:
+                    pass
+
+                await asyncio.wait_for(
+                    client.disconnect(), timeout=15  # type: ignore[misc]
+                )
+            except asyncio.TimeoutError:
+                log.warning(
+                    "Client disconnect timed out after 15s; proceeding with shutdown"
+                )
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def _signal_handler():
+        """Signal handler that safely triggers shutdown from signal context."""
+        loop.call_soon_threadsafe(shutdown_event.set)
+
+    try:
+        loop.add_signal_handler(signal.SIGTERM, _signal_handler)
+        loop.add_signal_handler(signal.SIGINT, _signal_handler)
+    except NotImplementedError:
+        # Signals not available (e.g., on Windows); ignore
+        pass
+
+    # Clear any stale auth requests from previous sessions before starting worker
+    try:
+        cleared = 0
+        while r.lpop(AUTH_QUEUE_KEY):
+            cleared += 1
+        if cleared > 0:
+            log.info(
+                "[AUTH] Cleared %d stale auth request(s) from previous session", cleared
+            )
+
+        # Also clear stale auth responses
+        auth_response_pattern = "tgsentinel:auth_responses"
+        try:
+            r.delete(auth_response_pattern)
+            log.debug("[AUTH] Cleared stale auth responses hash")
+        except Exception:
+            pass
+    except Exception as exc:
+        log.warning("[AUTH] Failed to clear stale auth queue: %s", exc)
+
+    auth_worker_task = asyncio.create_task(auth_queue_worker())
+
+    # Non-interactive startup: do not prompt for phone in headless envs
+    log.info("[STARTUP] Connecting to Telegram...")
+    await client.connect()  # type: ignore[misc]
+    log.info("[STARTUP] Connected to Telegram")
+
+    # Fix session file permissions after connect (Telethon may create it here)
+    try:
+        from pathlib import Path
+
+        session_path = Path(cfg.telegram_session or "/app/data/tgsentinel.session")
+        if session_path.exists():
+            size = session_path.stat().st_size
+            os.chmod(session_path, 0o666)
+            log.debug(
+                "[STARTUP] Session file exists: %s (%d bytes, permissions fixed)",
+                session_path,
+                size,
+            )
+        else:
+            log.info("[STARTUP] No existing session file found")
+    except Exception as perm_exc:
+        log.warning("[STARTUP] Session file check failed: %s", perm_exc)
+
+    try:
+        # Try to load session from database by calling get_me()
+        # This forces Telethon to deserialize the auth key from SQLite
+        log.info("[STARTUP] Checking existing session...")
+        try:
+            me = await client.get_me()  # type: ignore[misc]
+            user_id = getattr(me, "id", None) if me else None
+            username = getattr(me, "username", None) if me else None
+
+            if me:
+                log.info(
+                    "[STARTUP] ✓ Session restored successfully: user_id=%s, username=%s",
+                    user_id,
+                    username,
+                )
+                _mark_authorized(me)
+            else:
+                log.info(
+                    "[STARTUP] get_me() returned None - session file exists but not authorized"
+                )
+                authorized = False
+        except Exception as getme_err:
+            # Not authorized, check directly
+            log.info("[STARTUP] get_me() failed: %s", getme_err)
+            log.info("[STARTUP] Checking authorization status directly...")
+            authorized = await client.is_user_authorized()  # type: ignore[misc]
+            if authorized:
+                log.info("[STARTUP] ✓ Client is authorized (direct check)")
+                _mark_authorized()
+            else:
+                log.info("[STARTUP] ✗ Client is not authorized")
+    except Exception as auth_exc:
+        log.error("[STARTUP] Authorization check failed: %s", auth_exc, exc_info=True)
+        authorized = False
+
+    if not authorized:
+        log.warning("[STARTUP] ✗ No valid session found - authentication required")
+        wait_total = int(os.getenv("SESSION_WAIT_SECS", "300"))
+        interval = 3
+        waited = 0
+
+        log.warning(
+            "No Telegram session found. Waiting up to %ss for UI login at http://localhost:5001",
+            wait_total,
+        )
+        log.info("Complete the login in the UI, sentinel will detect it automatically")
+        try:
+            r.setex(
+                "tgsentinel:worker_status",
+                30,
+                json.dumps(
+                    {
+                        "authorized": False,
+                        "status": "waiting",
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }
+                ),
+            )
+        except Exception:
+            pass
+
+        while waited < wait_total and not authorized:
+            try:
+                await asyncio.wait_for(auth_event.wait(), timeout=interval)
+            except asyncio.TimeoutError:
+                waited += interval
+                if waited % 30 == 0:
+                    log.info("Still waiting for login... (%ss/%ss)", waited, wait_total)
+                continue
+
+        if not authorized:
+            log.error("Session not available after %ss. Please:", wait_total)
+            log.error("  1. Go to http://localhost:5001")
+            log.error("  2. Complete the Telegram login")
+            log.error("  3. Run: docker compose restart sentinel")
+            try:
+                r.setex(
+                    "tgsentinel:worker_status",
+                    60,
+                    json.dumps(
+                        {
+                            "authorized": False,
+                            "status": "unauthorized",
+                            "ts": datetime.now(timezone.utc).isoformat(),
+                        }
+                    ),
+                )
+            except Exception:
+                pass
+            return
 
     # Get and store current user info in Redis for UI access
     try:
@@ -372,6 +1125,8 @@ async def _run():
         }
         r.set("tgsentinel:user_info", json.dumps(user_info))
         log.info("Stored user info in Redis: %s", user_info.get("username"))
+        # Worker status is already set by _mark_authorized() with 1-hour TTL
+        # and will be refreshed by worker_status_refresher() every 10 minutes
     except Exception as e:
         log.warning("Failed to fetch/store user info: %s", e)
 
@@ -392,6 +1147,9 @@ async def _run():
             channels_config=cfg.channels,
         )
         log.info("Test digest sent!")
+
+    # Start ingestion once authorized
+    start_ingestion(cfg, client, r)
 
     # Send initial digests on startup if enabled
     if cfg.alerts.digest.hourly:
@@ -419,13 +1177,14 @@ async def _run():
         )
 
     async def worker():
-        await process_loop(cfg, client, engine)
+        await process_loop(cfg, client, engine, handshake_gate)
 
     async def periodic():
         # hourly digest
         while True:
             await asyncio.sleep(3600)
             if cfg.alerts.digest.hourly:
+                await handshake_gate.wait()
                 log.info("Sending hourly digest...")
                 await send_digest(
                     engine,
@@ -441,6 +1200,7 @@ async def _run():
         while True:
             await asyncio.sleep(86400)
             if cfg.alerts.digest.daily:
+                await handshake_gate.wait()
                 log.info("Sending daily digest...")
                 await send_digest(
                     engine,
@@ -458,10 +1218,32 @@ async def _run():
             log.info("Sentinel heartbeat - monitoring active")
             dump()
 
+    async def worker_status_refresher():
+        """Periodically refresh worker status in Redis to ensure it doesn't expire."""
+        while True:
+            await asyncio.sleep(600)  # Every 10 minutes
+            if authorized:
+                try:
+                    r.setex(
+                        "tgsentinel:worker_status",
+                        3600,
+                        json.dumps(
+                            {
+                                "authorized": True,
+                                "status": "authorized",
+                                "ts": datetime.now(timezone.utc).isoformat(),
+                            }
+                        ),
+                    )
+                    log.debug("[HEARTBEAT] Worker status refreshed in Redis")
+                except Exception as exc:
+                    log.warning("[HEARTBEAT] Failed to refresh worker status: %s", exc)
+
     async def participant_info_handler():
         """Handle participant info requests from UI."""
         while True:
             try:
+                await handshake_gate.wait()
                 # Check for pending requests frequently to reduce UI latency
                 await asyncio.sleep(1)
 
@@ -507,12 +1289,27 @@ async def _run():
 
     async def telegram_chats_handler():
         """Handle Telegram chats discovery requests from UI."""
+        log.info(
+            "[CHATS-HANDLER] Starting chats handler (pattern: tgsentinel:telegram_chats_request:*)"
+        )
         while True:
             try:
+                await handshake_gate.wait()
                 await asyncio.sleep(1)
 
+                # Check if authorized before processing
+                if not authorized:
+                    log.debug("[CHATS-HANDLER] Not authorized, skipping scan")
+                    continue
+
                 # Scan for chat discovery requests
-                for key in r.scan_iter("tgsentinel:telegram_chats_request:*"):
+                keys_found = list(r.scan_iter("tgsentinel:telegram_chats_request:*"))
+                if keys_found:
+                    log.info(
+                        "[CHATS-HANDLER] Found %d chat request(s)", len(keys_found)
+                    )
+
+                for key in keys_found:
                     try:
                         # Decode key if it's bytes
                         if isinstance(key, bytes):
@@ -529,12 +1326,19 @@ async def _run():
                         req = json.loads(str(request_data))
                         request_id = req.get("request_id")
 
-                        log.debug("Processing Telegram chats request: %s", request_id)
+                        log.info("[CHATS-HANDLER] Processing request_id=%s", request_id)
 
                         # Fetch dialogs
+                        log.debug(
+                            "[CHATS-HANDLER] Fetching dialogs from cache/Telegram"
+                        )
                         from telethon.tl.types import Channel, Chat
 
-                        dialogs = await client.get_dialogs()  # type: ignore[misc]
+                        dialogs = await _get_cached_dialogs()
+                        log.debug(
+                            "[CHATS-HANDLER] Got %d dialogs, filtering for Channel/Chat entities",
+                            len(dialogs),
+                        )
                         chats = []
 
                         for dialog in dialogs:
@@ -568,18 +1372,26 @@ async def _run():
                         )
                         response_data = {"status": "ok", "chats": chats}
                         r.setex(response_key, 60, json.dumps(response_data))
+                        log.debug(
+                            "[CHATS-HANDLER] Stored response at key=%s", response_key
+                        )
 
                         # Delete the request key
                         r.delete(key)
 
-                        log.debug(
-                            "Completed Telegram chats request: %s (%d chats)",
+                        log.info(
+                            "[CHATS-HANDLER] Completed request_id=%s: %d chats returned",
                             request_id,
                             len(chats),
                         )
 
                     except Exception as e:
-                        log.error("Error processing chats request %s: %s", key, e)
+                        log.error(
+                            "[CHATS-HANDLER] Error processing request key=%s: %s",
+                            key,
+                            e,
+                            exc_info=True,
+                        )
                         # Send error response
                         try:
                             if "request_id" in locals():
@@ -589,25 +1401,36 @@ async def _run():
                                     "message": str(e),
                                 }
                                 r.setex(response_key, 60, json.dumps(error_data))
+                                log.debug("[CHATS-HANDLER] Stored error response")
                         except Exception:
                             pass
                         r.delete(key)  # Clean up failed request
 
             except Exception as e:
-                log.error("Telegram chats handler error: %s", e)
+                log.error("[CHATS-HANDLER] Handler loop error: %s", e, exc_info=True)
                 await asyncio.sleep(5)
 
-    async def telegram_users_handler():
-        """Handle Telegram users discovery requests from UI."""
-        log.info("Telegram users handler started")
+    async def telegram_dialogs_handler():
+        """Handle Telegram dialogs (chats) requests from UI."""
+        log.info(
+            "[DIALOGS-HANDLER] Starting dialogs handler (pattern: tgsentinel:request:get_dialogs:*)"
+        )
         while True:
             try:
+                await handshake_gate.wait()
                 await asyncio.sleep(1)
 
-                # Scan for user discovery requests
-                keys_found = list(r.scan_iter("tgsentinel:telegram_users_request:*"))
+                # Check if authorized before processing
+                if not authorized:
+                    log.debug("[DIALOGS-HANDLER] Not authorized, skipping scan")
+                    continue
+
+                # Scan for dialogs requests
+                keys_found = list(r.scan_iter("tgsentinel:request:get_dialogs:*"))
                 if keys_found:
-                    log.info("Found %d user request keys", len(keys_found))
+                    log.info(
+                        "[DIALOGS-HANDLER] Found %d dialogs request(s)", len(keys_found)
+                    )
 
                 for key in keys_found:
                     try:
@@ -626,14 +1449,140 @@ async def _run():
                         req = json.loads(str(request_data))
                         request_id = req.get("request_id")
 
-                        log.info("Processing Telegram users request: %s", request_id)
+                        log.info(
+                            "[DIALOGS-HANDLER] Processing request_id=%s", request_id
+                        )
 
                         # Fetch dialogs
-                        log.info("Fetching dialogs from Telegram...")
+                        from telethon.tl.types import Channel, Chat as TgChat
+
+                        log.debug(
+                            "[DIALOGS-HANDLER] Fetching dialogs from cache/Telegram"
+                        )
+                        dialogs = await _get_cached_dialogs()
+                        log.info(
+                            "[DIALOGS-HANDLER] Got %d dialogs, filtering for channels/groups",
+                            len(dialogs),
+                        )
+                        chats = []
+
+                        for dialog in dialogs:
+                            entity = dialog.entity
+                            if isinstance(entity, (Channel, TgChat)):
+                                chat_type = "group"
+                                if isinstance(entity, Channel):
+                                    if getattr(entity, "broadcast", False):
+                                        chat_type = "channel"
+                                    elif getattr(entity, "megagroup", False):
+                                        chat_type = "supergroup"
+                                    else:
+                                        chat_type = "group"
+                                name = getattr(entity, "title", None) or getattr(
+                                    entity, "first_name", "Unknown"
+                                )
+                                chats.append(
+                                    {
+                                        "id": getattr(entity, "id", 0),
+                                        "name": name,
+                                        "type": chat_type,
+                                        "username": getattr(entity, "username", None),
+                                    }
+                                )
+
+                        # Send response
+                        response_key = f"tgsentinel:response:get_dialogs:{request_id}"
+                        response_data = {"status": "ok", "chats": chats}
+                        r.setex(response_key, 60, json.dumps(response_data))
+                        log.debug(
+                            "[DIALOGS-HANDLER] Stored response at key=%s", response_key
+                        )
+
+                        # Delete the request key
+                        r.delete(key)
+
+                        log.info(
+                            "[DIALOGS-HANDLER] Completed request_id=%s: %d chats returned",
+                            request_id,
+                            len(chats),
+                        )
+
+                    except Exception as e:
+                        log.error(
+                            "[DIALOGS-HANDLER] Error processing request key=%s: %s",
+                            key,
+                            e,
+                            exc_info=True,
+                        )
+                        # Send error response
+                        try:
+                            if "request_id" in locals():
+                                response_key = f"tgsentinel:response:get_dialogs:{request_id}"  # type: ignore[possibly-undefined]
+                                error_data = {
+                                    "status": "error",
+                                    "error": str(e),
+                                }
+                                r.setex(response_key, 60, json.dumps(error_data))
+                                log.debug("[DIALOGS-HANDLER] Sent error response for request_id=%s", request_id)  # type: ignore[possibly-undefined]
+                        except Exception:
+                            pass
+                        r.delete(key)  # Clean up failed request
+
+            except Exception as e:
+                log.error("[DIALOGS-HANDLER] Handler error: %s", e, exc_info=True)
+                await asyncio.sleep(5)
+
+    async def telegram_users_handler():
+        """Handle Telegram users discovery requests from UI."""
+        log.info(
+            "[USERS-HANDLER] Starting users handler (pattern: tgsentinel:telegram_users_request:*)"
+        )
+        while True:
+            try:
+                await handshake_gate.wait()
+                await asyncio.sleep(1)
+
+                # Check if authorized before processing
+                if not authorized:
+                    log.debug("[USERS-HANDLER] Not authorized, skipping scan")
+                    continue
+
+                # Scan for user discovery requests
+                keys_found = list(r.scan_iter("tgsentinel:telegram_users_request:*"))
+                if keys_found:
+                    log.info(
+                        "[USERS-HANDLER] Found %d user request(s)", len(keys_found)
+                    )
+
+                for key in keys_found:
+                    try:
+                        # Decode key if it's bytes
+                        if isinstance(key, bytes):
+                            key = key.decode()
+
+                        request_data = r.get(key)
+                        if not request_data:
+                            continue
+
+                        # Ensure request_data is a string
+                        if isinstance(request_data, bytes):
+                            request_data = request_data.decode()
+
+                        req = json.loads(str(request_data))
+                        request_id = req.get("request_id")
+
+                        log.info("[USERS-HANDLER] Processing request_id=%s", request_id)
+
+                        # Fetch dialogs
+                        log.debug(
+                            "[USERS-HANDLER] Fetching dialogs from cache/Telegram"
+                        )
                         from telethon.tl.types import User
 
-                        dialogs = await client.get_dialogs()  # type: ignore[misc]
-                        log.info("Successfully fetched %d dialogs", len(dialogs))
+                        dialogs = await _get_cached_dialogs()
+                        log.info(
+                            "[USERS-HANDLER] Got %d dialogs, filtering for User entities",
+                            len(dialogs),
+                        )
                         users = []
 
                         for dialog in dialogs:
@@ -675,21 +1624,31 @@ async def _run():
                         )
                         response_data = {"status": "ok", "users": users}
                         r.setex(response_key, 60, json.dumps(response_data))
+                        log.debug(
+                            "[USERS-HANDLER] Stored response at key=%s", response_key
+                        )
 
                         # Delete the request key
                         r.delete(key)
 
                         log.debug(
-                            "Completed Telegram users request %s: %d users",
+                            "[USERS-HANDLER] Completed request_id=%s: %d users",
                             request_id,
                             len(users),
                         )
                         log.info(
-                            "Returning %d users for request %s", len(users), request_id
+                            "[USERS-HANDLER] Returning %d users for request_id=%s",
+                            len(users),
+                            request_id,
                         )
 
                     except Exception as e:
-                        log.error("Error processing users request %s: %s", key, e)
+                        log.error(
+                            "[USERS-HANDLER] Error processing request key=%s: %s",
+                            key,
+                            e,
+                            exc_info=True,
+                        )
                         # Send error response
                         try:
                             if "request_id" in locals():
@@ -699,24 +1658,281 @@ async def _run():
                                     "message": str(e),
                                 }
                                 r.setex(response_key, 60, json.dumps(error_data))
+                                log.debug("[USERS-HANDLER] Sent error response for request_id=%s", request_id)  # type: ignore[possibly-undefined]
                         except Exception:
                             pass
                         r.delete(key)  # Clean up failed request
 
             except Exception as e:
-                log.error("Telegram users handler error: %s", e)
+                log.error("[USERS-HANDLER] Handler error: %s", e, exc_info=True)
                 await asyncio.sleep(5)
 
+    async def relogin_coordinator():
+        """Pause Telegram client while UI replaces the session file."""
+        key = "tgsentinel:relogin"
+        active_request_id: str | None = None
+        deadline: datetime | None = None
+
+        while True:
+            await asyncio.sleep(0.5)
+            try:
+                raw = r.get(key)
+            except Exception as redis_err:
+                log.debug("Could not read re-login marker: %s", redis_err)
+                continue
+
+            state = None
+            if raw:
+                try:
+                    if isinstance(raw, bytes):
+                        raw = raw.decode()
+                    state = json.loads(str(raw))
+                except Exception as parse_err:
+                    log.debug("Invalid re-login marker payload: %s", parse_err)
+                    state = None
+
+            if not state:
+                if (
+                    active_request_id
+                    and deadline
+                    and datetime.now(timezone.utc) > deadline
+                ):
+                    log.warning(
+                        "Re-login handshake %s timed out (marker disappeared); resuming worker",
+                        active_request_id,
+                    )
+                    try:
+                        await client.connect()
+                    except Exception as exc:
+                        log.debug("Reconnect after timeout failed: %s", exc)
+                    handshake_gate.set()
+                    active_request_id = None
+                    deadline = None
+                continue
+
+            status = state.get("status")
+            request_id = state.get("request_id")
+
+            if status == "request" and request_id:
+                if active_request_id and request_id != active_request_id:
+                    # Another request arrived while one is active - wait for completion
+                    continue
+                if active_request_id == request_id and not handshake_gate.is_set():
+                    # Already processing this request
+                    continue
+
+                active_request_id = request_id
+                deadline = datetime.now(timezone.utc) + timedelta(seconds=180)
+                handshake_gate.clear()
+                log.info(
+                    "Re-login handshake %s requested; disconnecting Telegram client",
+                    request_id,
+                )
+                try:
+                    # Explicitly save session before disconnect
+                    try:
+                        if hasattr(client, "session") and hasattr(client.session, "save"):  # type: ignore[misc]
+                            client.session.save()  # type: ignore[misc]
+                    except Exception:
+                        pass
+
+                    await client.disconnect()  # type: ignore[misc]
+                except Exception as exc:
+                    log.debug("Client disconnect during handshake failed: %s", exc)
+                try:
+                    r.set(
+                        key,
+                        json.dumps(
+                            {
+                                "status": "worker_detached",
+                                "request_id": request_id,
+                                "ts": datetime.now(timezone.utc).isoformat(),
+                            }
+                        ),
+                        ex=180,
+                    )
+                except Exception:
+                    pass
+                try:
+                    r.setex(
+                        "tgsentinel:worker_status",
+                        30,
+                        json.dumps(
+                            {
+                                "authorized": False,
+                                "status": "relogin_paused",
+                                "ts": datetime.now(timezone.utc).isoformat(),
+                            }
+                        ),
+                    )
+                except Exception:
+                    pass
+                continue
+
+            if (
+                active_request_id
+                and request_id == active_request_id
+                and status in {"promotion_complete", "cancelled"}
+            ):
+                log.info(
+                    "Re-login handshake %s acknowledged with status %s; reconnecting",
+                    request_id,
+                    status,
+                )
+                try:
+                    await client.connect()
+                    try:
+                        authorized = await client.is_user_authorized()
+                    except Exception:
+                        authorized = False
+                    if not authorized:
+                        log.warning(
+                            "Client unauthorized after re-login promotion; waiting for session",
+                        )
+                except Exception as exc:
+                    log.error("Reconnect after re-login failed: %s", exc)
+                handshake_gate.set()
+                active_request_id = None
+                deadline = None
+                try:
+                    r.set(
+                        key,
+                        json.dumps(
+                            {
+                                "status": "worker_resumed",
+                                "request_id": request_id,
+                                "ts": datetime.now(timezone.utc).isoformat(),
+                            }
+                        ),
+                        ex=60,
+                    )
+                except Exception:
+                    pass
+                continue
+
+            if active_request_id and deadline and datetime.now(timezone.utc) > deadline:
+                log.warning(
+                    "Re-login handshake %s timed out waiting for completion; resuming worker",
+                    active_request_id,
+                )
+                try:
+                    await client.connect()
+                except Exception as exc:
+                    log.debug("Reconnect after handshake timeout failed: %s", exc)
+                handshake_gate.set()
+                try:
+                    r.set(
+                        key,
+                        json.dumps(
+                            {
+                                "status": "timeout",
+                                "request_id": active_request_id,
+                                "ts": datetime.now(timezone.utc).isoformat(),
+                            }
+                        ),
+                        ex=60,
+                    )
+                except Exception:
+                    pass
+                active_request_id = None
+                deadline = None
+
+    async def session_persistence_handler():
+        """Periodically save session to disk for durability.
+
+        This ensures that the authenticated session is always persisted to disk,
+        even if the process crashes. Critical for avoiding re-authentication.
+        """
+        log.info("Session persistence handler started")
+        while True:
+            try:
+                await asyncio.sleep(60)  # Save every 60 seconds
+
+                # Explicitly save session to SQLite
+                try:
+                    if hasattr(client, "session") and hasattr(client.session, "save"):  # type: ignore[misc]
+                        client.session.save()  # type: ignore[misc]
+                        log.debug("Session persisted to disk")
+                except Exception as save_exc:
+                    log.debug("Could not persist session: %s", save_exc)
+            except asyncio.CancelledError:
+                # Handle shutdown gracefully
+                try:
+                    if hasattr(client, "session") and hasattr(client.session, "save"):  # type: ignore[misc]
+                        client.session.save()  # type: ignore[misc]
+                        log.debug("Session persisted during shutdown")
+                except Exception:
+                    pass
+                raise
+            except Exception as exc:
+                log.debug("Session persistence handler error: %s", exc)
+
     log.info("Starting all handlers with asyncio.gather...")
-    await asyncio.gather(
-        worker(),
-        periodic(),
-        daily(),
-        metrics_logger(),
-        participant_info_handler(),
-        telegram_chats_handler(),
-        telegram_users_handler(),
+
+    # Create a task for all the background workers
+    async def run_workers():
+        worker_names = [
+            "worker",
+            "periodic",
+            "daily",
+            "metrics_logger",
+            "worker_status_refresher",
+            "participant_info_handler",
+            "telegram_chats_handler",
+            "telegram_dialogs_handler",
+            "telegram_users_handler",
+            "relogin_coordinator",
+            "session_persistence_handler",
+        ]
+
+        results = await asyncio.gather(
+            worker(),
+            periodic(),
+            daily(),
+            metrics_logger(),
+            worker_status_refresher(),
+            participant_info_handler(),
+            telegram_chats_handler(),
+            telegram_dialogs_handler(),
+            telegram_users_handler(),
+            relogin_coordinator(),
+            session_persistence_handler(),
+            return_exceptions=True,
+        )
+
+        # Check for exceptions in worker results
+        for worker_name, result in zip(worker_names, results):
+            if isinstance(result, BaseException) and not isinstance(
+                result, asyncio.CancelledError
+            ):
+                log.error(
+                    "Worker '%s' failed with exception: %s",
+                    worker_name,
+                    result,
+                    exc_info=result,
+                )
+
+    workers_task = asyncio.create_task(run_workers())
+
+    # Wait for either the workers to complete or shutdown signal
+    shutdown_task = asyncio.create_task(shutdown_event.wait())
+    done, pending = await asyncio.wait(
+        [workers_task, shutdown_task],
+        return_when=asyncio.FIRST_COMPLETED,
     )
+
+    # If shutdown was triggered, cancel workers and perform graceful shutdown
+    if shutdown_task in done:
+        log.info("Shutdown signal received, cancelling workers...")
+        workers_task.cancel()
+        try:
+            await workers_task
+        except asyncio.CancelledError:
+            pass
+        await _graceful_shutdown()
+    else:
+        # Workers completed (shouldn't happen normally), cancel shutdown task
+        shutdown_task.cancel()
 
 
 if __name__ == "__main__":

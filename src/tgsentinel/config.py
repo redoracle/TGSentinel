@@ -104,6 +104,16 @@ def _env_int(name: str, default: int) -> int:
         raise ValueError(f"{name} must be an integer") from exc
 
 
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        return float(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a float") from exc
+
+
 def load_config(path="config/tgsentinel.yml") -> AppCfg:
     with open(path, "r", encoding="utf-8") as f:
         y = yaml.safe_load(f)
@@ -127,9 +137,7 @@ def load_config(path="config/tgsentinel.yml") -> AppCfg:
 
     db_uri = os.getenv("DB_URI", "sqlite:////app/data/sentinel.db")
     model = os.getenv("EMBEDDINGS_MODEL", None) or None
-    # Strip inline comments from SIMILARITY_THRESHOLD (e.g., "0.42 # comment")
-    sim_thr_raw = os.getenv("SIMILARITY_THRESHOLD", "0.42")
-    sim_thr = float(sim_thr_raw.split("#")[0].strip())
+    sim_thr = _env_float("SIMILARITY_THRESHOLD", 0.42)
 
     digest_defaults = DigestCfg(**y.get("alerts", {}).get("digest", {}))
     digest_cfg = DigestCfg(

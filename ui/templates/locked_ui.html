@@ -17,13 +17,15 @@
     <div class="card-body">
       <p class="text-muted">This interface is locked. Enter the UI Lock password to continue.</p>
       <div id="unlockAlert" class="alert d-none" role="alert"></div>
-      <div class="mb-3">
-        <label for="unlockPassword" class="form-label">Password</label>
-        <input type="password" class="form-control" id="unlockPassword" placeholder="••••••••" autocomplete="current-password">
-      </div>
-      <div class="d-grid gap-2">
-        <button id="btnUnlock" class="btn btn-primary" type="button">Unlock</button>
-      </div>
+      <form id="unlockForm">
+        <div class="mb-3">
+          <label for="unlockPassword" class="form-label">Password</label>
+          <input type="password" class="form-control" id="unlockPassword" placeholder="••••••••" autocomplete="current-password" required>
+        </div>
+        <div class="d-grid gap-2">
+          <button id="btnUnlock" class="btn btn-primary" type="submit">Unlock</button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -35,23 +37,58 @@
       alertBox.textContent = msg || '';
       alertBox.classList.remove('d-none');
     }
-    document.getElementById('btnUnlock').addEventListener('click', async () => {
+    
+    function clearPasswordAndFocus(){
+      const pwdInput = document.getElementById('unlockPassword');
+      pwdInput.value = '';
+      pwdInput.focus();
+    }
+    
+    document.getElementById('unlockForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      
+      const btn = document.getElementById('btnUnlock');
+      const pwdInput = document.getElementById('unlockPassword');
+      const pwd = (pwdInput.value || '').trim();
+      
+      if(pwd.length === 0){
+        pwdInput.value = '';
+        setAlert('Password is required.', 'danger');
+        pwdInput.focus();
+        return;
+      }
+      
+      btn.disabled = true;
       try{
-        const pwd = document.getElementById('unlockPassword').value || '';
         const resp = await fetch('/api/ui/lock', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'unlock', password: pwd })
         });
-        const data = await resp.json();
+        
+        // Safely parse JSON response
+        let data;
+        try {
+          data = await resp.json();
+        } catch (parseErr) {
+          console.error('Failed to parse unlock response as JSON:', parseErr);
+          clearPasswordAndFocus();
+          setAlert('Invalid server response. Please try again.', 'danger');
+          return;
+        }
+        
         if(!resp.ok){
+          clearPasswordAndFocus();
           setAlert(data && data.message ? data.message : `HTTP ${resp.status}`, 'danger');
           return;
         }
         // Reload back to dashboard after unlocking
         window.location.href = '/';
       }catch(err){
+        clearPasswordAndFocus();
         setAlert('Failed to unlock. Please try again.', 'danger');
+      }finally{
+        btn.disabled = false;
       }
     });
   </script>

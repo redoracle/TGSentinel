@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Login Required · TG Sentinel</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
@@ -13,10 +14,27 @@
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
         <div class="modal-header">
+          <img src="{{ url_for('static', filename='images/logo.png') }}" alt="TG Sentinel" class="modal-logo me-3">
           <h5 class="modal-title" id="loginModalLabel">Authenticate Telegram Session</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
+          <!-- Login Method Toggle -->
+          <div class="mb-4">
+            <div class="btn-group w-100" role="group" aria-label="Login method selection">
+              <input type="radio" class="btn-check" name="loginMethod" id="methodPhone" autocomplete="off" checked>
+              <label class="btn btn-outline-primary" for="methodPhone">
+                <i class="bi bi-phone"></i> Phone Number
+              </label>
+              
+              <input type="radio" class="btn-check" name="loginMethod" id="methodUpload" autocomplete="off">
+              <label class="btn btn-outline-primary" for="methodUpload">
+                <i class="bi bi-upload"></i> Upload Session
+              </label>
+            </div>
+          </div>
+
+          <!-- Phone Login Form -->
           <form id="loginForm" onsubmit="return false;">
             <div class="mb-3">
               <label for="loginPhone" class="form-label">Phone Number</label>
@@ -34,6 +52,19 @@
               <div class="form-text">If two-factor authentication is enabled.</div>
             </div>
           </form>
+
+          <!-- Upload Session Form -->
+          <form id="uploadForm" class="d-none" enctype="multipart/form-data" onsubmit="return false;">
+            <div class="mb-3">
+              <label for="sessionFile" class="form-label">Session File</label>
+              <input type="file" class="form-control" id="sessionFile" accept=".session">
+              <div class="form-text">Upload a valid Telethon .session file. Files are portable across installations.</div>
+            </div>
+            <div class="alert alert-info small" role="alert">
+              <i class="bi bi-info-circle"></i> Session files contain your authorization key and can be used to restore access without SMS codes.
+            </div>
+          </form>
+
           <div id="loginAlert" class="alert d-none" role="alert"></div>
         </div>
         <div class="modal-footer align-items-center">
@@ -41,6 +72,7 @@
           <button type="button" id="btnSendCode" class="btn btn-outline-primary">Send Code</button>
           <button type="button" id="btnVerifyCode" class="btn btn-primary d-none">Verify</button>
           <button type="button" id="btnResendCode" class="btn btn-link d-none">Resend code</button>
+          <button type="button" id="btnUploadSession" class="btn btn-primary d-none">Upload & Restore</button>
           <span id="resendCountdown" class="text-muted small d-none" aria-live="polite"></span>
         </div>
       </div>
@@ -53,20 +85,22 @@
     document.addEventListener('DOMContentLoaded', ()=>{
       try {
         const modalEl = document.getElementById('loginModal');
+        if (!modalEl) {
+          console.error('Login modal element not found');
+          return;
+        }
+        
         const modal = new bootstrap.Modal(modalEl);
         
-        // Apply glass backdrop effect
+        // Apply glass backdrop effect after modal is fully rendered
         const addGlassClass = () => {
-          setTimeout(() => {
-            const backdrop = document.querySelector('.modal-backdrop');
-            if (backdrop && !backdrop.classList.contains('glass-backdrop')) {
-              backdrop.classList.add('glass-backdrop');
-            }
-          }, 50);
+          const backdrop = document.querySelector('.modal-backdrop');
+          if (backdrop && !backdrop.classList.contains('glass-backdrop')) {
+            backdrop.classList.add('glass-backdrop');
+          }
         };
         
         modalEl.addEventListener('shown.bs.modal', addGlassClass);
-        modalEl.addEventListener('show.bs.modal', addGlassClass);
         
         modal.show();
       } catch (e) {
