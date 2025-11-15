@@ -26,17 +26,30 @@
                     <div class="navbar-brand-text">TG Sentinel</div>
                     <div class="navbar-brand-subtitle">Intelligent Telegram Activity Sentinel</div>
                 </div>
-                <span id="connection-indicator" class="badge status-offline ms-2" role="status" aria-live="polite">Offline</span>
-                <span id="worker-indicator" class="badge status-offline ms-2" role="status" aria-live="polite" title="Worker authorization status">Worker: Unknown</span>
-                {% if auth_bypass %}
-                <span class="badge bg-warning text-dark ms-2" title="UI auth bypass is enabled via UI_SKIP_AUTH">Auth Bypass</span>
-                {% endif %}
             </a>
-			<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#primaryNav" aria-controls="primaryNav" aria-expanded="false" aria-label="Toggle navigation">
+			
+		<!-- Status and User Identity Block -->
+		<div class="navbar-status-user d-none d-lg-flex align-items-center gap-3 ms-3">
+			{% if auth_bypass %}
+			<span class="badge bg-warning text-dark" title="UI auth bypass is enabled via UI_SKIP_AUTH">Auth Bypass</span>
+			{% endif %}
+			<div class="d-flex flex-column align-items-center gap-1">
+				<img id="user-avatar" src="{{ url_for('static', filename='images/logo.png') }}" alt="User avatar" class="rounded-circle navbar-avatar">
+				<span id="status-indicator" class="badge status-offline" role="status" aria-live="polite" title="System status">Offline</span>
+			</div>
+			<div class="navbar-user-info">
+				<div class="navbar-user-details">
+					<span id="username-label" class="text-white small">loading...</span>
+					<span class="text-white mx-2"> </span>
+					<span id="phone-mask" class="text-white small">pending</span>
+				</div>
+			</div>
+		</div>			<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#primaryNav" aria-controls="primaryNav" aria-expanded="false" aria-label="Toggle navigation">
 				<span class="navbar-toggler-icon"></span>
 			</button>
-			<div class="collapse navbar-collapse flex-lg-grow-1 justify-content-lg-center" id="primaryNav">
-				<ul class="navbar-nav mx-lg-auto mb-2 mb-lg-0">
+			
+			<div class="collapse navbar-collapse" id="primaryNav">
+				<ul class="navbar-nav ms-auto mb-2 mb-lg-0">
 					<li class="nav-item">
 						<a class="nav-link {% if request.endpoint == 'dashboard_view' %}active{% endif %}" href="{{ url_for('dashboard_view') }}">Dashboard</a>
 					</li>
@@ -66,28 +79,17 @@
 						</ul>
 					</li>
 				</ul>
+				
+				<!-- Logout and Lock Controls -->
+				<div class="d-flex align-items-center gap-2 ms-lg-3">
+					<a class="btn btn-outline-primary btn-sm" href="/logout" id="btn-logout" aria-label="Logout">Logout</a>
+					<button class="btn btn-ghost btn-sm btn-lock" type="button" id="btn-ui-lock" title="Lock UI" aria-label="Lock UI">
+						<i class="bi bi-lock-fill icon-lg"></i>
+					</button>
+				</div>
 			</div>
 		</div>
 	</nav>
-
-	<header class="container-fluid py-3">
-		<div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
-			<div class="d-flex align-items-center gap-3">
-				<img id="user-avatar" src="{{ url_for('static', filename='images/logo.png') }}" alt="User avatar" class="rounded-circle">
-				<div>
-					<p class="mb-1 fw-semibold" id="user-name">Loading...</p>
-					<p class="mb-0 text-muted small" id="username-label">Username: loading...</p>
-					<p class="mb-0 text-muted small" id="phone-mask">Phone: pending</p>
-				</div>
-			</div>
-			<div class="d-flex flex-wrap align-items-center gap-2">
-				<a class="btn btn-outline-primary btn-sm" href="/logout" id="btn-logout" aria-label="Logout">Logout</a>
-				<button class="btn btn-ghost btn-sm btn-lock" type="button" id="btn-ui-lock" title="Lock UI" aria-label="Lock UI">
-					<i class="bi bi-lock-fill icon-lg"></i>
-				</button>
-			</div>
-		</div>
-	</header>
 
 	<main class="container-fluid py-4">
 		{% block content %}{% endblock %}
@@ -147,7 +149,7 @@
 					<form id="loginForm" onsubmit="return false;">
 						<div class="mb-3">
 							<label for="loginPhone" class="form-label">Phone Number</label>
-                    <input type="tel" class="form-control" id="loginPhone" placeholder="+1 555 0100" required autocomplete="tel" inputmode="tel">
+                    <input type="tel" class="form-control" id="loginPhone" placeholder="+41 2600 0000" required autocomplete="tel" inputmode="tel">
 							<div class="form-text">Enter your Telegram account phone in international format.</div>
 						</div>
 						<div class="mb-3 d-none" id="codeRow">
@@ -301,20 +303,8 @@
 
 		window.showToast = showToast;
 
-        function updateConnectionIndicator(payload) {
-            const indicator = document.getElementById("connection-indicator");
-            if (!indicator) {
-                return;
-            }
-            const { connected } = payload;
-            indicator.classList.remove("status-online", "status-offline");
-            indicator.classList.add(connected ? "status-online" : "status-offline");
-            indicator.textContent = connected ? "Online" : "Offline";
-            indicator.setAttribute("aria-label", connected ? "Connection status: online" : "Connection status: offline");
-        }
-
         async function refreshWorkerStatus(){
-            const badge = document.getElementById('worker-indicator');
+            const badge = document.getElementById('status-indicator');
             if (!badge) return;
             try{
                 const resp = await fetch('/api/worker/status');
@@ -323,44 +313,46 @@
                 badge.classList.remove('status-online','status-offline');
                 if (auth === true){
                     badge.classList.add('status-online');
-                    badge.textContent = 'Worker: Authorized';
-                    badge.setAttribute('aria-label','Worker authorized');
+                    badge.textContent = 'Online';
+                    badge.setAttribute('aria-label','System online');
+                    badge.setAttribute('title','System online');
                 } else if (auth === false){
                     badge.classList.add('status-offline');
-                    const statusText = (data && data.status) || 'waiting';
-                    badge.textContent = statusText === 'waiting' ? 'Worker: Waiting' : 'Worker: Unauthorized';
-                    badge.setAttribute('aria-label','Worker not authorized');
+                    badge.textContent = 'Offline';
+                    badge.setAttribute('aria-label','System offline');
+                    badge.setAttribute('title','System offline - Worker not authorized');
                 } else {
                     badge.classList.add('status-offline');
-                    badge.textContent = 'Worker: Unknown';
-                    badge.setAttribute('aria-label','Worker status unknown');
+                    badge.textContent = 'Offline';
+                    badge.setAttribute('aria-label','System offline');
+                    badge.setAttribute('title','System offline - Worker status unknown');
                 }
             }catch(e){
                 badge.classList.remove('status-online');
                 badge.classList.add('status-offline');
-                badge.textContent = 'Worker: Unknown';
+                badge.textContent = 'Offline';
+                badge.setAttribute('title','System offline - Connection error');
             }
         }
 
 	function populateSessionInfo(data) {
 		const avatarEl = document.getElementById("user-avatar");
-		const nameEl = document.getElementById("user-name");
 		const usernameEl = document.getElementById("username-label");
 		const phoneEl = document.getElementById("phone-mask");
 
 		if (avatarEl && data.avatar) {
 			avatarEl.src = data.avatar;
 		}
-		if (nameEl && data.username) {
-			nameEl.textContent = data.username;
-		}
 		if (usernameEl && data.username) {
-			usernameEl.textContent = `Username: ${data.username}`;
+			usernameEl.textContent = data.username;
 		}
 		if (phoneEl && data.phone_masked) {
-			phoneEl.textContent = `Phone: ${data.phone_masked}`;
+			phoneEl.textContent = data.phone_masked;
 		}
-		updateConnectionIndicator({ connected: Boolean(data.connected) });
+		// Update status based on connection state
+		if (data.connected) {
+			refreshWorkerStatus();
+		}
 	}		
 	async function refreshSessionInfo() {
 			try {
@@ -1149,34 +1141,38 @@
 					}
 				}
 			
-			let reconnectToastShown = false;
+		let reconnectToastShown = false;
 
-			socket.on("connect", () => {
-				updateConnectionIndicator({ connected: true });
-				if (reconnectToastShown) {
-					showToast("Dashboard link re-established", "success");
-				}
-				reconnectToastShown = true;
-			});
+		socket.on("connect", () => {
+			refreshWorkerStatus();
+			if (reconnectToastShown) {
+				showToast("Dashboard link re-established", "success");
+			}
+			reconnectToastShown = true;
+		});
 
-			socket.on("disconnect", () => {
-				updateConnectionIndicator({ connected: false });
-				showToast("Real-time updates paused", "warning");
-			});
+		socket.on("disconnect", () => {
+			const badge = document.getElementById('status-indicator');
+			if (badge) {
+				badge.classList.remove('status-online');
+				badge.classList.add('status-offline');
+				badge.textContent = 'Offline';
+				badge.setAttribute('title','System offline - Connection lost');
+			}
+			showToast("Real-time updates paused", "warning");
+		});
 
-			socket.on("status", (payload) => updateConnectionIndicator(payload));
-			socket.on("error", (payload) => {
-				const message = payload && payload.message ? payload.message : "Unknown socket error";
-				showToast(message, "error");
-			});
+		socket.on("status", () => refreshWorkerStatus());
+		socket.on("error", (payload) => {
+			const message = payload && payload.message ? payload.message : "Unknown socket error";
+			showToast(message, "error");
+		});
 
-            socket.on("dashboard:update", () => {
-                const event = new CustomEvent("tgsentinel:dashboard-update");
-                document.dispatchEvent(event);
-                try { refreshWorkerStatus(); } catch(e) {}
-            });
-
-            
+        socket.on("dashboard:update", () => {
+            const event = new CustomEvent("tgsentinel:dashboard-update");
+            document.dispatchEvent(event);
+            try { refreshWorkerStatus(); } catch(e) {}
+        });            
 		});
 	</script>
 	<script src="{{ url_for('static', filename='js/login.js') }}"></script>

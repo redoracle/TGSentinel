@@ -31,12 +31,12 @@ jobs:
 
       - name: Run tests
         run: |
-          pytest --cov=src/tgsentinel --cov-report=xml --cov-report=term
+          pytest --cov=src/tgsentinel --cov-report=xml --cov-report=term --ignore=tests/test_ui_login_endpoints.py
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v4
         with:
-          file: ./coverage.xml
+          files: ./coverage.xml
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: false

@@ -54,6 +54,7 @@ Components
 • Maintains a persistent session (.session file).
 • Streams NewMessage events from all accessible chats.
 • Performs normalization: chat ID, sender, timestamp, text, entities, reply/reaction counts.
+• **Single-Owner Pattern**: Only the sentinel container owns and writes to the session SQLite database.
 
 2️⃣ Redis Stream (Message Bus)
 • Lightweight, append-only queue between ingestion and analysis stages.
@@ -98,7 +99,67 @@ Components
 
 ⸻
 
-## � Quick Start
+## 🔒 Session Architecture
+
+TG Sentinel follows a **Single-Owner Process** pattern for Telegram session management to ensure data integrity and prevent SQLite concurrency issues:
+
+### Key Principles
+
+- **Sentinel Container**: Exclusive owner of the Telegram session SQLite database
+- **UI Container**: Never directly accesses the session file; all Telegram operations delegated via Redis
+- **No Re-authentication**: Session persists across container restarts once authenticated
+- **Zero Concurrency Conflicts**: Single writer pattern eliminates "database is locked" errors
+
+### Architecture Flow
+
+```bash
+User (Web UI)
+    ↓
+    ↓ Credentials via Redis
+    ↓
+UI Container (Flask)
+    ↓ Redis IPC (auth_queue)
+    ↓
+Sentinel Container (Telethon)
+    ↓ Exclusive session access
+    ↓
+Telegram Session (SQLite)
+    ↓
+Telegram API
+```
+
+### Authentication Process
+
+1. User enters phone/code in web UI
+2. UI submits credentials to Redis (`tgsentinel:auth_queue`)
+3. Sentinel reads queue and performs sign-in operation
+4. Sentinel validates with `client.get_me()`
+5. Session persisted to disk automatically
+6. UI polls status and confirms login
+
+**Result**: Session file owned exclusively by sentinel; no dual-writer conflicts; no re-authentication loops.
+
+### Common Session Issues
+
+If you experience session problems:
+
+- **"database is locked"** - Should never happen with single-owner pattern; verify UI container not accessing session
+- **Re-authentication required** - Session not persisting (check container logs for save errors)
+- **Connection timeout** - Network issues or Telegram API limits
+
+Solution: Restart containers and verify session ownership:
+
+```bash
+docker compose restart
+docker compose logs sentinel | grep "Session loaded"
+# Should show: "Session loaded via get_me(): User(...)"
+```
+
+For technical details, see [Engineering Guidelines: Session Management](docs/ENGINEERING_GUIDELINES.md#session-management-single-owner-pattern).
+
+⸻
+
+## 🚀 Quick Start
 
 ### Prerequisites
 
@@ -461,3 +522,45 @@ See **[tools/README.md](tools/README.md)** for development and session managemen
 - **`check_rate_limit.py`** - Check Telegram rate limit status
 - **`run_tests.py`** - Run the full test suite
 - And more...
+
+## 📄 License
+
+TG Sentinel is distributed under the Apache License 2.0, a permissive and industry-standard open-source license chosen to support transparency, broad adoption, and long-term commercial viability.
+
+### Why Apache-2.0
+
+- **Trust and Auditability**
+
+TG Sentinel monitors all Telegram channels, groups, and chats through a user-owned session.
+This requires maximum clarity, observability, and community oversight.
+A permissive license ensures that independent developers and security professionals can inspect the entire codebase without restrictions.
+
+- **Strong Legal Protection**
+
+Apache-2.0 includes explicit and robust clauses for:
+• Patent use
+• Contributor rights
+• Warranty disclaimers
+• Limitation of liability
+
+For a privacy-sensitive tool that handles encrypted communication and AI-driven analysis, these protections are essential for both maintainers and users.
+
+- **Maximum Adoption and Ecosystem Growth**
+
+Permissive licensing allows:
+• Universities and researchers to integrate it into experimental pipelines
+• Developers to embed it into private infrastructures
+• Companies to build solutions on top of it
+• Teams to deploy and customize it freely
+
+This accelerates innovation and builds a larger ecosystem around TG Sentinel.
+
+- **Foundation for Future Commercial Extensions**
+
+Apache-2.0 supports a clean path toward:
+• Pro and enterprise editions
+• Hosted SaaS offerings
+• Proprietary add-on modules
+• Partnerships and integrations
+
+The community version remains fully open, while advanced features can be offered under commercial licenses without conflict.

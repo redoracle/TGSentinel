@@ -41,6 +41,149 @@ Core components:
 - **Delivery**: Telegram DMs or channel posts for alerts; scheduled digests.
 - **UI**: Flask + Socket.IO dashboard for monitoring, configuration, and tools.
 
+### Session Management (Single-Owner Pattern)
+
+TG Sentinel implements a **Single-Owner Process** pattern to ensure SQLite session integrity:
+
+- **Sentinel container**: SOLE owner of `tgsentinel.session` SQLite database
+
+  - Exclusive TelegramClient instance
+  - Performs all sign_in() operations
+  - Saves session every 60 seconds + before disconnect
+  - Processes auth requests from Redis queue
+
+- **UI container**: ZERO direct session access
+
+  - TelegramClient set to None (prevented from import)
+  - All Telegram operations delegated via Redis IPC
+  - Submits credentials to `tgsentinel:auth_queue`
+  - Polls `tgsentinel:worker_status` for authorization
+
+- **Redis delegation patterns**:
+  - Authentication: UI → Redis → Sentinel → Telegram
+  - Get dialogs: UI → Redis → Sentinel → client.get_dialogs()
+  - Get users: UI → Redis → Sentinel → filtered dialogs
+  - Participant info: UI → Redis → Sentinel → cached results
+
+**Benefits**:
+
+- No "database is locked" errors (single writer)
+- No re-authentication loops (session persists)
+- No session corruption (exclusive access)
+- Scalable architecture (multiple UI workers, one sentinel)
+
+**Session Persistence**:
+
+- Periodic: Every 60 seconds during operation
+- Pre-disconnect: Before all client.disconnect() calls
+- Graceful shutdown: Signal handlers save session
+- File permissions: umask(0o000) set at module top
+
+**API Delegation Patterns**:
+
+```markdown
+Authentication Flow:
+UI: POST /api/session/login/start
+→ Redis: tgsentinel:auth_queue (action: "start")
+→ Sentinel: client.send_code_request()
+→ Redis: tgsentinel:auth_responses:{request_id}
+→ UI: Returns phone_code_hash
+
+UI: POST /api/session/login/verify
+→ Redis: tgsentinel:auth_queue (action: "verify")
+→ Sentinel: client.sign_in(code)
+→ Sentinel: client.get_me() validation
+→ Redis: tgsentinel:worker_status (authorized: true)
+→ UI: Confirms login
+
+Telegram Data Access:
+UI: GET /api/telegram/chats
+→ Redis: tgsentinel:request:get_dialogs:{request_id}
+→ Sentinel: telegram_dialogs_handler()
+→ Sentinel: client.get_dialogs()
+→ Redis: tgsentinel:response:get_dialogs:{request_id}
+→ UI: Returns chat list
+
+UI: GET /api/telegram/users
+→ Redis: tgsentinel:telegram_users_request:{request_id}
+→ Sentinel: telegram_users_handler()
+→ Sentinel: client.get_dialogs() + User filter
+→ Redis: tgsentinel:telegram_users_response:{request_id}
+→ UI: Returns user list
+```
+
+**Implementation Details**:
+
+- **UI Container** (`ui/app.py`):
+
+  - `TelegramClient = None` prevents accidental instantiation
+  - All endpoints use Redis delegation (auth_queue, request/response pattern)
+  - Response timeout: 30-60 seconds with polling
+  - No direct session file access
+
+- **Sentinel Container** (`src/tgsentinel/main.py`):
+
+  - Single `TelegramClient` via `make_client(cfg)`
+  - Auth queue handler: `_handle_auth_request()`
+  - Dialog handler: `telegram_dialogs_handler()`
+  - Session file: `/app/data/tgsentinel.session` (0o666 permissions)
+  - Session saved: every 60s + before disconnect + on signals
+
+- **Client Factory** (`src/tgsentinel/client.py`):
+  - Single creation point ensures one instance
+  - Sets file permissions: `os.chmod(session_path, 0o666)`
+  - Returns configured TelegramClient
+
+**Validation Checklist**:
+
+```bash
+# Verify UI has no TelegramClient usage
+grep -r "TelegramClient(" ui/  # Should return nothing
+
+# Verify sentinel owns session
+docker compose logs sentinel | grep "TelegramClient"
+# Should show single client creation
+
+# Monitor Redis delegation
+docker compose exec redis redis-cli KEYS "tgsentinel:*"
+# Should show auth_queue, request/response keys
+
+# Check session file ownership
+docker compose exec sentinel ls -la /app/data/tgsentinel.session
+# Should show: -rw-rw-rw- (0o666 permissions)
+```
+
+**Troubleshooting Session Issues**:
+
+- **"database is locked"**:
+
+  - Cause: Multiple processes writing to session DB
+  - Fix: Verify UI has `TelegramClient = None`; check for rogue instances
+  - Validation: `grep -r "from telethon import TelegramClient" ui/` should return nothing
+
+- **"attempt to write a readonly database"**:
+
+  - Cause: umask too restrictive or multiple writers
+  - Fix: Ensure `umask(0o000)` at module top before imports
+  - Validation: Check file permissions are 0o666
+
+- **Session not persisting**:
+
+  - Cause: Session not saved before disconnect
+  - Fix: Verify periodic handler running; check all disconnect paths call `client.session.save()`
+  - Validation: `docker compose logs sentinel | grep "session.save"` should show periodic saves
+
+- **Authentication loop** (keeps asking for code):
+
+  - Cause: Session not written to disk properly
+  - Fix: Check periodic persistence handler; verify fsync after writes; restart sentinel
+  - Validation: Session file should exist and have non-zero size after successful auth
+
+- **Re-authentication after restart**:
+  - Cause: Session file not persisted or corrupted
+  - Fix: Check volume mounts in docker-compose.yml; verify `./data` is mounted rw
+  - Validation: Session file should survive container restart
+
 Repository layout:
 
 - `src/tgsentinel/`: core runtime
@@ -64,6 +207,7 @@ Repository layout:
 
 ### 1. Telethon → client.py
 
+- **Session Ownership**: Sentinel container exclusively owns TelegramClient instance and session database.
 - Registers an `events.NewMessage` handler.
 - Normalizes payload: `chat_id`, `chat_title`, `msg_id`, `sender_id`, `sender_name`, `mentioned`, `text`, `replies`, `reactions`, `timestamp`.
 - Caches:

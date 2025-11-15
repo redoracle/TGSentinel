@@ -182,7 +182,7 @@ def app():
     mock_config.redis = {
         "host": "localhost",
         "port": 6379,
-        "db": 15,
+        "db": 15,  # Use DB 15 for tests
         "stream": "sentinel:messages",
     }
     mock_alerts = MagicMock()
@@ -202,3 +202,25 @@ def app():
 def client(app):
     """Create Flask test client."""
     return app.test_client()
+
+
+@pytest.fixture
+def mock_init():
+    """Mock initialization to avoid external dependencies."""
+    with (
+        patch("ui.app._is_initialized", True),
+        patch("ui.app.config") as mock_config,
+        patch("ui.app.engine") as mock_engine,
+        patch("ui.app.redis_client"),
+    ):
+        mock_config.telegram_session = "/app/data/test.session"
+        mock_config.db_uri = "sqlite:///:memory:"
+        mock_config.redis = {"host": "localhost", "port": 6379}
+
+        # Mock database connection
+        mock_conn = MagicMock()
+        mock_engine.connect.return_value.__enter__.return_value = mock_conn
+        mock_conn.execute.return_value.scalar.return_value = 0
+        mock_conn.execute.return_value = []
+
+        yield mock_config

@@ -363,10 +363,21 @@ class TestCommandCenter:
         assert data["status"] == "accepted"
 
     def test_quick_action_purge_database(self, client):
-        """Verify Purge Database quick action."""
+        """Verify Purge Database quick action requires confirmation."""
+        # First request without confirmation should fail
         response = client.post(
             "/api/console/command",
             json={"command": "/purge db"},
+            content_type="application/json",
+        )
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert data["status"] == "confirmation_required"
+
+        # Second request with confirmation should succeed
+        response = client.post(
+            "/api/console/command",
+            json={"command": "/purge db", "confirm": "DELETE_ALL_DATA"},
             content_type="application/json",
         )
         assert response.status_code == 200

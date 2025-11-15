@@ -158,11 +158,17 @@ def live_app(live_test_setup):
     mock_config.alerts = mock_alerts
 
     with patch("app.load_config", return_value=mock_config):
-        with patch("redis.Redis") as mock_redis_class:
-            mock_redis_class.return_value = live_test_setup["redis"]
+        import app as flask_app  # type: ignore[import-not-found]
 
-            import app as flask_app  # type: ignore[import-not-found]
+        # Force re-initialization by resetting the global state
+        flask_app._is_initialized = False
+        flask_app.redis_client = None
+        flask_app._cached_health = None  # Clear health cache
+        flask_app._cached_summary = None  # Clear summary cache
 
+        with patch.object(
+            flask_app.redis, "Redis", return_value=live_test_setup["redis"]
+        ):
             flask_app.app.config["TESTING"] = True
             flask_app.config = mock_config
 

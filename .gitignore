@@ -16,6 +16,7 @@ env/
 
 # Logs and runtime data
 *.log
+*.bak
 *.sqlite3
 *.db
 /data/
@@ -30,3 +31,4 @@ env/
 Thumbs.db
 
 !data/plugins/README.md
+.github/instructions/

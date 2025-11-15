@@ -28,7 +28,12 @@ class TestMakeClient:
             similarity_threshold=0.42,
         )
 
-        with patch("tgsentinel.client.TelegramClient") as mock_client:
+        with (
+            patch("tgsentinel.client.TelegramClient") as mock_client,
+            patch(
+                "tgsentinel.client._resolve_session_path", return_value="test.session"
+            ),
+        ):
             client = make_client(cfg)
 
             mock_client.assert_called_once_with("test.session", 123456, "test_hash")

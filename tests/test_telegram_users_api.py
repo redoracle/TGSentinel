@@ -163,13 +163,14 @@ class TestTelegramUsersAPI:
                 assert data["source"] == "config"
 
     def test_users_api_redis_error(self, client):
-        """Test Redis connection error."""
+        """Test Redis connection error - returns empty list gracefully."""
         with patch("app.redis_client", None):  # Simulate no Redis
             response = client.get("/api/telegram/users")
 
-            assert response.status_code == 503
+            # Updated: API now returns 200 with empty list instead of 503
+            assert response.status_code == 200
             data = response.get_json()
-            assert "Redis not available" in data["message"]
+            assert data["users"] == []
 
     def test_users_api_malformed_response(self, client):
         """Test malformed response from sentinel."""

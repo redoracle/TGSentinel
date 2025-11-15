@@ -339,15 +339,17 @@ def init_app() -> None:
                 client = redis.Redis(
                     host=stream_cfg["host"],
                     port=int(stream_cfg.get("port", 6379)),
+                    db=int(stream_cfg.get("db", 0)),
                     decode_responses=True,
                     socket_timeout=1.5,
                 )
                 client.ping()
                 redis_client = client
                 logger.info(
-                    "Redis connection ready: %s:%s",
+                    "Redis connection ready: %s:%s (DB %s)",
                     stream_cfg["host"],
                     stream_cfg.get("port", 6379),
+                    stream_cfg.get("db", 0),
                 )
             except (
                 Exception
@@ -685,7 +687,7 @@ def _credential_fingerprint() -> Dict[str, str] | None:
         api_hash = os.getenv("TG_API_HASH")
     if api_id is None or not api_hash:
         return None
-    fingerprint = hashlib.sha256(api_hash.encode("utf-8")).hexdigest()
+    fingerprint = hashlib.sha256(str(api_hash).encode("utf-8")).hexdigest()
     return {"api_id": str(api_id), "api_hash_sha256": fingerprint}
 
 
