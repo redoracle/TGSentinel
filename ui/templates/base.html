@@ -228,37 +228,32 @@
 	</div>
 
 	<!-- Logout Confirmation Modal -->
-	<div class="modal fade" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+	<div class="modal fade" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true">
 		<div class="modal-dialog modal-dialog-centered">
 			<div class="modal-content">
 				<div class="modal-header">
-					<h5 class="modal-title" id="logoutModalLabel">⚠️ Complete System Reset</h5>
+					<h5 class="modal-title" id="logoutModalLabel">Logout Confirmation</h5>
 					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 				</div>
 				<div class="modal-body">
-					<div class="alert alert-danger mb-3">
-						<strong>Warning:</strong> This will permanently delete ALL data:
-						<ul class="mb-0 mt-2">
-							<li>Database (sentinel.db)</li>
-							<li>Redis cache and streams</li>
-							<li>Telegram session files</li>
-							<li>All configuration YML files</li>
-							<li>User avatars and cached data</li>
-						</ul>
-					</div>
-					<p class="mb-3">To confirm this action, type <strong>DELETE ALL</strong> below:</p>
-					<input type="text" class="form-control" id="logoutConfirmInput" placeholder="Type DELETE ALL to confirm" autocomplete="off">
-					<div id="logoutConfirmError" class="text-danger mt-2" style="display: none;">Please type "DELETE ALL" exactly to proceed.</div>
+					<p>Are you sure you want to logout? This will:</p>
+					<ul>
+						<li>Disconnect your Telegram session</li>
+						<li>Clear authentication state</li>
+						<li>Return you to the login screen</li>
+					</ul>
+					<p class="mb-0"><small class="text-muted">Your configuration and data will be preserved. You can log back in anytime.</small></p>
 				</div>
 				<div class="modal-footer">
 					<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-					<button type="button" id="btnConfirmLogout" class="btn btn-danger" disabled>Delete All & Logout</button>
+					<button type="button" id="btnConfirmLogout" class="btn btn-primary">Logout</button>
 				</div>
 			</div>
 		</div>
 	</div>
 
 	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+	<script src="{{ url_for('static', filename='js/progress-modal.js') }}"></script>
 	<script>
 		// Global function to enhance modals with glass backdrop effect
 		function applyGlassBackdrop(modalElement) {
@@ -367,7 +362,9 @@
 		const phoneEl = document.getElementById("phone-mask");
 
 		if (avatarEl && data.avatar) {
-			avatarEl.src = data.avatar;
+			// Add cache-busting timestamp to force browser to reload avatar on user switch
+			const cacheBuster = '?t=' + Date.now();
+			avatarEl.src = data.avatar + cacheBuster;
 		}
 		if (usernameEl && data.username) {
 			usernameEl.textContent = data.username;
@@ -408,7 +405,7 @@
 			try {
 				const modalEl = document.getElementById('logoutModal');
 				if (modalEl) {
-					const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl, { backdrop: 'static', keyboard: false });
+					const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
 					modal.show();
 				}
 			} catch (e) {
@@ -423,65 +420,136 @@
 			logoutBtnMobile.addEventListener("click", handleLogout);
 		}
 
-		// Enable/disable logout button based on confirmation input
-		const logoutConfirmInput = document.getElementById("logoutConfirmInput");
+		// Confirm logout button performs simple session logout
 		const btnConfirmLogout = document.getElementById("btnConfirmLogout");
-		const logoutConfirmError = document.getElementById("logoutConfirmError");
-		
-		if (logoutConfirmInput && btnConfirmLogout) {
-			logoutConfirmInput.addEventListener("input", () => {
-				const value = logoutConfirmInput.value.trim();
-				if (value === "DELETE ALL") {
-					btnConfirmLogout.disabled = false;
-					logoutConfirmError.style.display = "none";
-				} else {
-					btnConfirmLogout.disabled = true;
-				}
-			});
-			
-			// Reset input when modal is hidden
-			const logoutModal = document.getElementById("logoutModal");
-			if (logoutModal) {
-				logoutModal.addEventListener("hidden.bs.modal", () => {
-					logoutConfirmInput.value = "";
-					btnConfirmLogout.disabled = true;
-					logoutConfirmError.style.display = "none";
-				});
-			}
-		}
-
-		// Confirm logout button performs complete data cleanup
 		if (btnConfirmLogout) {
 			btnConfirmLogout.addEventListener("click", async () => {
-				// Validate one more time
-				if (logoutConfirmInput && logoutConfirmInput.value.trim() !== "DELETE ALL") {
-					if (logoutConfirmError) {
-						logoutConfirmError.style.display = "block";
+				// Hide the confirmation modal first
+				try {
+					const logoutModalEl = document.getElementById('logoutModal');
+					if (logoutModalEl) {
+						const logoutModal = bootstrap.Modal.getInstance(logoutModalEl);
+						if (logoutModal) logoutModal.hide();
 					}
-					return;
+				} catch (e) {
+					console.error("Failed to hide logout modal", e);
 				}
 				
-				// Disable to prevent double clicks and show busy state
+				// Show progress modal
+				const progress = window.ProgressModal ? new window.ProgressModal() : null;
+				
+				if (progress) {
+					progress.show('logout', 'Logging Out');
+					progress.addLog('Initiating logout sequence...', 'info');
+				}
+				
+				// Disable to prevent double clicks
 				btnConfirmLogout.setAttribute('aria-busy', 'true');
 				btnConfirmLogout.classList.add('disabled');
-				btnConfirmLogout.textContent = "Deleting...";
 				
-				// Call complete cleanup API
+				// Call logout API
 				try {
-					const controller = new AbortController();
-					const tid = setTimeout(() => controller.abort(), 5000);
-					try { 
-						await fetch('/api/session/logout-complete', { method: 'POST', signal: controller.signal });
-					} catch (_) {}
-					clearTimeout(tid);
-				} catch (_) {}
-				
-				// Clear local state and broadcast to other tabs
-				try { sessionStorage.clear(); } catch (_) {}
-				try { localStorage.clear(); } catch (_) {}
-				try { localStorage.setItem('tgsentinel:logout', String(Date.now())); } catch (_) {}
-				// Navigate via server-side /logout route to guarantee session invalidation + gating
-				try { window.location.assign('/logout'); } catch (_) { window.location.href = '/logout'; }
+					if (progress) {
+						progress.addLog('Sending logout request to sentinel...', 'info');
+						progress.nextStage();
+					}
+					
+					const response = await fetch('/api/session/logout', { method: 'POST' });
+					const data = await response.json();
+					console.log("Logout response:", data);
+					
+					if (progress) {
+						progress.addLog('Logout request sent to sentinel', 'success');
+						progress.nextStage();
+						
+						// Poll for logout progress from sentinel
+						const pollProgress = async () => {
+							const maxAttempts = 60; // 30 seconds max (500ms interval)
+							let attempts = 0;
+							let lastStage = null;
+							let lastMessage = null;
+							
+							const checkProgress = async () => {
+								attempts++;
+								
+								try {
+									const progressResp = await fetch('/api/worker/logout-progress');
+									if (progressResp.ok) {
+										const progressData = await progressResp.json();
+										console.log('[LOGOUT] Progress data:', progressData);
+										
+										if (progressData.stage && progressData.stage !== 'unknown') {
+											const percent = progressData.percent || 0;
+											const message = progressData.message || 'Processing...';
+											
+											// Always update progress bar
+											progress.updateProgress(percent, message);
+											
+											// Only add log if stage or message changed (prevent duplicates)
+											if (progressData.stage !== lastStage || message !== lastMessage) {
+												progress.addLog(message, 'info');
+												console.log(`[LOGOUT] Stage: ${progressData.stage}, Percent: ${percent}, Message: ${message}`);
+												lastStage = progressData.stage;
+												lastMessage = message;
+											}
+											
+											if (progressData.stage === 'completed' || percent >= 100) {
+												progress.addLog('Logout completed successfully!', 'success');
+												
+												// Clear local state
+												try { sessionStorage.clear(); } catch (_) {}
+												try { localStorage.setItem('tgsentinel:logout', String(Date.now())); } catch (_) {}
+												
+												// Wait longer for users to see completion (3.5 seconds)
+												setTimeout(() => {
+													if (progress) progress.hide();
+													// Use redirect from sentinel or fallback to /logout
+													const redirectUrl = progressData.redirect || '/logout';
+													window.location.href = redirectUrl;
+												}, 3500);
+												return;
+											}
+										}
+									}
+								} catch (pollErr) {
+									console.debug('Progress poll error:', pollErr);
+								}
+								
+								// Continue polling if not completed and under max attempts
+								if (attempts < maxAttempts) {
+									setTimeout(checkProgress, 500);
+								} else {
+									// Timeout - force redirect anyway
+									progress.addLog('Logout timeout - redirecting', 'warning');
+									setTimeout(() => {
+										if (progress) progress.hide();
+										try { sessionStorage.clear(); } catch (_) {}
+										try { localStorage.setItem('tgsentinel:logout', String(Date.now())); } catch (_) {}
+										window.location.href = '/logout';
+									}, 500);
+								}
+							};
+							
+							// Start polling after a short delay
+							setTimeout(checkProgress, 500);
+						};
+						
+						pollProgress();
+					}
+				} catch (err) {
+					console.error("Logout request failed:", err);
+					if (progress) {
+						progress.addLog(`Logout error: ${err.message}`, 'error');
+					}
+					
+					// On error, force reload after delay
+					setTimeout(() => {
+						if (progress) progress.hide();
+						try { sessionStorage.clear(); } catch (_) {}
+						try { localStorage.setItem('tgsentinel:logout', String(Date.now())); } catch (_) {}
+						window.location.reload(true);
+					}, 2000);
+				}
 			});
 		}
 
@@ -877,6 +945,66 @@
 						<dd class="col-sm-8"><code class="user-select-all small">${escapeHtml(String(data.user.access_hash))}</code></dd>`;
 				}
 				
+				// Relationship flags
+				if (data.user.is_self) {
+					html += `
+						<dt class="col-sm-4">Account</dt>
+						<dd class="col-sm-8"><span class="badge bg-primary"><i class="bi bi-person-fill me-1"></i>This is YOU</span></dd>`;
+				}
+				
+				// Contact/mutual info
+				if (data.user.mutual_contact) {
+					html += `
+						<dt class="col-sm-4">Contact</dt>
+						<dd class="col-sm-8"><span class="badge bg-success"><i class="bi bi-person-check-fill me-1"></i>Mutual Contact</span></dd>`;
+				} else if (data.user.contact) {
+					html += `
+						<dt class="col-sm-4">Contact</dt>
+						<dd class="col-sm-8"><span class="badge bg-info"><i class="bi bi-person-plus-fill me-1"></i>In Contacts</span></dd>`;
+				}
+				
+				// Status information (with was_online timestamp)
+				if (data.user.status_type) {
+					html += `
+						<dt class="col-sm-4">Status</dt>
+						<dd class="col-sm-8">`;
+					if (data.user.status_type === 'online') {
+						html += `<span class="badge bg-success"><i class="bi bi-circle-fill me-1"></i>Online</span>`;
+						if (data.user.status_expires) {
+							const expires = new Date(data.user.status_expires);
+							html += ` <small class="text-muted">(until ${expires.toLocaleTimeString()})</small>`;
+						}
+					} else if (data.user.status_type === 'offline') {
+						html += `<span class="badge bg-secondary"><i class="bi bi-circle me-1"></i>Offline</span>`;
+						if (data.user.was_online) {
+							const wasOnline = new Date(data.user.was_online);
+							html += ` <small class="text-muted">(last seen: ${wasOnline.toLocaleString()})</small>`;
+						}
+					} else if (data.user.status_type === 'recently') {
+						html += `<span class="badge bg-info">Recently Active</span>`;
+					} else if (data.user.status_type === 'last_week') {
+						html += `<span class="badge bg-light text-dark">Last Week</span>`;
+					} else if (data.user.status_type === 'last_month') {
+						html += `<span class="badge bg-light text-dark">Last Month</span>`;
+					} else {
+						html += `<span class="badge bg-light text-dark">${escapeHtml(data.user.status_type)}</span>`;
+					}
+					html += `</dd>`;
+				}
+				
+				// Photo metadata (if available)
+				if (data.user.photo_id) {
+					html += `
+						<dt class="col-sm-4">Profile Photo</dt>
+						<dd class="col-sm-8">
+							<span class="badge bg-success">Available</span>
+							<small class="text-muted ms-2">ID: <code>${escapeHtml(String(data.user.photo_id))}</code></small>`;
+					if (data.user.photo_dc_id) {
+						html += ` <small class="text-muted">DC: <code>${escapeHtml(String(data.user.photo_dc_id))}</code></small>`;
+					}
+					html += `</dd>`;
+				}
+				
 				if (data.user.phone) {
 					html += `
 						<dt class="col-sm-4">Phone</dt>
@@ -934,58 +1062,6 @@
 					html += `
 						<dt class="col-sm-4">Language</dt>
 						<dd class="col-sm-8"><span class="badge bg-light text-dark">${escapeHtml(data.user.lang_code.toUpperCase())}</span></dd>`;
-				}
-				
-				// Status indicators
-				if (data.user.status) {
-					html += `
-						<dt class="col-sm-4">Status</dt>
-						<dd class="col-sm-8">`;
-					if (data.user.status === 'online') {
-						html += `<span class="badge bg-success"><i class="bi bi-circle-fill me-1"></i>Online</span>`;
-					} else if (data.user.status === 'offline') {
-						html += `<span class="badge bg-secondary"><i class="bi bi-circle me-1"></i>Offline</span>`;
-					} else if (data.user.status === 'recently') {
-						html += `<span class="badge bg-info">Recently Active</span>`;
-					} else if (data.user.status === 'last_week') {
-						html += `<span class="badge bg-light text-dark">Last Week</span>`;
-					} else if (data.user.status === 'last_month') {
-						html += `<span class="badge bg-light text-dark">Last Month</span>`;
-					} else {
-						html += `<span class="badge bg-light text-dark">${escapeHtml(data.user.status)}</span>`;
-					}
-					html += `</dd>`;
-				}
-				
-				if (data.user.last_seen) {
-					const lastSeen = new Date(data.user.last_seen * 1000);
-					html += `
-						<dt class="col-sm-4">Last Seen</dt>
-						<dd class="col-sm-8">${lastSeen.toLocaleString()}</dd>`;
-				}
-				
-				// Privacy settings
-				if (data.user.photo_available !== undefined) {
-					html += `
-						<dt class="col-sm-4">Profile Photo</dt>
-						<dd class="col-sm-8">`;
-					if (data.user.photo_available) {
-						html += `<span class="badge bg-success">Available</span>`;
-					} else {
-						html += `<span class="badge bg-secondary">Not Set</span>`;
-					}
-					html += `</dd>`;
-				}
-				
-				// Contact/mutual info
-				if (data.user.mutual_contact) {
-					html += `
-						<dt class="col-sm-4">Contact</dt>
-						<dd class="col-sm-8"><span class="badge bg-success"><i class="bi bi-person-check-fill me-1"></i>Mutual Contact</span></dd>`;
-				} else if (data.user.contact) {
-					html += `
-						<dt class="col-sm-4">Contact</dt>
-						<dd class="col-sm-8"><span class="badge bg-info"><i class="bi bi-person-plus me-1"></i>In Contacts</span></dd>`;
 				}
 				
 				// Restrictions

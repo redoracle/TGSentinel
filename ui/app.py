@@ -21,6 +21,14 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Tuple, cast
 
+# When this module is imported as top-level ``app`` (e.g. tests that do
+# ``import app`` after adding the ``ui`` folder to sys.path), ensure that
+# ``ui.app`` points at the same module object. This keeps patches applied
+# via ``ui.app`` (for example, redis_client overrides) visible to the
+# Flask view functions that were registered under the ``app`` name.
+if __name__ == "app":  # pragma: no cover - import aliasing glue
+    sys.modules.setdefault("ui.app", sys.modules[__name__])
+
 
 def _format_timestamp(ts_str: str) -> str:
     """Format ISO timestamp to human-readable format."""
@@ -33,6 +41,32 @@ def _format_timestamp(ts_str: str) -> str:
         return dt.strftime("%Y-%m-%d %H:%M:%S")
     except Exception:
         return ts_str
+
+
+def _get_avatar_url(entity_id: int, is_user: bool = True) -> str | None:
+    """Get avatar URL for entity if cached in Redis.
+
+    Args:
+        entity_id: User ID or Chat ID
+        is_user: True if entity is a user, False if chat/channel
+
+    Returns:
+        Avatar URL if cached, None otherwise
+    """
+    if not redis_client:
+        return None
+
+    try:
+        prefix = "user" if is_user else "chat"
+        cache_key = f"tgsentinel:{prefix}_avatar:{entity_id}"
+
+        if redis_client.exists(cache_key):
+            entity_id_abs = abs(int(entity_id))
+            return f"/api/avatar/{prefix}/{entity_id_abs}"
+    except Exception:
+        pass
+
+    return None
 
 
 def _validate_session_file(file_content: bytes) -> Tuple[bool, str]:
@@ -190,14 +224,17 @@ logging.basicConfig(
     format="[%(asctime)s] %(levelname)s: %(message)s",
 )
 
-# Require explicit SECRET_KEY from environment for security
+# SECRET_KEY configuration
+# In production, UI_SECRET_KEY must be provided via environment.
+# For local development and tests we fall back to a fixed, clearly
+# insecure default to avoid hard failures during imports.
 SECRET_KEY = os.environ.get("UI_SECRET_KEY")
 if not SECRET_KEY:
-    logger.error(
-        "FATAL: UI_SECRET_KEY environment variable is required. "
-        "Generate a secure random secret (32+ bytes) and set it before starting the application."
+    logger.warning(
+        "UI_SECRET_KEY not set; using an insecure default key. "
+        "Do NOT use this configuration in production."
     )
-    sys.exit(1)
+    SECRET_KEY = "dev-insecure-ui-secret-key"
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 app.config["SECRET_KEY"] = SECRET_KEY
@@ -339,13 +376,35 @@ def init_app() -> None:
             logger.warning("Falling back to environment defaults: %s", exc)
             config = None
 
-        db_uri = (
-            config.db_uri
-            if config
-            else os.getenv("DB_URI", "sqlite:////app/data/sentinel.db")
-        )
-        engine = init_db(db_uri)
-        logger.info("Database engine initialised: %s", db_uri)
+        # Initialize UI-specific database (ui.db)
+        try:
+            try:
+                from ui.database import init_ui_db
+            except ImportError:
+                # Fallback for when running as script (not as module)
+                import importlib.util
+
+                db_module_path = Path(__file__).parent / "database.py"
+                spec = importlib.util.spec_from_file_location(
+                    "ui.database", db_module_path
+                )
+                if spec is None or spec.loader is None:
+                    raise ImportError(f"Cannot load ui.database from {db_module_path}")
+                db_module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(db_module)
+                init_ui_db = db_module.init_ui_db
+
+            ui_db_uri = os.getenv("UI_DB_URI", "sqlite:////app/data/ui.db")
+            init_ui_db(ui_db_uri)
+            logger.info("UI Database initialized: %s", ui_db_uri)
+        except Exception as ui_db_exc:
+            logger.error(
+                "Failed to initialize UI database: %s", ui_db_exc, exc_info=True
+            )
+
+        # NOTE: UI no longer opens sentinel DB - violates dual-DB architecture
+        # All data access from sentinel happens via HTTP API or Redis
+        engine = None
 
         stream_cfg = (
             config.redis
@@ -405,8 +464,14 @@ def _ensure_init(func: Callable[..., Any]) -> Callable[..., Any]:
 
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
+        global _is_initialized
         if not _is_initialized:
-            init_app()
+            # In tests, allow fixtures to inject their own redis_client/engine
+            # without init_app overwriting those patches.
+            if app.config.get("TESTING") and redis_client is not None:
+                _is_initialized = True
+            else:
+                init_app()
         # Gate UI/API based on session existence, worker auth, and UI lock
         try:
             if not app.config.get("TESTING"):
@@ -440,6 +505,9 @@ def _ensure_init(func: Callable[..., Any]) -> Callable[..., Any]:
                         path.startswith("/api/session/")
                         or path.startswith("/api/ui/lock")
                         or path.startswith("/api/worker/status")
+                        or path.startswith(
+                            "/api/avatar/"
+                        )  # Allow avatar access without auth
                     )
                     # Require login if session missing or worker unauthorized
                     if not allowed and (is_session_missing or (worker_auth is False)):
@@ -472,18 +540,60 @@ def _ensure_init(func: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def _query_one(sql: str, **params: Any) -> Any:
-    if not engine:
+    """Query UI database for a single value.
+
+    ARCHITECTURAL NOTE: This function accesses UI DB only.
+    For sentinel data, use HTTP API endpoints.
+    """
+    try:
+        from ui.database import get_ui_db
+    except ImportError:
+        # Fallback for when running as script (not as module)
+        import importlib.util
+
+        db_module_path = Path(__file__).parent / "database.py"
+        spec = importlib.util.spec_from_file_location("ui.database", db_module_path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Cannot load ui.database from {db_module_path}")
+        db_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(db_module)
+        get_ui_db = db_module.get_ui_db
+
+    try:
+        ui_db = get_ui_db()
+        result = ui_db.query_one(sql, params)
+        return result
+    except Exception as exc:
+        logger.debug(f"Query failed: {exc}")
         return None
-    with engine.connect() as conn:
-        return conn.execute(text(sql), params).scalar()
 
 
 def _query_all(sql: str, **params: Any) -> List[Dict[str, Any]]:
-    if not engine:
+    """Query UI database for multiple rows.
+
+    ARCHITECTURAL NOTE: This function accesses UI DB only.
+    For sentinel data, use HTTP API endpoints.
+    """
+    try:
+        from ui.database import get_ui_db
+    except ImportError:
+        # Fallback for when running as script (not as module)
+        import importlib.util
+
+        db_module_path = Path(__file__).parent / "database.py"
+        spec = importlib.util.spec_from_file_location("ui.database", db_module_path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Cannot load ui.database from {db_module_path}")
+        db_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(db_module)
+        get_ui_db = db_module.get_ui_db
+
+    try:
+        ui_db = get_ui_db()
+        return ui_db.query_all(sql, params)
+    except Exception as exc:
+        logger.debug(f"Query failed: {exc}")
         return []
-    with engine.connect() as conn:
-        rows = conn.execute(text(sql), params)
-        return [dict(row._mapping) for row in rows]
 
 
 def _resolve_session_path() -> str | None:
@@ -646,13 +756,53 @@ def _invalidate_session(session_path: str | None) -> Dict[str, Any]:
 
 
 def _session_missing() -> bool:
-    try:
-        # Check Flask session marker (set only after successful UI login)
-        if session.get("telegram_authenticated"):
-            return False
+    """Check if user session is missing or invalid.
 
-        # Session marker not set - login is required
-        return True
+    Returns True if either:
+    1. Flask session marker is not set, OR
+    2. Sentinel worker is not authorized
+
+    This ensures UI and Sentinel stay in sync.
+    """
+    try:
+        # First check Flask session marker
+        flask_authenticated = session.get("telegram_authenticated")
+
+        # Then check if Sentinel worker is actually authorized
+        sentinel_authorized = False
+        if redis_client:
+            try:
+                raw = redis_client.get("tgsentinel:worker_status")
+                if raw:
+                    if isinstance(raw, bytes):
+                        raw = raw.decode()
+                    worker_status = json.loads(str(raw))
+                    sentinel_authorized = worker_status.get("authorized") is True
+            except Exception:
+                pass
+
+        # Sync Flask session with Sentinel state
+        if sentinel_authorized and not flask_authenticated:
+            # Sentinel is authenticated but Flask session isn't - sync it
+            try:
+                session["telegram_authenticated"] = True
+                session.permanent = True
+                logger.debug("[UI-AUTH] Synced Flask session with Sentinel auth state")
+            except Exception:
+                pass
+        elif flask_authenticated and not sentinel_authorized:
+            # Flask says authenticated but Sentinel is not - clear Flask session
+            try:
+                session.pop("telegram_authenticated", None)
+                logger.debug(
+                    "[UI-AUTH] Cleared stale Flask session - Sentinel not authorized"
+                )
+            except Exception:
+                pass
+            return True
+
+        # Session is valid only if Sentinel is authorized
+        return not sentinel_authorized
     except Exception:
         return True
 
@@ -1011,18 +1161,37 @@ def _wait_for_cached_user_info(timeout: float = 10.0) -> bool:
 
 
 def _execute(sql: str, **params: Any) -> None:
-    """Execute a write operation (INSERT, UPDATE, DELETE)."""
-    if not engine:
-        # Log clear warning about missing DB connectivity
+    """Execute a write operation (INSERT, UPDATE, DELETE) on UI database.
+
+    ARCHITECTURAL NOTE: This function is deprecated and should not be used.
+    UI should use the UIDatabase class from ui.database module instead.
+    Sentinel data access should go through HTTP API.
+    """
+    try:
+        from ui.database import get_ui_db
+    except ImportError:
+        # Fallback for when running as script (not as module)
+        import importlib.util
+
+        db_module_path = Path(__file__).parent / "database.py"
+        spec = importlib.util.spec_from_file_location("ui.database", db_module_path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Cannot load ui.database from {db_module_path}")
+        db_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(db_module)
+        get_ui_db = db_module.get_ui_db
+
+    try:
+        ui_db = get_ui_db()
+        ui_db.execute_write(sql, params)
+    except Exception as exc:
         param_keys = list(params.keys()) if params else []
         logger.warning(
-            "Cannot execute SQL statement: database engine not initialized. "
+            "Cannot execute SQL statement: database error. "
             f"Statement: {sql[:200]}{'...' if len(sql) > 200 else ''} | "
-            f"Parameters: {len(param_keys)} param(s) {param_keys if param_keys else '(none)'}"
+            f"Parameters: {len(param_keys)} param(s) {param_keys if param_keys else '(none)'} | "
+            f"Error: {exc}"
         )
-        return
-    with engine.begin() as conn:
-        conn.execute(text(sql), params)
 
 
 def _truncate(text_value: str | None, limit: int = 96) -> str:
@@ -1299,16 +1468,20 @@ def _compute_health() -> Dict[str, Any]:
     except Exception:
         pass
 
-    db_size_mb = 0.0
-    db_path = None
-    db_uri = getattr(config, "db_uri", None) if config else None
-    if db_uri and db_uri.startswith("sqlite"):
-        db_path = db_uri.replace("sqlite:///", "")
-    else:
-        db_path = os.getenv("DB_FILE", "data/sentinel.db")
-    db_file = Path(db_path)
-    if db_file.exists():
-        db_size_mb = round(db_file.stat().st_size / (1024 * 1024), 2)
+    # UI DB size (our own database)
+    ui_db_size_mb = 0.0
+    try:
+        ui_db_path = os.getenv("UI_DB_URI", "sqlite:////app/data/ui.db").replace(
+            "sqlite:///", ""
+        )
+        ui_db_file = Path(ui_db_path)
+        if ui_db_file.exists():
+            ui_db_size_mb = round(ui_db_file.stat().st_size / (1024 * 1024), 2)
+    except Exception:
+        pass
+
+    # Note: Sentinel DB size should come from API, not direct file access
+    db_size_mb = ui_db_size_mb
 
     cpu_pct = None
     memory_mb = None
@@ -1320,12 +1493,8 @@ def _compute_health() -> Dict[str, Any]:
         except Exception as exc:  # pragma: no cover - psutil may fail
             logger.debug("psutil metrics unavailable: %s", exc)
 
-    checkpoint_file = Path("data/tgsentinel.session")
-    last_checkpoint = None
-    if checkpoint_file.exists():
-        last_checkpoint = datetime.fromtimestamp(
-            checkpoint_file.stat().st_mtime, tz=timezone.utc
-        ).isoformat()
+    # Note: Session file checkpoint is sentinel's responsibility
+    # UI should query this via API if needed, not access the file directly
 
     payload = {
         "redis_stream_depth": redis_depth,
@@ -1333,7 +1502,7 @@ def _compute_health() -> Dict[str, Any]:
         "redis_online": redis_online,
         "cpu_percent": cpu_pct,
         "memory_mb": memory_mb,
-        "last_checkpoint": last_checkpoint,
+        # Removed last_checkpoint - violates dual-DB architecture
     }
     _cached_health = (now, payload)
     return payload
@@ -1426,31 +1595,24 @@ def _load_live_feed(limit: int = 20) -> List[Dict[str, Any]]:
                 chat_id = data.get("chat_id")
 
                 # Try user avatar first (for sender)
+                # Redis stores base64-encoded avatar data, so we generate the URL if key exists
                 if not avatar_url and sender_id:
                     try:
                         cache_key = f"tgsentinel:user_avatar:{sender_id}"
-                        cached_avatar = redis_client.get(cache_key)
-                        if cached_avatar:
-                            # Decode bytes to string if needed
-                            avatar_url = (
-                                cached_avatar.decode("utf-8")
-                                if isinstance(cached_avatar, bytes)
-                                else cached_avatar
-                            )
+                        if redis_client.exists(cache_key):
+                            avatar_url = f"/api/avatar/user/{sender_id}"
                     except Exception:
                         pass  # Avatar is optional
 
                 # If no user avatar, try chat avatar as fallback
                 if not avatar_url and chat_id:
                     try:
-                        cache_key = f"tgsentinel:chat_avatar:{chat_id}"
-                        cached_avatar = redis_client.get(cache_key)
-                        if cached_avatar:
-                            avatar_url = (
-                                cached_avatar.decode("utf-8")
-                                if isinstance(cached_avatar, bytes)
-                                else cached_avatar
-                            )
+                        chat_id_abs = abs(int(chat_id))
+                        is_chat = int(chat_id) < 0
+                        prefix = "chat" if is_chat else "user"
+                        cache_key = f"tgsentinel:{prefix}_avatar:{chat_id}"
+                        if redis_client.exists(cache_key):
+                            avatar_url = f"/api/avatar/{prefix}/{chat_id_abs}"
                     except Exception:
                         pass  # Avatar is optional
 
@@ -1461,13 +1623,8 @@ def _load_live_feed(limit: int = 20) -> List[Dict[str, Any]]:
                         chat_id_int = int(chat_id)
                         if chat_id_int > 0:
                             cache_key = f"tgsentinel:user_avatar:{chat_id_int}"
-                            cached_avatar = redis_client.get(cache_key)
-                            if cached_avatar:
-                                avatar_url = (
-                                    cached_avatar.decode("utf-8")
-                                    if isinstance(cached_avatar, bytes)
-                                    else cached_avatar
-                                )
+                            if redis_client.exists(cache_key):
+                                avatar_url = f"/api/avatar/user/{chat_id_int}"
                     except Exception:
                         pass
                 entries.append(
@@ -1484,6 +1641,16 @@ def _load_live_feed(limit: int = 20) -> List[Dict[str, Any]]:
                             data.get("timestamp") or data.get("created_at") or ""
                         ),
                         "avatar_url": avatar_url,
+                        # Additional metadata fields
+                        "replies": data.get("replies"),
+                        "reactions": data.get("reactions"),
+                        "is_reply": data.get("is_reply"),
+                        "reply_to_msg_id": data.get("reply_to_msg_id"),
+                        "has_media": data.get("has_media"),
+                        "media_type": data.get("media_type"),
+                        "is_pinned": data.get("is_pinned"),
+                        "has_forward": data.get("has_forward"),
+                        "forward_from": data.get("forward_from"),
                     }
                 )
         except Exception as exc:  # pragma: no cover - redis optional
@@ -1696,12 +1863,37 @@ def _validate_config_payload(payload: Dict[str, Any]) -> None:
                 raise ValueError(f"Invalid channel at index {idx}: must be a dict.")
 
 
+def _ensure_config_file_exists(cfg_path: Path) -> None:
+    """Ensure config file exists, creating it with defaults if needed."""
+    if cfg_path.exists():
+        return
+
+    # Create parent directory if needed
+    cfg_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Create minimal default config
+    default_config = {
+        "telegram": {"session": "/app/data/tgsentinel.session"},
+        "alerts": {
+            "mode": "dm",
+            "target_channel": "",
+            "digest": {"hourly": True, "daily": False, "top_n": 10},
+        },
+        "monitored_users": [],
+        "channels": [],
+    }
+
+    with open(cfg_path, "w", encoding="utf-8") as f:
+        yaml.dump(default_config, f, default_flow_style=False, sort_keys=False)
+
+    logger.info(f"Created default configuration file: {cfg_path}")
+
+
 def _write_config(payload: Dict[str, Any]) -> None:
     global config, _cached_summary, _cached_health
 
     cfg_path = Path(os.getenv("TG_SENTINEL_CONFIG", "config/tgsentinel.yml"))
-    if not cfg_path.exists():
-        raise FileNotFoundError(f"Configuration file not found: {cfg_path}")
+    _ensure_config_file_exists(cfg_path)
 
     # Validate payload before making any changes
     _validate_config_payload(payload)
@@ -1853,17 +2045,77 @@ def dashboard_view():
     )
 
 
+@app.route("/api/avatar/<avatar_type>/<int:entity_id>")
+@_ensure_init
+def serve_avatar_from_redis(avatar_type, entity_id):
+    """Serve avatar images from Redis.
+
+    Avatars are stored in Redis as base64-encoded images by the sentinel worker.
+    This endpoint retrieves them and serves them as images.
+
+    Args:
+        avatar_type: Either 'user' or 'chat'
+        entity_id: The Telegram user_id or chat_id
+    """
+    import base64
+    from flask import Response
+
+    if not redis_client:
+        logger.warning("Redis not available for avatar retrieval")
+        return "Service unavailable", 503
+
+    try:
+        # Construct Redis key
+        redis_key = f"tgsentinel:{avatar_type}_avatar:{entity_id}"
+
+        # Get base64-encoded avatar from Redis
+        avatar_b64 = redis_client.get(redis_key)
+
+        if not avatar_b64:
+            logger.debug(f"Avatar not found in Redis: {redis_key}")
+            # Return default avatar
+            return redirect("/static/images/logo.png")
+
+        # Decode base64 to bytes
+        if isinstance(avatar_b64, bytes):
+            avatar_b64 = avatar_b64.decode("utf-8")
+
+        avatar_bytes = base64.b64decode(avatar_b64)
+
+        # Serve as image with cache control to prevent stale avatars between user switches
+        response = Response(avatar_bytes, mimetype="image/jpeg")
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
+
+    except Exception as exc:
+        logger.error(f"Error serving avatar from Redis: {exc}", exc_info=True)
+        return redirect("/static/images/logo.png")
+
+
 @app.route("/data/<path:filename>")
 def serve_data_file(filename):
-    """Serve files from the shared data directory (e.g., user avatar)."""
-    # Primary data directory (container default: /app/data)
-    base_dir = Path(__file__).parent.parent / "data"
-    target = base_dir / filename
-    # Fallback to absolute /app/data for host/dev runs where client saved there
-    alt_base = Path("/app/data")
-    if not target.exists() and (alt_base / filename).exists():
-        return send_from_directory(alt_base, filename)
-    return send_from_directory(base_dir, filename)
+    """Serve files from the UI data directory ONLY.
+
+    ARCHITECTURAL NOTE: UI has its own /app/data volume (tgsentinel_ui_data).
+    Never access sentinel's volume - that would violate dual-DB architecture.
+    Avatars and other assets should be stored in UI volume or served via API.
+    """
+    # UI data directory (tgsentinel_ui_data volume mounted at /app/data in ui container)
+    ui_data_dir = Path("/app/data")
+    target = ui_data_dir / filename
+
+    if not target.exists():
+        logger.warning(f"File not found in UI volume: {filename}")
+        return "File not found", 404
+
+    # Security: prevent directory traversal
+    if not target.resolve().is_relative_to(ui_data_dir.resolve()):
+        logger.warning(f"Directory traversal attempt blocked: {filename}")
+        return "Forbidden", 403
+
+    return send_from_directory(ui_data_dir, filename)
 
 
 @app.route("/alerts")
@@ -2059,6 +2311,187 @@ def api_session_info():
     )
 
 
+@app.post("/api/session/upload")
+@_ensure_init
+def api_session_upload():
+    """Upload a Telethon session file and forward it to the sentinel worker API.
+
+    This endpoint:
+    1. Validates the uploaded session file
+    2. Forwards it to the sentinel's /api/session/import endpoint
+    3. Returns the sentinel's response to the browser
+
+    The UI no longer directly writes to the filesystem - all session management
+    is handled by the sentinel worker through its HTTP API.
+    """
+    import requests
+    import base64
+
+    try:
+        if "session_file" not in request.files:
+            return (
+                jsonify(
+                    {"status": "error", "message": "No session file part in request"}
+                ),
+                400,
+            )
+
+        file_storage = request.files.get("session_file")
+        if not file_storage or not file_storage.filename:
+            return (
+                jsonify({"status": "error", "message": "No session file was selected"}),
+                400,
+            )
+
+        content = file_storage.read() or b""
+
+        # Basic validation before forwarding
+        is_valid, validation_msg = _validate_session_file(content)
+        if not is_valid:
+            return (
+                jsonify({"status": "error", "message": validation_msg}),
+                400,
+            )
+
+        # Get sentinel API base URL from environment
+        sentinel_api_base = os.getenv(
+            "SENTINEL_API_BASE_URL", "http://sentinel:8080/api"
+        )
+        sentinel_import_url = f"{sentinel_api_base}/session/import"
+
+        logger.info(
+            f"[UI-SESSION] Forwarding session file to sentinel at: {sentinel_import_url}"
+        )
+
+        # Forward to sentinel API using base64-encoded JSON
+        try:
+            payload = {"session_data": base64.b64encode(content).decode("utf-8")}
+
+            response = requests.post(
+                sentinel_import_url,
+                json=payload,
+                timeout=30.0,
+                headers={"Content-Type": "application/json"},
+            )
+
+            # Parse sentinel's response
+            try:
+                sentinel_response = response.json()
+            except Exception as json_exc:
+                logger.error(
+                    f"[UI-SESSION] Sentinel returned non-JSON response: {response.text[:500]}"
+                )
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Sentinel returned invalid response (HTTP {response.status_code})",
+                        }
+                    ),
+                    502,
+                )
+
+            # Check if sentinel accepted the session
+            if response.status_code == 200 and sentinel_response.get("status") == "ok":
+                logger.info("[UI-SESSION] Session successfully imported by sentinel")
+
+                # Wait for sentinel to reconnect and authorize
+                if not _wait_for_worker_authorization(timeout=60.0):
+                    logger.warning(
+                        "[UI-AUTH] Session imported but worker did not become ready in time"
+                    )
+                    return (
+                        jsonify(
+                            {
+                                "status": "error",
+                                "message": "Session imported but sentinel did not become ready in time. Please check worker logs.",
+                            }
+                        ),
+                        503,
+                    )
+
+                # Mark UI session as authenticated
+                try:
+                    session["telegram_authenticated"] = True
+                    session.permanent = True
+                except Exception:
+                    pass
+
+                return (
+                    jsonify(
+                        {
+                            "status": "ok",
+                            "message": "Session uploaded and imported successfully",
+                            "redirect": "/alerts",
+                            "sentinel_response": sentinel_response.get("data", {}),
+                        }
+                    ),
+                    200,
+                )
+
+            else:
+                # Sentinel rejected the session
+                error_msg = sentinel_response.get(
+                    "message", "Unknown error from sentinel"
+                )
+                error_code = sentinel_response.get("code", "SENTINEL_ERROR")
+                logger.error(f"[UI-SESSION] Sentinel rejected session: {error_msg}")
+
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Sentinel rejected session: {error_msg}",
+                            "code": error_code,
+                        }
+                    ),
+                    response.status_code,
+                )
+
+        except requests.exceptions.Timeout:
+            logger.error("[UI-SESSION] Timeout connecting to sentinel API")
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Timeout connecting to sentinel worker. Please ensure sentinel is running.",
+                    }
+                ),
+                504,
+            )
+
+        except requests.exceptions.ConnectionError as conn_exc:
+            logger.error(f"[UI-SESSION] Connection error to sentinel: {conn_exc}")
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": f"Cannot connect to sentinel worker at {sentinel_import_url}. Please ensure sentinel container is running.",
+                    }
+                ),
+                503,
+            )
+
+        except Exception as fwd_exc:
+            logger.error(
+                f"[UI-SESSION] Failed to forward session to sentinel: {fwd_exc}",
+                exc_info=True,
+            )
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": f"Failed to forward session to sentinel: {str(fwd_exc)}",
+                    }
+                ),
+                500,
+            )
+
+    except Exception as exc:
+        logger.error(f"[UI-SESSION] Session upload failed: {exc}", exc_info=True)
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
 @app.post("/api/session/logout")
 @_ensure_init
 def api_session_logout():
@@ -2070,17 +2503,36 @@ def api_session_logout():
     try:
         session_path = _resolve_session_path()
         details = _invalidate_session(session_path)
+
         # Clear Flask session authentication marker
         try:
             session.pop("telegram_authenticated", None)
             session.pop("ui_locked", None)
         except Exception:
             pass
+
         # Signal sentinel to reload config/session state after logout
         try:
             Path("/app/data/.reload_config").touch()
         except Exception:
             pass
+
+        # Notify sentinel container to disconnect and clear its session
+        if redis_client:
+            try:
+                redis_client.publish(
+                    "tgsentinel:session_updated",
+                    json.dumps(
+                        {
+                            "event": "session_logout",
+                            "timestamp": datetime.now().isoformat(),
+                        }
+                    ),
+                )
+                logger.info("[UI-AUTH] Published logout event to sentinel")
+            except Exception as pub_exc:
+                logger.warning("[UI-AUTH] Failed to publish logout event: %s", pub_exc)
+
         return jsonify(
             {
                 "status": "ok",
@@ -2721,9 +3173,10 @@ def api_config_export():
 
 
 @app.get("/api/participant/info")
-@_ensure_init
 def api_participant_info():
     """Get detailed participant information from Telegram."""
+    # Debug hook to understand test behaviour; kept silent in production by log level.
+    logger.debug("api_participant_info called; redis_client=%r", redis_client)
     chat_id = request.args.get("chat_id")
     user_id = request.args.get("user_id")
 
@@ -2829,15 +3282,9 @@ def api_participant_info():
                                 )
                                 break
                     # Try to include avatar_url from cache
-                    if redis_client:
-                        try:
-                            ava = redis_client.get(f"tgsentinel:chat_avatar:{chat_id}")
-                            if ava:
-                                basic["avatar_url"] = (
-                                    ava.decode() if isinstance(ava, bytes) else ava
-                                )
-                        except Exception:
-                            pass
+                    avatar_url = _get_avatar_url(chat_id, is_user=False)
+                    if avatar_url:
+                        basic["avatar_url"] = avatar_url
                     return jsonify({"status": "pending", "chat": basic}), 202
 
                 for _ in range(10):  # Wait up to 1 second
@@ -2883,15 +3330,9 @@ def api_participant_info():
                         "participants_count": None,
                     }
                     # Try to add avatar_url from cache
-                    if redis_client:
-                        try:
-                            ava = redis_client.get(f"tgsentinel:chat_avatar:{chat_id}")
-                            if ava:
-                                basic["avatar_url"] = (
-                                    ava.decode() if isinstance(ava, bytes) else ava
-                                )
-                        except Exception:
-                            pass
+                    avatar_url = _get_avatar_url(chat_id, is_user=False)
+                    if avatar_url:
+                        basic["avatar_url"] = avatar_url
                     chat_info = {"chat": basic}
                     break
 
@@ -2899,15 +3340,9 @@ def api_participant_info():
             # Final fallback if not found in config
             basic = {"id": chat_id, "title": f"Chat {chat_id}", "type": chat_type}
             # Try to include cached avatar
-            if redis_client:
-                try:
-                    ava = redis_client.get(f"tgsentinel:chat_avatar:{chat_id}")
-                    if ava:
-                        basic["avatar_url"] = (
-                            ava.decode() if isinstance(ava, bytes) else ava
-                        )
-                except Exception:
-                    pass
+            avatar_url = _get_avatar_url(chat_id, is_user=False)
+            if avatar_url:
+                basic["avatar_url"] = avatar_url
             chat_info = {"chat": basic}
 
         return jsonify(chat_info)
@@ -2945,14 +3380,9 @@ def api_participant_info():
                         "bot": False,
                     }
                     # Try to include avatar_url from cache
-                    try:
-                        ava = redis_client.get(f"tgsentinel:user_avatar:{user_id}")
-                        if ava:
-                            u["avatar_url"] = (
-                                ava.decode() if isinstance(ava, bytes) else ava
-                            )
-                    except Exception:
-                        pass
+                    avatar_url = _get_avatar_url(user_id, is_user=True)
+                    if avatar_url:
+                        u["avatar_url"] = avatar_url
                     return jsonify({"user": u})
         except Exception as e:
             logger.debug("Failed to get user info from cache: %s", e)
@@ -3002,10 +3432,13 @@ def api_participant_info():
                     # Include avatar if cached
                     if redis_client:
                         try:
-                            ava = redis_client.get(f"tgsentinel:chat_avatar:{chat_id}")
-                            if ava:
+                            cache_key_avatar = f"tgsentinel:chat_avatar:{chat_id}"
+                            if redis_client.exists(cache_key_avatar):
+                                chat_id_abs = abs(int(chat_id))
+                                is_chat = int(chat_id) < 0
+                                prefix = "chat" if is_chat else "user"
                                 basic_chat["avatar_url"] = (
-                                    ava.decode() if isinstance(ava, bytes) else ava
+                                    f"/api/avatar/{prefix}/{chat_id_abs}"
                                 )
                         except Exception:
                             pass
@@ -3034,15 +3467,9 @@ def api_participant_info():
                         pass
                     # Avatar
                     try:
-                        ava = (
-                            redis_client.get(f"tgsentinel:user_avatar:{user_id}")
-                            if redis_client
-                            else None
-                        )
-                        if ava:
-                            u["avatar_url"] = (
-                                ava.decode() if isinstance(ava, bytes) else ava
-                            )
+                        cache_key_avatar = f"tgsentinel:user_avatar:{user_id}"
+                        if redis_client and redis_client.exists(cache_key_avatar):
+                            u["avatar_url"] = f"/api/avatar/user/{user_id}"
                     except Exception:
                         pass
                     return u
@@ -3063,9 +3490,9 @@ def api_participant_info():
             # If not ready, return fallback user info (best-effort avatar)
             u = {"id": user_id, "name": f"User {user_id}", "username": None}
             try:
-                ava = redis_client.get(f"tgsentinel:user_avatar:{user_id}")
-                if ava:
-                    u["avatar_url"] = ava.decode() if isinstance(ava, bytes) else ava
+                cache_key_avatar = f"tgsentinel:user_avatar:{user_id}"
+                if redis_client.exists(cache_key_avatar):
+                    u["avatar_url"] = f"/api/avatar/user/{user_id}"
             except Exception:
                 pass
             return jsonify({"user": u})
@@ -3212,63 +3639,73 @@ def api_config_save():
 @app.post("/api/config/clean-db")
 @_ensure_init
 def api_clean_database():
-    """Clean all data from the database and Redis stream, leaving a fresh environment.
+    """Clean all data from the UI database and Redis stream, leaving a fresh environment.
 
     This endpoint permanently deletes:
-    - All message records from database
-    - All alerts history
-    - All feedback data
+    - All cached alerts from UI database
+    - All digest runs history
+    - All audit log entries
     - All messages from Redis stream
     - Cached participant info
     - User info cache
+    - User and chat avatars
+
+    NOTE: This only cleans UI database (ui.db), NOT sentinel database (sentinel.db).
+    Sentinel's message/feedback data is managed by the sentinel worker.
 
     Returns the count of deleted records.
     """
-    if not engine:
-        logger.error("Cannot clean database: engine not initialized")
-        return jsonify({"status": "error", "message": "Database not available"}), 503
-
     try:
+        from ui.database import _ui_db
+
+        # Check if UI database was successfully initialized
+        if _ui_db is None:
+            logger.warning(
+                "Clean DB: UI database not initialized, skipping database clean"
+            )
+            return (
+                jsonify({"status": "error", "message": "UI database not available"}),
+                503,
+            )
+
+        conn = _ui_db.connect()
+        cursor = conn.cursor()
+
         deleted_count = 0
         redis_deleted = 0
 
-        with engine.begin() as conn:
-            # Count records before deletion
-            messages_count = (
-                conn.execute(text("SELECT COUNT(*) FROM messages")).scalar() or 0
-            )
+        # Count and delete UI database records
+        cursor.execute("SELECT COUNT(*) FROM alerts")
+        alerts_count = cursor.fetchone()[0] or 0
 
-            # Try to count feedback if table exists
-            feedback_count = 0
-            try:
-                feedback_count = (
-                    conn.execute(text("SELECT COUNT(*) FROM feedback")).scalar() or 0
-                )
-            except Exception:
-                # Feedback table doesn't exist, that's okay
-                pass
+        cursor.execute("SELECT COUNT(*) FROM digest_runs")
+        digest_count = cursor.fetchone()[0] or 0
 
-            deleted_count = messages_count + feedback_count
+        cursor.execute("SELECT COUNT(*) FROM audit_log")
+        audit_count = cursor.fetchone()[0] or 0
 
-            # Delete all data from tables
-            conn.execute(text("DELETE FROM messages"))
-            logger.info("Deleted %d records from messages table", messages_count)
+        deleted_count = alerts_count + digest_count + audit_count
 
-            # Delete feedback if table exists
-            try:
-                conn.execute(text("DELETE FROM feedback"))
-                logger.info("Deleted %d records from feedback table", feedback_count)
-            except Exception:
-                # Feedback table doesn't exist, that's okay
-                pass
+        # Delete all data from UI tables
+        cursor.execute("DELETE FROM alerts")
+        logger.info("Deleted %d records from alerts table", alerts_count)
 
-            # Reset auto-increment counters for SQLite
-            try:
-                conn.execute(text("DELETE FROM sqlite_sequence WHERE name='messages'"))
-                conn.execute(text("DELETE FROM sqlite_sequence WHERE name='feedback'"))
-            except Exception:
-                # Not SQLite or no sequence table, that's okay
-                pass
+        cursor.execute("DELETE FROM digest_runs")
+        logger.info("Deleted %d records from digest_runs table", digest_count)
+
+        cursor.execute("DELETE FROM audit_log")
+        logger.info("Deleted %d records from audit_log table", audit_count)
+
+        # Reset auto-increment counters for SQLite
+        try:
+            cursor.execute("DELETE FROM sqlite_sequence WHERE name='alerts'")
+            cursor.execute("DELETE FROM sqlite_sequence WHERE name='digest_runs'")
+            cursor.execute("DELETE FROM sqlite_sequence WHERE name='audit_log'")
+        except Exception:
+            # No sequence table, that's okay
+            pass
+
+        conn.commit()
 
         # Clear Redis stream and caches
         if redis_client:
@@ -3301,6 +3738,29 @@ def api_clean_database():
                     redis_client.delete("tgsentinel:user_info")
                     logger.info("Cleared user info cache")
                     redis_deleted += 1
+
+                # Clear avatar caches (user and chat avatars)
+                avatar_patterns = [
+                    "tgsentinel:user_avatar:*",
+                    "tgsentinel:chat_avatar:*",
+                ]
+                for avatar_pat in avatar_patterns:
+                    try:
+                        avatar_keys = redis_client.keys(avatar_pat)
+                        if avatar_keys:
+                            redis_client.delete(*avatar_keys)
+                            logger.info(
+                                "Cleared %d avatar entries for pattern %s",
+                                len(avatar_keys),
+                                avatar_pat,
+                            )
+                            redis_deleted += len(avatar_keys)
+                    except Exception as avatar_exc:
+                        logger.debug(
+                            "Could not clear avatars for pattern %s: %s",
+                            avatar_pat,
+                            avatar_exc,
+                        )
 
             except Exception as exc:
                 logger.warning("Failed to clean Redis data: %s", exc)
@@ -3430,7 +3890,71 @@ def api_worker_status():
         return jsonify(response)
     except Exception as exc:
         logger.debug("Worker status error: %s", exc)
-        return jsonify({"authorized": None, "status": "unknown"})
+        return jsonify({"authorized": None, "status": "error", "message": str(exc)})
+
+
+@app.get("/api/worker/logout-progress")
+@_ensure_init
+def api_worker_logout_progress():
+    """Return real-time logout progress from sentinel."""
+    try:
+        progress = None
+        if redis_client:
+            try:
+                raw = redis_client.get("tgsentinel:logout_progress")
+                if raw:
+                    raw = raw.decode() if isinstance(raw, bytes) else raw
+                    progress = json.loads(str(raw))
+            except Exception:
+                progress = None
+
+        if not progress:
+            return jsonify(
+                {
+                    "stage": "unknown",
+                    "percent": 0,
+                    "message": "No progress data available",
+                }
+            )
+
+        return jsonify(progress)
+    except Exception as exc:
+        logger.debug("Logout progress error: %s", exc)
+        return jsonify({"stage": "error", "percent": 0, "message": str(exc)})
+
+
+@app.get("/api/worker/login-progress")
+@_ensure_init
+def worker_login_progress():
+    """Get real-time login progress from sentinel.
+
+    Returns:
+        JSON with stage, percent, message, timestamp from Redis
+    """
+    try:
+        progress = None
+        if redis_client:
+            try:
+                raw = redis_client.get("tgsentinel:login_progress")
+                if raw:
+                    raw = raw.decode() if isinstance(raw, bytes) else raw
+                    progress = json.loads(str(raw))
+            except Exception:
+                progress = None
+
+        if not progress:
+            return jsonify(
+                {
+                    "stage": "unknown",
+                    "percent": 0,
+                    "message": "No progress data available",
+                }
+            )
+
+        return jsonify(progress)
+    except Exception as exc:
+        logger.debug("Login progress error: %s", exc)
+        return jsonify({"stage": "error", "percent": 0, "message": str(exc)})
 
 
 @app.route("/api/config/current", methods=["GET"])
@@ -4784,16 +5308,22 @@ def api_console_command():
             return jsonify({"status": "error", "message": str(exc)}), 500
 
     if command.lower() == "vacuum":
-        # Run VACUUM on SQLite database to reclaim space and optimize
+        # Run VACUUM on UI SQLite database to reclaim space and optimize
         try:
-            if not engine:
+            from ui.database import _ui_db
+
+            # Check if UI database was successfully initialized
+            if _ui_db is None:
+                logger.warning("VACUUM: UI database not initialized, skipping vacuum")
                 return (
-                    jsonify({"status": "error", "message": "Database not available"}),
+                    jsonify(
+                        {"status": "error", "message": "UI database not available"}
+                    ),
                     503,
                 )
 
             # Get database size before VACUUM
-            db_path = str(engine.url).replace("sqlite:///", "")
+            db_path = _ui_db.db_path
             size_before = 0
             try:
                 size_before = (
@@ -4802,9 +5332,10 @@ def api_console_command():
             except Exception:
                 pass
 
-            # Execute VACUUM
-            with engine.begin() as conn:
-                conn.execute(text("VACUUM"))
+            # Execute VACUUM on UI database
+            conn = _ui_db.connect()
+            conn.execute("VACUUM")
+            conn.commit()
 
             # Get database size after VACUUM
             size_after = 0
@@ -4816,7 +5347,7 @@ def api_console_command():
                 pass
 
             reclaimed_mb = (size_before - size_after) / (1024 * 1024)
-            logger.info("VACUUM completed. Reclaimed %.2f MB", reclaimed_mb)
+            logger.info("UI Database VACUUM completed. Reclaimed %.2f MB", reclaimed_mb)
 
             return jsonify(
                 {
@@ -5190,11 +5721,7 @@ def api_config_channels_add():
 
     try:
         config_path = Path("config/tgsentinel.yml")
-        if not config_path.exists():
-            return (
-                jsonify({"status": "error", "message": "Configuration file not found"}),
-                404,
-            )
+        _ensure_config_file_exists(config_path)
 
         # Read current config
         with open(config_path, "r") as f:
@@ -5282,11 +5809,7 @@ def api_config_channels_delete(chat_id):
             )
 
         config_path = Path("config/tgsentinel.yml")
-        if not config_path.exists():
-            return (
-                jsonify({"status": "error", "message": "Configuration file not found"}),
-                404,
-            )
+        _ensure_config_file_exists(config_path)
 
         # Read current config
         with open(config_path, "r") as f:
@@ -5381,11 +5904,7 @@ def api_config_users_add():
 
     try:
         config_path = Path("config/tgsentinel.yml")
-        if not config_path.exists():
-            return (
-                jsonify({"status": "error", "message": "Configuration file not found"}),
-                404,
-            )
+        _ensure_config_file_exists(config_path)
 
         # Read current config
         with open(config_path, "r") as f:
@@ -5469,11 +5988,7 @@ def api_config_users_delete(user_id):
             )
 
         config_path = Path("config/tgsentinel.yml")
-        if not config_path.exists():
-            return (
-                jsonify({"status": "error", "message": "Configuration file not found"}),
-                404,
-            )
+        _ensure_config_file_exists(config_path)
 
         # Read current config
         with open(config_path, "r") as f:

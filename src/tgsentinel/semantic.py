@@ -43,5 +43,7 @@ def score_text(text: str) -> Optional[float]:
     if not text or _model is None or _interest_vec is None:
         return None
     v = _model.encode([text], normalize_embeddings=True)[0]
-    # cosine similarity
-    return float(np.dot(v, _interest_vec))
+    # cosine similarity - ensure we get a scalar value
+    similarity = np.dot(v, _interest_vec)
+    # Handle both scalar and array results from np.dot
+    return float(similarity.item() if hasattr(similarity, "item") else similarity)

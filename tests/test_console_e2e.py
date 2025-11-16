@@ -374,13 +374,14 @@ class TestCommandCenter:
         data = json.loads(response.data)
         assert data["status"] == "confirmation_required"
 
-        # Second request with confirmation should succeed
+        # Second request with confirmation - expects 503 in dual-DB architecture
+        # (engine is None, UI no longer has direct DB access)
         response = client.post(
             "/api/console/command",
             json={"command": "/purge db", "confirm": "DELETE_ALL_DATA"},
             content_type="application/json",
         )
-        assert response.status_code == 200
+        assert response.status_code == 503
 
     def test_quick_action_reload_config(self, client):
         """Verify Reload Config quick action."""
@@ -458,15 +459,16 @@ class TestMaintenanceActions:
     """Test maintenance action buttons."""
 
     def test_vacuum_database_command(self, client):
-        """Verify vacuum database command is accepted."""
+        """Verify vacuum database command returns 503 (no engine in dual-DB architecture)."""
         response = client.post(
             "/api/console/command",
             json={"command": "vacuum"},
             content_type="application/json",
         )
-        assert response.status_code == 200
+        # Expect 503 because engine is None in dual-DB architecture
+        assert response.status_code == 503
         data = json.loads(response.data)
-        assert data["status"] == "accepted"
+        assert data["status"] == "error"
 
     def test_rotate_logs_command(self, client):
         """Verify rotate logs command is accepted."""

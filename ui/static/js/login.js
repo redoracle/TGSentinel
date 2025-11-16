@@ -153,9 +153,19 @@
     clearAlert();
     if (btnVerify) btnVerify.disabled = true;
     if (btnSend) btnSend.disabled = true;
+    
+    // Show progress modal
+    const progress = window.ProgressModal ? new window.ProgressModal() : null;
+    
     try{
       const payload = { phone: (phoneInput && phoneInput.value || '').trim(), code: (codeInput && codeInput.value || '').trim() };
       if (pwdInput && pwdInput.value) payload.password = pwdInput.value;
+      
+      if (progress) {
+        progress.show('login_phone', 'Authenticating Telegram Session');
+        progress.addLog('Sending verification request...', 'info');
+      }
+      
       const resp = await fetch('/api/session/login/verify', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
       
       // Safely parse JSON response
@@ -164,14 +174,13 @@
         data = await resp.json();
       } catch (parseErr) {
         console.error('Failed to parse response as JSON:', parseErr);
-        // If we can't parse JSON and response is not ok, throw with status
         if (!resp.ok) {
           throw new Error(`HTTP ${resp.status} - Invalid response format`);
         }
       }
       
       if (resp.status === 410) {
-        // Session missing/expired — prompt to resend with cooldown
+        if (progress) progress.hide();
         setAlert((data && data.message) || 'Session expired. Please resend code.', 'warning');
         if (btnResend) btnResend.classList.remove('d-none');
         if (btnSend) btnSend.textContent = 'Resend Code';
@@ -179,17 +188,86 @@
         if (window.showToast) window.showToast('Code expired. Resend required.', 'warning');
         return;
       }
-      if(!resp.ok){ throw new Error((data && data.message) ? data.message : `HTTP ${resp.status}`); }
-      setAlert('Authenticated. Updating session…', 'success');
-      try{ if (window.refreshSessionInfo) window.refreshSessionInfo(); }catch(e){}
-      if (window.showToast) window.showToast('Authenticated', 'success');
-      setTimeout(()=>{
-        try{ bootstrap.Modal.getInstance(qs('loginModal')).hide(); }catch(e){}
-        // Ensure gated pages unlock: reload after auth
-        setTimeout(()=>{ try { window.location.reload(); } catch(e) {} }, 400);
-      }, 600);
+      
+      if(!resp.ok){ 
+        if (progress) {
+          progress.addLog(`Error: ${data && data.message || resp.status}`, 'error');
+          progress.hide();
+        }
+        throw new Error((data && data.message) ? data.message : `HTTP ${resp.status}`); 
+      }
+      
+      if (progress) {
+        progress.addLog('Code verified successfully', 'success');
+        progress.nextStage();
+        
+        // Hide the login modal behind the progress modal
+        try { 
+          const loginModalEl = qs('loginModal');
+          if (loginModalEl) {
+            const modalInstance = bootstrap.Modal.getInstance(loginModalEl);
+            if (modalInstance) modalInstance.hide();
+          }
+        } catch(e) { console.debug('Could not hide login modal:', e); }
+        
+        // Poll for login progress from sentinel (no timeout - wait for completion)
+        const pollProgress = async () => {
+          let lastStage = null;
+          let lastMessage = null;
+          
+          const checkProgress = async () => {
+            try {
+              const progressResp = await fetch('/api/worker/login-progress');
+              if (progressResp.ok) {
+                const progressData = await progressResp.json();
+                
+                if (progressData.stage && progressData.stage !== 'unknown') {
+                  const percent = progressData.percent || 0;
+                  const message = progressData.message || 'Processing...';
+                  
+                  // Only update progress bar (always)
+                  progress.updateProgress(percent, message);
+                  
+                  // Only add log if stage or message changed
+                  if (progressData.stage !== lastStage || message !== lastMessage) {
+                    progress.addLog(message, 'info');
+                    lastStage = progressData.stage;
+                    lastMessage = message;
+                  }
+                  
+                  if (progressData.stage === 'completed' || percent >= 100) {
+                    progress.addLog('Authentication complete!', 'success');
+                    
+                    setAlert('Authenticated. Updating session…', 'success');
+                    try{ if (window.refreshSessionInfo) window.refreshSessionInfo(); }catch(e){}
+                    if (window.showToast) window.showToast('Authenticated', 'success');
+                    
+                    setTimeout(()=>{
+                      if (progress) progress.hide();
+                      // Force browser reload to refresh UI state
+                      setTimeout(()=>{ try { window.location.reload(); } catch(e) {} }, 1000);
+                    }, 2000);
+                    return;
+                  }
+                }
+              }
+            } catch (pollErr) {
+              console.debug('Progress poll error:', pollErr);
+            }
+            
+            // Continue polling indefinitely until completion
+            setTimeout(checkProgress, 500);
+          };
+          
+          // Start polling after a short delay
+          setTimeout(checkProgress, 500);
+        };
+        
+        pollProgress();
+      }
     } catch(err){
       console.error('Verify failed', err);
+      if (progress) progress.hide();
       setAlert(String(err.message || err), 'danger');
     } finally {
       if (btnVerify) btnVerify.disabled = false;
@@ -310,11 +388,19 @@
     }
 
     if (btnUploadSession) btnUploadSession.disabled = true;
-    setAlert('Uploading and validating session...', 'info');
-
+    
+    // Show progress modal with log streaming
+    const progress = window.ProgressModal ? new window.ProgressModal() : null;
+    
     try {
       const formData = new FormData();
       formData.append('session_file', file);
+
+      if (progress) {
+        progress.show('login_upload', 'Restoring Telegram Session');
+        progress.addLog(`Uploading session file: ${file.name}`, 'info');
+        progress.addLog(`File size: ${(file.size / 1024).toFixed(2)} KB`, 'debug');
+      }
 
       const resp = await fetch('/api/session/upload', {
         method: 'POST',
@@ -333,21 +419,86 @@
 
       if (!resp.ok) {
         const errorMsg = (data && data.message) || `Upload failed (HTTP ${resp.status})`;
+        if (progress) {
+          progress.addLog(`Upload failed: ${errorMsg}`, 'error');
+          setTimeout(() => progress.hide(), 2000);
+        }
         throw new Error(errorMsg);
       }
 
-      setAlert((data && data.message) || 'Session restored successfully!', 'success');
-      if (window.showToast) window.showToast('Session restored', 'success');
-      
-      // Refresh session info and reload
-      try { if (window.refreshSessionInfo) window.refreshSessionInfo(); } catch(e) {}
-      setTimeout(() => {
-        try { bootstrap.Modal.getInstance(qs('loginModal')).hide(); } catch(e) {}
-        setTimeout(() => { try { window.location.reload(); } catch(e) {} }, 400);
-      }, 600);
+      if (progress) {
+        progress.addLog('Session file uploaded successfully', 'success');
+        progress.nextStage();
+        
+        // Hide the login modal behind the progress modal
+        try { 
+          const loginModalEl = qs('loginModal');
+          if (loginModalEl) {
+            const modalInstance = bootstrap.Modal.getInstance(loginModalEl);
+            if (modalInstance) modalInstance.hide();
+          }
+        } catch(e) { console.debug('Could not hide login modal:', e); }
+        
+        // Poll for login progress from sentinel (no timeout - wait for completion)
+        const pollProgress = async () => {
+          let lastStage = null;
+          let lastMessage = null;
+          
+          const checkProgress = async () => {
+            try {
+              const progressResp = await fetch('/api/worker/login-progress');
+              if (progressResp.ok) {
+                const progressData = await progressResp.json();
+                
+                if (progressData.stage && progressData.stage !== 'unknown') {
+                  const percent = progressData.percent || 0;
+                  const message = progressData.message || 'Processing...';
+                  
+                  // Only update progress bar (always)
+                  progress.updateProgress(percent, message);
+                  
+                  // Only add log if stage or message changed
+                  if (progressData.stage !== lastStage || message !== lastMessage) {
+                    progress.addLog(message, 'info');
+                    lastStage = progressData.stage;
+                    lastMessage = message;
+                  }
+                  
+                  if (progressData.stage === 'completed' || percent >= 100) {
+                    progress.addLog('Session restored successfully!', 'success');
+                    
+                    setAlert((data && data.message) || 'Session restored successfully!', 'success');
+                    if (window.showToast) window.showToast('Session restored', 'success');
+                    
+                    // Refresh session info and reload
+                    try { if (window.refreshSessionInfo) window.refreshSessionInfo(); } catch(e) {}
+                    setTimeout(() => {
+                      if (progress) progress.hide();
+                      // Force browser reload to refresh UI state
+                      setTimeout(() => { try { window.location.reload(); } catch(e) {} }, 1000);
+                    }, 2000);
+                    return;
+                  }
+                }
+              }
+            } catch (pollErr) {
+              console.debug('Progress poll error:', pollErr);
+            }
+            
+            // Continue polling indefinitely until completion
+            setTimeout(checkProgress, 500);
+          };
+          
+          // Start polling after a short delay
+          setTimeout(checkProgress, 500);
+        };
+        
+        pollProgress();
+      }
 
     } catch (err) {
       console.error('Upload failed:', err);
+      if (progress) setTimeout(() => progress.hide(), 2000);
       setAlert(String(err.message || err), 'danger');
       if (window.showToast) window.showToast('Upload failed', 'error');
     } finally {

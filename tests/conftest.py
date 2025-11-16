@@ -1,5 +1,6 @@
 """Test configuration and shared fixtures for TG Sentinel tests."""
 
+import fnmatch
 import os
 import sys
 import tempfile
@@ -7,8 +8,137 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import redis
 from redis import Redis
 from sqlalchemy import create_engine
+
+
+class InMemoryRedis:
+    """Lightweight in-memory Redis replacement for tests.
+
+    Provides just enough behaviour for the test-suite without requiring a real
+    Redis server or network access.
+    """
+
+    def __init__(self, *args, **kwargs):
+        self._data: dict[str, object] = {}
+        self._streams: dict[str, list[tuple[str, dict[str, object]]]] = {}
+
+    # Basic connection/housekeeping -------------------------------------------------
+    def ping(self) -> bool:  # type: ignore[override]
+        return True
+
+    def close(self) -> None:  # type: ignore[override]
+        return None
+
+    def flushall(self) -> None:  # type: ignore[override]
+        self._data.clear()
+        self._streams.clear()
+
+    # Key/value operations ----------------------------------------------------------
+    def set(self, key: str, value: object, ex: int | None = None) -> bool:  # type: ignore[override]
+        self._data[key] = value
+        return True
+
+    def setex(self, key: str, ttl: int, value: object) -> bool:  # type: ignore[override]
+        return self.set(key, value)
+
+    def get(self, key: str) -> object | None:  # type: ignore[override]
+        return self._data.get(key)
+
+    def delete(self, *keys: str) -> int:  # type: ignore[override]
+        removed = 0
+        for key in keys:
+            if key in self._data:
+                del self._data[key]
+                removed += 1
+            if key in self._streams:
+                del self._streams[key]
+                removed += 1
+        return removed
+
+    def exists(self, key: str) -> int:  # type: ignore[override]
+        return int(key in self._data or key in self._streams)
+
+    def keys(self, pattern: str = "*"):  # type: ignore[override]
+        all_keys = list(self._data.keys()) + list(self._streams.keys())
+        return [k for k in all_keys if fnmatch.fnmatch(str(k), pattern)]
+
+    def scan_iter(self, pattern: str = "*"):  # type: ignore[override]
+        for key in self.keys(pattern):
+            yield key
+
+    # List operations ---------------------------------------------------------------
+    def rpush(self, key: str, *values: object) -> int:  # type: ignore[override]
+        lst = self._data.get(key)
+        if not isinstance(lst, list):
+            lst = []
+        lst.extend(values)
+        self._data[key] = lst
+        return len(lst)
+
+    # Hash operations ---------------------------------------------------------------
+    def hget(self, name: str, key: str) -> object | None:  # type: ignore[override]
+        h = self._data.get(name)
+        if not isinstance(h, dict):
+            return None
+        return h.get(key)
+
+    def hset(self, name: str, key: str, value: object) -> int:  # type: ignore[override]
+        h = self._data.get(name)
+        if not isinstance(h, dict):
+            h = {}
+        h[key] = value
+        self._data[name] = h
+        return 1
+
+    def hdel(self, name: str, *keys: str) -> int:  # type: ignore[override]
+        h = self._data.get(name)
+        if not isinstance(h, dict):
+            return 0
+        removed = 0
+        for key in keys:
+            if key in h:
+                del h[key]
+                removed += 1
+        return removed
+
+    # Stream operations -------------------------------------------------------------
+    def xadd(self, stream: str, fields: dict[str, object], *_, **__) -> str:  # type: ignore[override]
+        items = self._streams.setdefault(stream, [])
+        if items:
+            last = items[-1][0]
+            try:
+                base = int(str(last).split("-")[0])
+            except Exception:
+                base = len(items)
+            new_id = f"{base + 1}-0"
+        else:
+            new_id = "1-0"
+        items.append((new_id, fields))
+        return new_id
+
+    def xlen(self, stream: str) -> int:  # type: ignore[override]
+        return len(self._streams.get(stream, []))
+
+    def xrevrange(
+        self, stream: str, max: str = "+", min: str = "-", count: int | None = None
+    ):  # type: ignore[override]
+        items = list(reversed(self._streams.get(stream, [])))
+        return items if count is None else items[:count]
+
+    def xrange(
+        self, stream: str, min: str = "-", max: str = "+", count: int | None = None
+    ):  # type: ignore[override]
+        items = list(self._streams.get(stream, []))
+        return items if count is None else items[:count]
+
+
+@pytest.fixture(autouse=True)
+def _patch_redis_for_tests(monkeypatch):
+    """Use in-memory Redis for the entire test session to avoid real network."""
+    monkeypatch.setattr(redis, "Redis", InMemoryRedis)
+    yield
 
 
 @pytest.fixture

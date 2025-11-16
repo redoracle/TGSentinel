@@ -1156,7 +1156,9 @@
             avatar.style.color = "white";
             
             // Try to load avatar from cache, otherwise use initials
-            const avatarUrl = `/data/chat_avatar_${Math.abs(chat.id)}.jpg`;
+            const isChat = chat.id < 0;
+            const prefix = isChat ? "chat" : "user";
+            const avatarUrl = `/api/avatar/${prefix}/${Math.abs(chat.id)}`;
             const avatarImg = document.createElement("img");
             avatarImg.src = avatarUrl;
             avatarImg.alt = chat.name;
@@ -1641,8 +1643,8 @@
             avatar.style.color = "white";
             avatar.style.backgroundColor = "#6f42c1"; // Purple for users
             
-            // Try to load avatar from cache
-            const avatarUrl = `/data/user_avatar_${user.id}.jpg`;
+            // Try to load avatar from cache via API endpoint
+            const avatarUrl = `/api/avatar/user/${user.id}`;
             const avatarImg = document.createElement("img");
             avatarImg.src = avatarUrl;
             avatarImg.alt = user.name;

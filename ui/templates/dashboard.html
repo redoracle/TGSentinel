@@ -161,6 +161,30 @@
                                     <span class="badge bg-success flex-shrink-0" style="z-index: 1;">{{ entry.importance }}</span>
                                 </div>
                                 <p class="mb-2" style="word-break: break-word; overflow-wrap: break-word;">{{ entry.message }}</p>
+                                
+                                {%- if entry.replies or entry.reactions or entry.is_reply or entry.has_media or entry.is_pinned or entry.has_forward %}
+                                <div class="d-flex flex-wrap gap-2 mb-2">
+                                    {%- if entry.replies %}
+                                    <span class="badge bg-secondary" title="Replies"><i class="bi bi-chat-left-text me-1"></i>{{ entry.replies }}</span>
+                                    {%- endif %}
+                                    {%- if entry.reactions %}
+                                    <span class="badge bg-secondary" title="Reactions"><i class="bi bi-emoji-smile me-1"></i>{{ entry.reactions }}</span>
+                                    {%- endif %}
+                                    {%- if entry.is_reply %}
+                                    <span class="badge bg-secondary" title="Reply to message {{ entry.reply_to_msg_id }}"><i class="bi bi-reply"></i></span>
+                                    {%- endif %}
+                                    {%- if entry.has_media %}
+                                    <span class="badge bg-secondary" title="{{ entry.media_type or 'Media' }}"><i class="bi bi-paperclip me-1"></i>{{ entry.media_type or 'Media' }}</span>
+                                    {%- endif %}
+                                    {%- if entry.is_pinned %}
+                                    <span class="badge bg-warning" title="Pinned message"><i class="bi bi-pin-angle-fill"></i></span>
+                                    {%- endif %}
+                                    {%- if entry.has_forward %}
+                                    <span class="badge bg-secondary" title="Forwarded from {{ entry.forward_from or 'unknown' }}"><i class="bi bi-arrow-right me-1"></i>{{ entry.forward_from or 'Forwarded' }}</span>
+                                    {%- endif %}
+                                </div>
+                                {%- endif %}
+                                
                                 <div class="d-flex flex-wrap gap-2">
                                     {% for tag in entry.tags %}
                                     <span class="badge bg-info text-uppercase" style="z-index: 1;">{{ tag }}</span>
@@ -389,6 +413,62 @@
             messageP.textContent = entry.message || "";
             contentDiv.appendChild(messageP);
             
+            // Metadata badges (replies, reactions, etc.)
+            if (entry.replies || entry.reactions || entry.is_reply || entry.has_media || entry.is_pinned || entry.has_forward) {
+                const metadataDiv = document.createElement("div");
+                metadataDiv.className = "d-flex flex-wrap gap-2 mb-2";
+                
+                if (entry.replies) {
+                    const repliesBadge = document.createElement("span");
+                    repliesBadge.className = "badge bg-secondary";
+                    repliesBadge.title = "Replies";
+                    repliesBadge.innerHTML = `<i class="bi bi-chat-left-text me-1"></i>${entry.replies}`;
+                    metadataDiv.appendChild(repliesBadge);
+                }
+                
+                if (entry.reactions) {
+                    const reactionsBadge = document.createElement("span");
+                    reactionsBadge.className = "badge bg-secondary";
+                    reactionsBadge.title = "Reactions";
+                    reactionsBadge.innerHTML = `<i class="bi bi-emoji-smile me-1"></i>${entry.reactions}`;
+                    metadataDiv.appendChild(reactionsBadge);
+                }
+                
+                if (entry.is_reply) {
+                    const replyBadge = document.createElement("span");
+                    replyBadge.className = "badge bg-secondary";
+                    replyBadge.title = entry.reply_to_msg_id ? `Reply to message ${entry.reply_to_msg_id}` : "Reply";
+                    replyBadge.innerHTML = '<i class="bi bi-reply"></i>';
+                    metadataDiv.appendChild(replyBadge);
+                }
+                
+                if (entry.has_media) {
+                    const mediaBadge = document.createElement("span");
+                    mediaBadge.className = "badge bg-secondary";
+                    mediaBadge.title = entry.media_type || "Media";
+                    mediaBadge.innerHTML = `<i class="bi bi-paperclip me-1"></i>${entry.media_type || 'Media'}`;
+                    metadataDiv.appendChild(mediaBadge);
+                }
+                
+                if (entry.is_pinned) {
+                    const pinnedBadge = document.createElement("span");
+                    pinnedBadge.className = "badge bg-warning";
+                    pinnedBadge.title = "Pinned message";
+                    pinnedBadge.innerHTML = '<i class="bi bi-pin-angle-fill"></i>';
+                    metadataDiv.appendChild(pinnedBadge);
+                }
+                
+                if (entry.has_forward) {
+                    const forwardBadge = document.createElement("span");
+                    forwardBadge.className = "badge bg-secondary";
+                    forwardBadge.title = entry.forward_from ? `Forwarded from ${entry.forward_from}` : "Forwarded";
+                    forwardBadge.innerHTML = `<i class="bi bi-arrow-right me-1"></i>${entry.forward_from || 'Forwarded'}`;
+                    metadataDiv.appendChild(forwardBadge);
+                }
+                
+                contentDiv.appendChild(metadataDiv);
+            }
+            
             // Tags div
             const tagsDiv = document.createElement("div");
             tagsDiv.className = "d-flex flex-wrap gap-2";
@@ -555,6 +635,8 @@
                 toggleSwitch.setAttribute("aria-checked", "true");
                 toggleSwitch.classList.add("active");
                 toggleStatus.textContent = "ON";
+                // Save to localStorage
+                localStorage.setItem("tgsentinel:live-feed-enabled", "true");
                 updateActivity(); // Immediate update
             } else {
                 // Stop live updates
@@ -566,10 +648,18 @@
                 toggleSwitch.setAttribute("aria-checked", "false");
                 toggleSwitch.classList.remove("active");
                 toggleStatus.textContent = "OFF";
+                // Save to localStorage
+                localStorage.setItem("tgsentinel:live-feed-enabled", "false");
             }
         }
         
         if (toggleSwitch) {
+            // Restore saved state from localStorage
+            const savedState = localStorage.getItem("tgsentinel:live-feed-enabled");
+            if (savedState === "true") {
+                updateLiveState(true);
+            }
+            
             // Click handler
             toggleSwitch.addEventListener("click", () => {
                 const isLive = toggleSwitch.getAttribute("data-live") === "true";

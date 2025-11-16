@@ -27,6 +27,7 @@ from .logging_setup import setup_logging
 from .metrics import dump
 from .store import init_db
 from .worker import process_loop
+from .api import start_api_server, set_sentinel_state, set_redis_client, set_config
 
 
 AUTH_QUEUE_KEY = "tgsentinel:auth_queue"
@@ -219,6 +220,8 @@ async def _fetch_participant_info(
                         if name_parts
                         else getattr(user, "username", f"User {user_id}")
                     ),
+                    "first_name": first_name,
+                    "last_name": last_name,
                     "username": getattr(user, "username", None),
                     "phone": getattr(user, "phone", None),
                     "bot": getattr(user, "bot", False),
@@ -228,13 +231,25 @@ async def _fetch_participant_info(
                     "support": bool(getattr(user, "support", False)),
                     "premium": bool(getattr(user, "premium", False)),
                     "restricted": bool(getattr(user, "restricted", False)),
+                    "deleted": bool(getattr(user, "deleted", False)),
                     "lang_code": getattr(user, "lang_code", None),
                     "access_hash": getattr(user, "access_hash", None),
+                    # Identity & Relationship flags
+                    "is_self": bool(getattr(user, "is_self", False)),
+                    "contact": bool(getattr(user, "contact", False)),
+                    "mutual_contact": bool(getattr(user, "mutual_contact", False)),
+                    # Profile photo metadata
+                    "photo_id": None,
+                    "photo_dc_id": None,
                 }
 
                 # Try to get user avatar
                 try:
                     if hasattr(user, "photo") and user.photo:  # type: ignore[attr-defined]
+                        # Extract photo metadata
+                        info["user"]["photo_id"] = getattr(user.photo, "photo_id", None)  # type: ignore[attr-defined]
+                        info["user"]["photo_dc_id"] = getattr(user.photo, "dc_id", None)  # type: ignore[attr-defined]
+
                         # User has a photo, cache it
                         from .client import _cache_avatar
 
@@ -243,6 +258,33 @@ async def _fetch_participant_info(
                             info["user"]["avatar_url"] = user_avatar_url
                 except Exception as e:
                     log.debug("Failed to fetch user avatar: %s", e)
+
+                # Extract status information
+                try:
+                    if hasattr(user, "status") and user.status:  # type: ignore[attr-defined]
+                        status = user.status  # type: ignore[attr-defined]
+                        status_type = type(status).__name__
+
+                        if "Online" in status_type:
+                            info["user"]["status_type"] = "online"
+                            info["user"]["status_expires"] = getattr(
+                                status, "expires", None
+                            )
+                        elif "Offline" in status_type:
+                            info["user"]["status_type"] = "offline"
+                            info["user"]["was_online"] = getattr(
+                                status, "was_online", None
+                            )
+                        elif "Recently" in status_type:
+                            info["user"]["status_type"] = "recently"
+                        elif "LastWeek" in status_type:
+                            info["user"]["status_type"] = "last_week"
+                        elif "LastMonth" in status_type:
+                            info["user"]["status_type"] = "last_month"
+                        else:
+                            info["user"]["status_type"] = "unknown"
+                except Exception as e:
+                    log.debug("Failed to extract status: %s", e)
 
                 # Fetch full user info for additional details (about/bio, common chats, etc.)
                 try:
@@ -402,11 +444,23 @@ async def _run():
         try:
             photos = await client.get_profile_photos("me", limit=1)  # type: ignore[misc]
             if photos:
-                avatar_filename = "user_avatar.jpg"
-                fs_path = Path("/app/data") / avatar_filename
+                import base64
+                import io
+
+                # Download avatar to memory instead of disk
+                avatar_bytes = io.BytesIO()
                 try:
-                    await client.download_profile_photo("me", file=str(fs_path))  # type: ignore[misc]
-                    avatar_url = f"/data/{avatar_filename}"
+                    await client.download_profile_photo("me", file=avatar_bytes)  # type: ignore[misc]
+                    avatar_bytes.seek(0)
+                    avatar_b64 = base64.b64encode(avatar_bytes.read()).decode("utf-8")
+
+                    # Store in Redis with user_id key
+                    user_id = getattr(me, "id", None)
+                    if user_id:
+                        redis_key = f"tgsentinel:user_avatar:{user_id}"
+                        r.set(redis_key, avatar_b64)  # No TTL
+                        avatar_url = f"/api/avatar/user/{user_id}"
+                        log.info(f"Stored user avatar in Redis: {redis_key}")
                 except Exception as avatar_exc:
                     log.debug("Could not download user avatar: %s", avatar_exc)
         except Exception as photo_exc:
@@ -424,10 +478,14 @@ async def _run():
                 "user_id": getattr(me, "id", None),
                 "avatar": avatar_url,
             }
-            r.set("tgsentinel:user_info", json.dumps(ui), ex=3600)  # 1 hour TTL
-            log.info("Stored user info in Redis after refresh: %s", ui.get("username"))
+            r.set("tgsentinel:user_info", json.dumps(ui))  # No TTL
+            log.info(
+                "Stored user info in Redis after refresh: %s (avatar: %s)",
+                ui.get("username"),
+                avatar_url,
+            )
         except Exception as cache_exc:
-            log.warning(
+            log.error(
                 "Could not store refreshed user info: %s", cache_exc, exc_info=True
             )
 
@@ -528,6 +586,13 @@ async def _run():
             "[AUTH] Marking as authorized, user=%s",
             getattr(user, "id", None) if user else "unknown",
         )
+
+        # Update API state
+        from .api import set_sentinel_state
+
+        set_sentinel_state("authorized", True)
+        set_sentinel_state("connected", True)
+
         try:
             # Store with longer TTL (1 hour) so it persists across checks
             r.setex(
@@ -555,7 +620,8 @@ async def _run():
                 "user_id": getattr(user, "id", None),
                 "avatar": "/static/images/logo.png",
             }
-            r.setex("tgsentinel:user_info", 3600, json.dumps(ui_info))
+            r.set("tgsentinel:user_info", json.dumps(ui_info))  # No TTL
+            set_sentinel_state("user_info", ui_info)
             log.debug("[AUTH] User info stored in Redis")
         except Exception as exc:
             log.warning("[AUTH] Failed to store user info: %s", exc)
@@ -587,12 +653,372 @@ async def _run():
                 return dialogs_cache[1]
 
             log.debug("Fetching dialogs from Telegram (cache expired)")
-            # Ensure client is connected before making API call
-            await _ensure_client_connected()
-            dialogs = await client.get_dialogs()  # type: ignore[misc]
-            dialogs_cache = (now, dialogs)
-            log.info("Fetched %d dialogs from Telegram", len(dialogs))
-            return dialogs
+            try:
+                # Ensure client is connected before making API call
+                await _ensure_client_connected()
+                dialogs = await client.get_dialogs()  # type: ignore[misc]
+                dialogs_cache = (now, dialogs)
+                log.info("Fetched %d dialogs from Telegram", len(dialogs))
+                return dialogs
+            except Exception as e:
+                log.error(
+                    "Failed to fetch dialogs: %s. Clearing cache and retrying once.",
+                    e,
+                    exc_info=True,
+                )
+                # Clear cache and retry once
+                dialogs_cache = None
+                if not force_refresh:
+                    # Retry with force refresh
+                    return await _get_cached_dialogs(force_refresh=True)
+                raise
+
+    async def channels_users_cache_refresher():
+        """Background task to refresh channels and users cache every 10 minutes.
+
+        This prevents UI timeouts by maintaining fresh Redis cache that can be
+        served instantly. Uses differential updates to add new entries and remove
+        channels/groups we're no longer part of.
+
+        Also listens for session_updated events to trigger immediate refresh
+        when a new user logs in.
+        """
+        log.info(
+            "[CACHE-REFRESHER] Starting channels/users cache refresher (10min interval)"
+        )
+
+        CACHE_INTERVAL = 600  # 10 minutes
+        REDIS_CHANNELS_KEY = "tgsentinel:cached_channels"
+        REDIS_USERS_KEY = "tgsentinel:cached_users"
+        REDIS_CACHE_READY_KEY = "tgsentinel:cache_ready"
+        CACHE_TTL = 900  # 15 minutes (longer than refresh interval for safety)
+
+        # Subscribe to session update events for immediate refresh on user switch
+        pubsub = r.pubsub()
+        await asyncio.to_thread(pubsub.subscribe, "tgsentinel:session_updated")
+        log.info("[CACHE-REFRESHER] Subscribed to session_updated events")
+
+        async def perform_cache_refresh():
+            """Perform the actual cache refresh operation."""
+            try:
+                from telethon.tl.types import Channel, Chat as TgChat, User
+
+                # Fetch fresh dialogs (fast - ~20 seconds for 365 dialogs)
+                dialogs = await _get_cached_dialogs(force_refresh=True)
+                # Note: _get_cached_dialogs() already logs "Fetched X dialogs"
+
+                # Process channels/groups metadata (fast - in-memory only)
+                channels_list = []
+                users_list = []
+                entities_with_photos = (
+                    []
+                )  # Collect entities for parallel avatar caching
+
+                for dialog in dialogs:
+                    entity = dialog.entity
+
+                    # Process channels and groups
+                    if isinstance(entity, (Channel, TgChat)):
+                        chat_type = "group"
+                        if isinstance(entity, Channel):
+                            if getattr(entity, "broadcast", False):
+                                chat_type = "channel"
+                            elif getattr(entity, "megagroup", False):
+                                chat_type = "supergroup"
+                            else:
+                                chat_type = "group"
+
+                        name = getattr(entity, "title", None) or getattr(
+                            entity, "first_name", "Unknown"
+                        )
+                        entity_id = getattr(entity, "id", 0)
+
+                        # Collect entity for parallel avatar caching later
+                        photo = getattr(entity, "photo", None)
+                        if photo and entity_id:
+                            entities_with_photos.append((entity_id, photo, name))
+
+                        channels_list.append(
+                            {
+                                "id": entity_id,
+                                "name": name,
+                                "type": chat_type,
+                                "username": getattr(entity, "username", None),
+                            }
+                        )
+
+                    # Process users
+                    elif isinstance(entity, User):
+                        name_parts = []
+                        if hasattr(entity, "first_name") and entity.first_name:
+                            name_parts.append(entity.first_name)
+                        if hasattr(entity, "last_name") and entity.last_name:
+                            name_parts.append(entity.last_name)
+
+                        display_name = (
+                            " ".join(name_parts)
+                            if name_parts
+                            else (
+                                entity.username
+                                if hasattr(entity, "username") and entity.username
+                                else f"User {entity.id}"
+                            )
+                        )
+
+                        # Collect user for parallel avatar caching later
+                        user_id = getattr(entity, "id", 0)
+                        photo = getattr(entity, "photo", None)
+                        if photo and user_id:
+                            entities_with_photos.append((user_id, photo, display_name))
+
+                        users_list.append(
+                            {
+                                "id": entity.id,
+                                "name": display_name,
+                                "username": getattr(entity, "username", None),
+                                "phone": getattr(entity, "phone", None),
+                                "bot": getattr(entity, "bot", False),
+                            }
+                        )
+
+                # Store metadata in Redis with TTL (fast - milliseconds)
+                r.setex(REDIS_CHANNELS_KEY, CACHE_TTL, json.dumps(channels_list))
+                r.setex(REDIS_USERS_KEY, CACHE_TTL, json.dumps(users_list))
+
+                # Mark cache as ready
+                r.setex(REDIS_CACHE_READY_KEY, CACHE_TTL, "1")
+
+                # Publish notification that cache is ready
+                r.publish(
+                    "tgsentinel:cache_ready_event",
+                    json.dumps(
+                        {
+                            "event": "cache_updated",
+                            "channels_count": len(channels_list),
+                            "users_count": len(users_list),
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        }
+                    ),
+                )
+
+                log.info(
+                    f"[CACHE-REFRESHER] ✓ Updated cache: {len(channels_list)} channels, "
+                    f"{len(users_list)} users"
+                )
+
+                # PUBLISH LOGIN COMPLETION NOW (before avatar caching)
+                # This allows UI to become responsive immediately
+                try:
+                    login_progress_exists = r.exists("tgsentinel:login_progress")
+                    if login_progress_exists:
+                        r.set(
+                            "tgsentinel:login_progress",
+                            json.dumps(
+                                {
+                                    "stage": "completed",
+                                    "percent": 100,
+                                    "message": f"Login complete! {len(channels_list)} channels, {len(users_list)} users available. Avatars loading in background...",
+                                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                                }
+                            ),
+                        )
+                        log.info(
+                            "[CACHE-REFRESHER] Published login completion (no TTL)"
+                        )
+                except Exception as progress_exc:
+                    log.debug(
+                        "[CACHE-REFRESHER] Failed to publish progress: %s",
+                        progress_exc,
+                    )
+
+                # NOW cache avatars in parallel batches (slow - but non-blocking for login)
+                if entities_with_photos:
+                    log.info(
+                        f"[CACHE-REFRESHER] Starting parallel avatar caching for {len(entities_with_photos)} entities..."
+                    )
+                    await _cache_avatars_parallel(entities_with_photos, client, r)
+                    log.info(
+                        f"[CACHE-REFRESHER] ✓ Completed avatar caching (next refresh in {CACHE_INTERVAL}s)"
+                    )
+
+            except Exception as refresh_err:
+                log.error(
+                    "[CACHE-REFRESHER] Failed to refresh cache: %s",
+                    refresh_err,
+                    exc_info=True,
+                )
+
+        while True:
+            try:
+                await handshake_gate.wait()
+
+                # Check if authorized before processing
+                if not authorized:
+                    log.debug("[CACHE-REFRESHER] Not authorized, waiting...")
+                    # Wait for auth_event instead of sleeping blindly
+                    try:
+                        await asyncio.wait_for(auth_event.wait(), timeout=30)
+                        log.info(
+                            "[CACHE-REFRESHER] Authorization detected, proceeding to cache refresh"
+                        )
+                        # Don't continue here - fall through to refresh immediately
+                    except asyncio.TimeoutError:
+                        continue  # Check again
+
+                # Check for session update event (non-blocking with short timeout)
+                session_updated = False
+                try:
+                    message = await asyncio.to_thread(pubsub.get_message, timeout=0.1)
+                    if message and message.get("type") == "message":
+                        try:
+                            msg_data = message["data"]
+                            if isinstance(msg_data, bytes):
+                                msg_data = msg_data.decode("utf-8")
+                            data = json.loads(msg_data)
+                            event_type = data.get("event")
+                            log.debug(
+                                "[CACHE-REFRESHER] Received event: %s", event_type
+                            )
+                            if event_type == "session_authorized":
+                                session_updated = True
+                                log.info(
+                                    "[CACHE-REFRESHER] Session authorization detected, triggering immediate refresh"
+                                )
+                        except Exception as parse_exc:
+                            log.warning(
+                                "[CACHE-REFRESHER] Failed to parse session update message: %s",
+                                parse_exc,
+                            )
+                except Exception as msg_exc:
+                    log.debug(
+                        "[CACHE-REFRESHER] No message in initial check: %s", msg_exc
+                    )
+
+                # Perform refresh if authorized
+                log.info("[CACHE-REFRESHER] Fetching dialogs for cache refresh...")
+
+                await perform_cache_refresh()
+
+                # Wait for next refresh interval (but check for session updates periodically)
+                if not session_updated:
+                    # Normal periodic refresh - wait full interval
+                    log.debug(
+                        "[CACHE-REFRESHER] Entering wait loop for %d seconds",
+                        CACHE_INTERVAL,
+                    )
+                    for i in range(CACHE_INTERVAL):
+                        # Check for session updates every second during wait
+                        try:
+                            message = await asyncio.to_thread(
+                                pubsub.get_message, timeout=1.0
+                            )
+                            if message and message.get("type") == "message":
+                                try:
+                                    msg_data = message["data"]
+                                    if isinstance(msg_data, bytes):
+                                        msg_data = msg_data.decode("utf-8")
+                                    data = json.loads(msg_data)
+                                    event_type = data.get("event")
+                                    log.info(
+                                        "[CACHE-REFRESHER] Received event during wait (iteration %d): %s",
+                                        i,
+                                        event_type,
+                                    )
+                                    if event_type == "session_authorized":
+                                        log.info(
+                                            "[CACHE-REFRESHER] Session authorization during wait period, breaking early"
+                                        )
+                                        break  # Break out of wait loop to refresh immediately
+                                except Exception as parse_exc:
+                                    log.warning(
+                                        "[CACHE-REFRESHER] Failed to parse message during wait: %s",
+                                        parse_exc,
+                                    )
+                        except Exception:
+                            pass  # Continue waiting on any error
+                else:
+                    # Session was just updated, wait a bit before next check
+                    log.debug("[CACHE-REFRESHER] Session just updated, short sleep")
+                    await asyncio.sleep(5)
+
+            except Exception as e:
+                log.error(
+                    "[CACHE-REFRESHER] Cache refresher error: %s", e, exc_info=True
+                )
+                await asyncio.sleep(60)  # Wait 1 minute on error before retrying
+
+    async def _cache_avatars_parallel(
+        entities_with_photos: list, client: TelegramClient, r: Redis
+    ):
+        """Cache avatars for entities in parallel batches to respect rate limits.
+
+        Args:
+            entities_with_photos: List of tuples (entity_id, photo, display_name)
+            client: Telethon client
+            r: Redis client
+        """
+        from .client import _cache_avatar
+
+        BATCH_SIZE = 10  # Download 10 avatars concurrently
+        BATCH_DELAY = 1  # Wait 1 second between batches to respect rate limits
+
+        avatar_tasks = []
+        total_cached = 0
+        total_skipped = 0
+        total_errors = 0
+
+        for entity_id, photo, display_name in entities_with_photos:
+            # Create task for avatar caching
+            task = _cache_avatar(client, entity_id, photo, r)
+            avatar_tasks.append((task, entity_id, display_name))
+
+            # Process batch when full
+            if len(avatar_tasks) >= BATCH_SIZE:
+                tasks_only = [t[0] for t in avatar_tasks]
+                results = await asyncio.gather(*tasks_only, return_exceptions=True)
+
+                # Count results
+                for idx, result in enumerate(results):
+                    entity_id = avatar_tasks[idx][1]
+                    if isinstance(result, Exception):
+                        total_errors += 1
+                        log.debug(
+                            f"[CACHE-REFRESHER] Avatar error for {entity_id}: {result}"
+                        )
+                    elif result:  # Avatar URL returned = cached
+                        total_cached += 1
+                    else:  # None returned = already cached or no photo
+                        total_skipped += 1
+
+                if total_cached > 0 or total_errors > 0:
+                    log.info(
+                        f"[CACHE-REFRESHER] Cached batch: {total_cached} new, "
+                        f"{total_skipped} skipped, {total_errors} errors"
+                    )
+
+                avatar_tasks = []
+                await asyncio.sleep(BATCH_DELAY)
+
+        # Process remaining tasks
+        if avatar_tasks:
+            tasks_only = [t[0] for t in avatar_tasks]
+            results = await asyncio.gather(*tasks_only, return_exceptions=True)
+            for idx, result in enumerate(results):
+                entity_id = avatar_tasks[idx][1]
+                if isinstance(result, Exception):
+                    total_errors += 1
+                    log.debug(
+                        f"[CACHE-REFRESHER] Avatar error for {entity_id}: {result}"
+                    )
+                elif result:
+                    total_cached += 1
+                else:
+                    total_skipped += 1
+
+        log.info(
+            f"[CACHE-REFRESHER] ✓ Avatar caching complete: {total_cached} cached, "
+            f"{total_skipped} skipped, {total_errors} errors"
+        )
 
     def _extract_retry_after_seconds(exc: Exception) -> int | None:
         for attr in ("seconds", "wait_seconds", "retry_after", "duration"):
@@ -1122,7 +1548,20 @@ async def _run():
                     # instance to pick up the newly written session file
                     old_client = client
                     try:
-                        await old_client.disconnect()  # type: ignore[misc]
+                        # Remove all event handlers before disconnect to prevent duplicate processing
+                        try:
+                            handlers = old_client.list_event_handlers()
+                            for callback, event in handlers:
+                                old_client.remove_event_handler(callback, event)
+                            log.debug(
+                                "[RELOGIN] Removed %d event handler(s) from old client",
+                                len(handlers),
+                            )
+                        except Exception as handler_exc:
+                            log.debug("Failed to remove handlers: %s", handler_exc)
+
+                        # Telethon's disconnect() is synchronous and returns None
+                        old_client.disconnect()  # type: ignore[misc]
                         _close_session_binding()
                         # Ensure session file locks are released
                         await asyncio.sleep(0.5)
@@ -1359,6 +1798,14 @@ async def _run():
     auth_worker_task = asyncio.create_task(auth_queue_worker())
     log.info("[STARTUP] Auth queue worker started")
 
+    # Start HTTP API server for UI communication
+    api_port = int(os.getenv("SENTINEL_API_PORT", "8080"))
+    set_config(cfg)
+    set_redis_client(r)
+    set_sentinel_state("session_path", str(session_file_path))
+    start_api_server(host="0.0.0.0", port=api_port)
+    log.info("[STARTUP] HTTP API server started on port %d", api_port)
+
     # Non-interactive startup: do not prompt for phone in headless envs
     log.info("[STARTUP] Connecting to Telegram...")
     await client.connect()  # type: ignore[misc]
@@ -1368,6 +1815,682 @@ async def _run():
     # This prevents race conditions during the initial connect phase
     relogin_coordinator_task = asyncio.create_task(relogin_coordinator())
     log.info("[STARTUP] Relogin coordinator started")
+
+    # Start session update monitor immediately to catch uploaded sessions
+    async def session_monitor():
+        """Monitor for uploaded session files and logout requests."""
+        nonlocal authorized, client
+        pubsub = r.pubsub()
+        try:
+            await asyncio.to_thread(pubsub.subscribe, "tgsentinel:session_updated")
+            log.info(
+                "[SESSION-MONITOR] Listening for session uploads and logout events"
+            )
+
+            while True:
+                message = await asyncio.to_thread(pubsub.get_message, timeout=1.0)
+                if message and message["type"] == "message":
+                    try:
+                        data = json.loads(message["data"])
+                        event_type = data.get("event")
+
+                        if event_type == "session_imported":
+                            log.info(
+                                "[SESSION-MONITOR] Session upload detected, recreating client with new session"
+                            )
+                            # Telethon caches session state in memory - we must create a new client
+                            # instance to pick up the newly uploaded session file
+                            try:
+                                old_client = client
+                                try:
+                                    if old_client.is_connected():
+                                        # Remove all event handlers before disconnect to prevent duplicate processing
+                                        try:
+                                            handlers = old_client.list_event_handlers()
+                                            for callback, event in handlers:
+                                                old_client.remove_event_handler(
+                                                    callback, event
+                                                )
+                                            log.debug(
+                                                "[SESSION-MONITOR] Removed %d event handler(s) from old client",
+                                                len(handlers),
+                                            )
+                                        except Exception as handler_exc:
+                                            log.debug(
+                                                "Failed to remove handlers: %s",
+                                                handler_exc,
+                                            )
+
+                                        # Telethon's disconnect() is synchronous and returns None
+                                        old_client.disconnect()
+                                    _close_session_binding()
+                                    # Ensure session file locks are released
+                                    await asyncio.sleep(0.5)
+                                    log.debug(
+                                        "[SESSION-MONITOR] Old client disconnected and session closed"
+                                    )
+                                except Exception as disc_exc:
+                                    log.debug(
+                                        "Disconnect during session reload: %s", disc_exc
+                                    )
+
+                                # Explicitly delete old client reference to release resources
+                                del old_client
+                                await asyncio.sleep(
+                                    0.3
+                                )  # Additional time for SQLite lock release
+
+                                # Publish login progress: creating client
+                                try:
+                                    r.set(
+                                        "tgsentinel:login_progress",
+                                        json.dumps(
+                                            {
+                                                "stage": "creating_client",
+                                                "percent": 20,
+                                                "message": "Creating Telegram client...",
+                                                "timestamp": datetime.now(
+                                                    timezone.utc
+                                                ).isoformat(),
+                                            }
+                                        ),
+                                    )
+                                except Exception:
+                                    pass
+
+                                # Create fresh client with uploaded session file
+                                log.info(
+                                    "[SESSION-MONITOR] Creating new client instance"
+                                )
+                                client = make_client(cfg)
+
+                                # Publish login progress: connecting
+                                try:
+                                    r.set(
+                                        "tgsentinel:login_progress",
+                                        json.dumps(
+                                            {
+                                                "stage": "connecting",
+                                                "percent": 40,
+                                                "message": "Connecting to Telegram...",
+                                                "timestamp": datetime.now(
+                                                    timezone.utc
+                                                ).isoformat(),
+                                            }
+                                        ),
+                                    )
+                                except Exception:
+                                    pass
+
+                                # Connect to Telegram
+                                log.info(
+                                    "[SESSION-MONITOR] Connecting to Telegram with new session"
+                                )
+                                await asyncio.wait_for(client.connect(), timeout=30)
+                                log.info(
+                                    "[SESSION-MONITOR] Connection established, checking authorization"
+                                )
+
+                                # Publish login progress: verifying
+                                try:
+                                    r.set(
+                                        "tgsentinel:login_progress",
+                                        json.dumps(
+                                            {
+                                                "stage": "verifying",
+                                                "percent": 60,
+                                                "message": "Verifying authorization...",
+                                                "timestamp": datetime.now(
+                                                    timezone.utc
+                                                ).isoformat(),
+                                            }
+                                        ),
+                                    )
+                                except Exception:
+                                    pass
+
+                                # Check authorization
+                                me = await asyncio.wait_for(client.get_me(), timeout=10)
+                                log.info("[SESSION-MONITOR] get_me() returned: %s", me)
+
+                                if me:
+                                    # Type assertion: get_me() returns User when authorized
+                                    from telethon.tl.types import User as TgUser
+
+                                    assert isinstance(
+                                        me, TgUser
+                                    ), "Expected User object from get_me()"
+                                    log.info(
+                                        "[SESSION-MONITOR] ✓ New session authorized: @%s (ID: %s)",
+                                        me.username or "no_username",
+                                        me.id,
+                                    )
+                                    authorized = True
+                                    auth_event.set()
+                                    handshake_gate.set()  # Unblock CACHE-REFRESHER and other handlers
+
+                                    # Update worker status in Redis
+                                    try:
+                                        r.set(
+                                            "tgsentinel:worker_status",
+                                            json.dumps(
+                                                {
+                                                    "authorized": True,
+                                                    "status": "authorized",
+                                                    "ts": datetime.now(
+                                                        timezone.utc
+                                                    ).isoformat(),
+                                                }
+                                            ),
+                                        )  # No TTL
+                                        # Publish login progress: downloading avatar
+                                        try:
+                                            r.set(
+                                                "tgsentinel:login_progress",
+                                                json.dumps(
+                                                    {
+                                                        "stage": "avatar",
+                                                        "percent": 70,
+                                                        "message": "Downloading user avatar...",
+                                                        "timestamp": datetime.now(
+                                                            timezone.utc
+                                                        ).isoformat(),
+                                                    }
+                                                ),
+                                            )
+                                        except Exception:
+                                            pass
+
+                                        # Store user info in Redis
+                                        user_info = {
+                                            "username": me.username,
+                                            "first_name": me.first_name,
+                                            "last_name": me.last_name,
+                                            "phone": me.phone,
+                                            "user_id": me.id,
+                                        }
+
+                                        # Cache user avatar if available (MUST happen before login completion)
+                                        if hasattr(me, "photo") and me.photo:
+                                            try:
+                                                from .client import _cache_avatar
+
+                                                avatar_url = await _cache_avatar(
+                                                    client, me.id, me.photo, r
+                                                )
+                                                if avatar_url:
+                                                    user_info["avatar"] = avatar_url
+                                                    log.info(
+                                                        "[SESSION-MONITOR] ✓ Cached user avatar: %s",
+                                                        avatar_url,
+                                                    )
+                                            except Exception as avatar_exc:
+                                                log.warning(
+                                                    "[SESSION-MONITOR] Failed to cache avatar: %s",
+                                                    avatar_exc,
+                                                )
+                                        else:
+                                            # No avatar available, use default
+                                            user_info["avatar"] = (
+                                                "/static/images/logo.png"
+                                            )
+                                            log.debug(
+                                                "[SESSION-MONITOR] No avatar photo, using default"
+                                            )
+
+                                        user_info_json = json.dumps(user_info)
+                                        log.info(
+                                            "[SESSION-MONITOR] About to write user_info to Redis: %s",
+                                            user_info_json,
+                                        )
+                                        r.set(
+                                            "tgsentinel:user_info",
+                                            user_info_json,
+                                        )  # No TTL
+                                        log.info(
+                                            "[SESSION-MONITOR] ✓ Updated Redis with user info (avatar: %s)",
+                                            user_info.get("avatar", "not set"),
+                                        )
+                                        # Verify
+                                        verify_ui = r.get("tgsentinel:user_info")
+                                        if verify_ui:
+                                            log.info(
+                                                "[SESSION-MONITOR] Verified user_info in Redis"
+                                            )
+                                        else:
+                                            log.error(
+                                                "[SESSION-MONITOR] Failed to verify user_info in Redis!"
+                                            )
+
+                                        # Publish login progress: fetching dialogs (80%)
+                                        try:
+                                            r.set(
+                                                "tgsentinel:login_progress",
+                                                json.dumps(
+                                                    {
+                                                        "stage": "fetching_dialogs",
+                                                        "percent": 80,
+                                                        "message": "Loading channels and contacts...",
+                                                        "timestamp": datetime.now(
+                                                            timezone.utc
+                                                        ).isoformat(),
+                                                    }
+                                                ),
+                                            )
+                                        except Exception:
+                                            pass
+                                    except Exception as redis_exc:
+                                        log.debug(
+                                            "Failed to update Redis after auth: %s",
+                                            redis_exc,
+                                        )
+
+                                    # Re-register message ingestion handler after session reload
+                                    try:
+                                        from .client import start_ingestion
+
+                                        start_ingestion(cfg, client, r)
+                                        log.info(
+                                            "[SESSION-MONITOR] ✓ Message ingestion handler re-registered"
+                                        )
+                                    except Exception as ingestion_exc:
+                                        log.error(
+                                            "[SESSION-MONITOR] Failed to re-register ingestion handler: %s",
+                                            ingestion_exc,
+                                            exc_info=True,
+                                        )
+
+                                    # Clear dialogs cache to force refresh with new session
+                                    try:
+                                        nonlocal dialogs_cache
+                                        dialogs_cache = None
+                                        log.info(
+                                            "[SESSION-MONITOR] ✓ Cleared dialogs cache"
+                                        )
+                                    except Exception as cache_exc:
+                                        log.debug(
+                                            "[SESSION-MONITOR] Failed to clear dialogs cache: %s",
+                                            cache_exc,
+                                        )
+
+                                    # Publish session_updated event to trigger CACHE-REFRESHER
+                                    try:
+                                        r.publish(
+                                            "tgsentinel:session_updated",
+                                            json.dumps(
+                                                {
+                                                    "event": "session_authorized",
+                                                    "user_id": me.id,
+                                                    "timestamp": datetime.now(
+                                                        timezone.utc
+                                                    ).isoformat(),
+                                                }
+                                            ),
+                                        )
+                                        log.info(
+                                            "[SESSION-MONITOR] ✓ Published session_updated event to trigger cache refresh"
+                                        )
+                                    except Exception as pub_exc:
+                                        log.error(
+                                            "[SESSION-MONITOR] Failed to publish session_updated: %s",
+                                            pub_exc,
+                                        )
+
+                                    # Publish login completion (100%) - no TTL
+                                    # Cache refresher will run in background and update this if needed
+                                    try:
+                                        r.set(
+                                            "tgsentinel:login_progress",
+                                            json.dumps(
+                                                {
+                                                    "stage": "completed",
+                                                    "percent": 100,
+                                                    "message": "Session switch complete! Loading channels and contacts...",
+                                                    "timestamp": datetime.now(
+                                                        timezone.utc
+                                                    ).isoformat(),
+                                                }
+                                            ),
+                                        )
+                                        log.info(
+                                            "[SESSION-MONITOR] Published login completion (100%)"
+                                        )
+                                    except Exception as completion_exc:
+                                        log.debug(
+                                            "[SESSION-MONITOR] Failed to publish login completion: %s",
+                                            completion_exc,
+                                        )
+                                else:
+                                    log.warning(
+                                        "[SESSION-MONITOR] get_me() returned None - session file appears invalid or expired"
+                                    )
+                                    log.warning(
+                                        "[SESSION-MONITOR] The session may need phone number verification or the credentials don't match"
+                                    )
+                            except asyncio.TimeoutError:
+                                log.error(
+                                    "[SESSION-MONITOR] Connection or auth check timed out"
+                                )
+                            except Exception as e:
+                                log.error(
+                                    "[SESSION-MONITOR] Client recreation failed: %s",
+                                    e,
+                                    exc_info=True,
+                                )
+
+                        elif event_type == "session_logout":
+                            log.info(
+                                "[SESSION-MONITOR] Logout request detected, disconnecting..."
+                            )
+
+                            # Publish initial logout progress (20%) - no TTL
+                            try:
+                                r.set(
+                                    "tgsentinel:logout_progress",
+                                    json.dumps(
+                                        {
+                                            "stage": "disconnecting",
+                                            "percent": 20,
+                                            "message": "Disconnecting from Telegram...",
+                                            "timestamp": datetime.now(
+                                                timezone.utc
+                                            ).isoformat(),
+                                        }
+                                    ),
+                                )
+                                log.info(
+                                    "[SESSION-MONITOR] Published logout progress (20%)"
+                                )
+                            except Exception:
+                                pass
+
+                            try:
+                                # Disconnect from Telegram - wait for graceful disconnect
+                                if client.is_connected():
+                                    log.debug(
+                                        "[SESSION-MONITOR] Disconnecting client gracefully..."
+                                    )
+
+                                    # Cancel all pending Telethon tasks before disconnect
+                                    # This prevents "Task was destroyed but it is pending" errors
+                                    all_tasks = asyncio.all_tasks()
+                                    telethon_tasks = [
+                                        t
+                                        for t in all_tasks
+                                        if not t.done()
+                                        and any(
+                                            name in str(t.get_coro())
+                                            for name in [
+                                                "_recv_loop",
+                                                "_send_loop",
+                                                "MTProtoSender",
+                                                "Connection",
+                                            ]
+                                        )
+                                    ]
+                                    if telethon_tasks:
+                                        log.info(
+                                            f"[SESSION-MONITOR] Cancelling {len(telethon_tasks)} pending Telethon tasks"
+                                        )
+                                        for task in telethon_tasks:
+                                            task.cancel()
+                                        # Wait for tasks to be cancelled with timeout
+                                        await asyncio.wait(telethon_tasks, timeout=2.0)
+                                        log.info(
+                                            "[SESSION-MONITOR] Telethon tasks cancelled"
+                                        )
+
+                                    # Remove all event handlers before disconnect to prevent stale processing
+                                    try:
+                                        handlers = client.list_event_handlers()
+                                        for callback, event in handlers:
+                                            client.remove_event_handler(callback, event)
+                                        log.debug(
+                                            "[SESSION-MONITOR] Removed %d event handler(s)",
+                                            len(handlers),
+                                        )
+                                    except Exception as handler_exc:
+                                        log.debug(
+                                            "Failed to remove handlers: %s", handler_exc
+                                        )
+
+                                    # Explicitly save session before disconnect
+                                    try:
+                                        if hasattr(client, "session") and hasattr(
+                                            client.session, "save"
+                                        ):  # type: ignore[misc]
+                                            client.session.save()  # type: ignore[misc]
+                                    except Exception:
+                                        pass
+
+                                    # Telethon's disconnect() is synchronous and returns None
+                                    client.disconnect()
+                                    _close_session_binding()
+
+                                    # Wait for Telethon to complete its cleanup
+                                    # This prevents "no such table: entities" errors
+                                    await asyncio.sleep(1.5)
+                                    log.info(
+                                        "[SESSION-MONITOR] ✓ Disconnected from Telegram"
+                                    )
+
+                                # Update progress: disconnected
+                                try:
+                                    r.set(
+                                        "tgsentinel:logout_progress",
+                                        json.dumps(
+                                            {
+                                                "stage": "disconnected",
+                                                "percent": 50,
+                                                "message": "Disconnected from Telegram",
+                                                "timestamp": datetime.now(
+                                                    timezone.utc
+                                                ).isoformat(),
+                                            }
+                                        ),
+                                    )
+                                except Exception:
+                                    pass
+
+                                # Delete session files to ensure clean logout
+                                try:
+                                    await asyncio.sleep(0.5)  # Extra safety margin
+
+                                    # Update progress: deleting files
+                                    try:
+                                        r.set(
+                                            "tgsentinel:logout_progress",
+                                            json.dumps(
+                                                {
+                                                    "stage": "deleting_files",
+                                                    "percent": 70,
+                                                    "message": "Removing session files...",
+                                                    "timestamp": datetime.now(
+                                                        timezone.utc
+                                                    ).isoformat(),
+                                                }
+                                            ),
+                                        )
+                                    except Exception:
+                                        pass
+
+                                    for suffix in ["", "-shm", "-wal", "-journal"]:
+                                        session_file = Path(
+                                            str(session_file_path) + suffix
+                                        )
+                                        if session_file.exists():
+                                            session_file.unlink()
+                                            log.info(
+                                                "[SESSION-MONITOR] Deleted session file: %s",
+                                                session_file.name,
+                                            )
+                                except Exception as file_exc:
+                                    log.warning(
+                                        "[SESSION-MONITOR] Failed to delete session files: %s",
+                                        file_exc,
+                                    )
+
+                                # Mark as not authorized
+                                authorized = False
+                                auth_event.clear()
+
+                                # Clear worker status and all cache keys in Redis
+                                try:
+                                    # Update progress: clearing Redis
+                                    r.set(
+                                        "tgsentinel:logout_progress",
+                                        json.dumps(
+                                            {
+                                                "stage": "clearing_redis",
+                                                "percent": 85,
+                                                "message": "Clearing authentication and cache...",
+                                                "timestamp": datetime.now(
+                                                    timezone.utc
+                                                ).isoformat(),
+                                            }
+                                        ),
+                                    )
+
+                                    r.set(
+                                        "tgsentinel:worker_status",
+                                        json.dumps(
+                                            {
+                                                "authorized": False,
+                                                "status": "logged_out",
+                                                "ts": datetime.now(
+                                                    timezone.utc
+                                                ).isoformat(),
+                                            }
+                                        ),
+                                    )  # No TTL - persist until next login
+
+                                    # Clear user info from Redis
+                                    r.delete("tgsentinel:user_info")
+
+                                    # Clear cache keys (channels, users, cache_ready flag)
+                                    r.delete("tgsentinel:cached_channels")
+                                    r.delete("tgsentinel:cached_users")
+                                    r.delete("tgsentinel:cache_ready")
+
+                                    # Clear any progress tracking keys
+                                    r.delete("tgsentinel:login_progress")
+                                    # logout_progress will be cleaned up after completion
+
+                                    # Clear avatar cache (pattern-based deletion)
+                                    try:
+                                        # Clear user and channel avatar patterns
+                                        for pattern in [
+                                            "tgsentinel:user_avatar:*",
+                                            "tgsentinel:channel_avatar:*",
+                                        ]:
+                                            cursor = "0"
+                                            keys_to_delete = []
+                                            while cursor != 0:
+                                                cursor, keys = r.scan(cursor, match=pattern, count=100)  # type: ignore[assignment]
+                                                if keys:
+                                                    keys_to_delete.extend(keys)
+                                            if keys_to_delete:
+                                                r.delete(*keys_to_delete)
+                                        log.info(
+                                            "[SESSION-MONITOR] Cleared avatar cache"
+                                        )
+                                    except Exception as avatar_exc:
+                                        log.debug(
+                                            "[SESSION-MONITOR] Failed to clear avatar cache: %s",
+                                            avatar_exc,
+                                        )
+
+                                    # Clear message ingestion stream to remove stale/duplicate messages
+                                    try:
+                                        stream_key = cfg.redis["stream"]
+                                        r.delete(stream_key)
+                                        log.info(
+                                            "[SESSION-MONITOR] Cleared message stream: %s",
+                                            stream_key,
+                                        )
+                                    except Exception as stream_exc:
+                                        log.debug(
+                                            "[SESSION-MONITOR] Failed to clear message stream: %s",
+                                            stream_exc,
+                                        )
+
+                                    log.info(
+                                        "[SESSION-MONITOR] Cleared user info, cache, and progress keys from Redis"
+                                    )
+                                except Exception as redis_exc:
+                                    log.warning(
+                                        "[SESSION-MONITOR] Failed to clear Redis data: %s",
+                                        redis_exc,
+                                    )
+
+                                # Clear config files on logout
+                                try:
+                                    import glob
+
+                                    config_files = glob.glob(
+                                        "config/*.yml"
+                                    ) + glob.glob("config/*.yaml")
+                                    for config_file in config_files:
+                                        try:
+                                            os.remove(config_file)
+                                            log.info(
+                                                "[SESSION-MONITOR] Deleted config file: %s",
+                                                config_file,
+                                            )
+                                        except Exception as file_exc:
+                                            log.debug(
+                                                "[SESSION-MONITOR] Failed to delete config file %s: %s",
+                                                config_file,
+                                                file_exc,
+                                            )
+                                except Exception as config_exc:
+                                    log.debug(
+                                        "[SESSION-MONITOR] Failed to clear config files: %s",
+                                        config_exc,
+                                    )
+
+                                # ALL cleanup complete - now log and publish 100%
+                                log.info(
+                                    "[SESSION-MONITOR] Logout completed, session files deleted, waiting for new session"
+                                )
+
+                                # Final progress: completed (100%) with redirect trigger - no TTL
+                                try:
+                                    r.set(
+                                        "tgsentinel:logout_progress",
+                                        json.dumps(
+                                            {
+                                                "stage": "completed",
+                                                "percent": 100,
+                                                "message": "Logout complete! Redirecting...",
+                                                "redirect": "/logout",
+                                                "timestamp": datetime.now(
+                                                    timezone.utc
+                                                ).isoformat(),
+                                            }
+                                        ),
+                                    )
+                                    log.info(
+                                        "[SESSION-MONITOR] Published logout completion (100%) with redirect"
+                                    )
+                                except Exception:
+                                    pass
+                            except Exception as e:
+                                log.error("[SESSION-MONITOR] Logout failed: %s", e)
+
+                    except Exception as e:
+                        log.debug("[SESSION-MONITOR] Parse error: %s", e)
+                await asyncio.sleep(0.1)
+        except Exception as e:
+            log.error("[SESSION-MONITOR] Fatal error: %s", e)
+        finally:
+            try:
+                await asyncio.to_thread(pubsub.close)
+            except:
+                pass
+
+    session_monitor_task = asyncio.create_task(session_monitor())
+    log.info("[STARTUP] Session monitor started")
 
     # Fix session file permissions after connect (Telethon may create it here)
     try:
@@ -1677,10 +2800,15 @@ async def _run():
                 await asyncio.sleep(5)
 
     async def telegram_chats_handler():
-        """Handle Telegram chats discovery requests from UI."""
-        log.info(
-            "[CHATS-HANDLER] Starting chats handler (pattern: tgsentinel:telegram_chats_request:*)"
-        )
+        """Handle Telegram chats discovery requests from UI.
+
+        Serves from Redis cache instantly if available, otherwise indicates cache is building.
+        """
+        log.info("[CHATS-HANDLER] Starting chats handler (serving from Redis cache)")
+
+        REDIS_CHANNELS_KEY = "tgsentinel:cached_channels"
+        REDIS_CACHE_READY_KEY = "tgsentinel:cache_ready"
+
         while True:
             try:
                 await handshake_gate.wait()
@@ -1717,43 +2845,55 @@ async def _run():
 
                         log.info("[CHATS-HANDLER] Processing request_id=%s", request_id)
 
-                        # Fetch dialogs
-                        log.debug(
-                            "[CHATS-HANDLER] Fetching dialogs from cache/Telegram"
-                        )
-                        from telethon.tl.types import Channel, Chat
+                        # Check if cache is ready
+                        cache_ready = r.get(REDIS_CACHE_READY_KEY)
 
-                        dialogs = await _get_cached_dialogs()
-                        log.debug(
-                            "[CHATS-HANDLER] Got %d dialogs, filtering for Channel/Chat entities",
-                            len(dialogs),
-                        )
-                        chats = []
+                        if cache_ready:
+                            # Serve from cache instantly
+                            log.debug("[CHATS-HANDLER] Serving from Redis cache")
+                            cached_channels = r.get(REDIS_CHANNELS_KEY)
 
-                        for dialog in dialogs:
-                            entity = dialog.entity
-
-                            # Only include channels, groups, and supergroups
-                            if isinstance(entity, (Channel, Chat)):
-                                chat_type = "channel"
-                                if isinstance(entity, Channel):
-                                    if entity.broadcast:
-                                        chat_type = "channel"
-                                    elif entity.megagroup:
-                                        chat_type = "supergroup"
-                                    else:
-                                        chat_type = "group"
-                                elif isinstance(entity, Chat):
-                                    chat_type = "group"
-
-                                chats.append(
-                                    {
-                                        "id": entity.id,
-                                        "name": getattr(entity, "title", "Unknown"),
-                                        "type": chat_type,
-                                        "username": getattr(entity, "username", None),
-                                    }
+                            if cached_channels:
+                                if isinstance(cached_channels, bytes):
+                                    cached_channels = cached_channels.decode()
+                                # Type cast: Redis returns str after decode
+                                chats = json.loads(str(cached_channels))
+                                log.info(
+                                    "[CHATS-HANDLER] \u2713 Served %d channels from cache",
+                                    len(chats),
                                 )
+                            else:
+                                # Cache key exists but no data (edge case)
+                                log.warning(
+                                    "[CHATS-HANDLER] Cache ready but no data found"
+                                )
+                                chats = []
+                        else:
+                            # Cache not ready yet - return status message
+                            log.info(
+                                "[CHATS-HANDLER] Cache not ready, returning building status"
+                            )
+                            chats = []
+
+                            # Send a status response indicating cache is building
+                            response_key = (
+                                f"tgsentinel:telegram_chats_response:{request_id}"
+                            )
+                            r.setex(
+                                response_key,
+                                30,
+                                json.dumps(
+                                    {
+                                        "status": "cache_building",
+                                        "message": "Channel cache is being built. Please wait...",
+                                        "chats": [],
+                                    }
+                                ),
+                            )
+
+                            # Delete the request key
+                            r.delete(key)
+                            continue
 
                         # Send response
                         response_key = (
@@ -1842,41 +2982,38 @@ async def _run():
                             "[DIALOGS-HANDLER] Processing request_id=%s", request_id
                         )
 
-                        # Fetch dialogs
-                        from telethon.tl.types import Channel, Chat as TgChat
+                        # Use Redis cache populated by CACHE-REFRESHER (instant response)
+                        REDIS_CHANNELS_KEY = "tgsentinel:cached_channels"
+                        REDIS_CACHE_READY_KEY = "tgsentinel:cache_ready"
 
-                        log.debug(
-                            "[DIALOGS-HANDLER] Fetching dialogs from cache/Telegram"
-                        )
-                        dialogs = await _get_cached_dialogs()
-                        log.info(
-                            "[DIALOGS-HANDLER] Got %d dialogs, filtering for channels/groups",
-                            len(dialogs),
-                        )
                         chats = []
 
-                        for dialog in dialogs:
-                            entity = dialog.entity
-                            if isinstance(entity, (Channel, TgChat)):
-                                chat_type = "group"
-                                if isinstance(entity, Channel):
-                                    if getattr(entity, "broadcast", False):
-                                        chat_type = "channel"
-                                    elif getattr(entity, "megagroup", False):
-                                        chat_type = "supergroup"
-                                    else:
-                                        chat_type = "group"
-                                name = getattr(entity, "title", None) or getattr(
-                                    entity, "first_name", "Unknown"
+                        # Check if cache is ready
+                        cache_ready = r.get(REDIS_CACHE_READY_KEY)
+
+                        if cache_ready:
+                            # Get channels from Redis cache (fast!)
+                            cached_channels = r.get(REDIS_CHANNELS_KEY)
+                            if cached_channels:
+                                # Decode if bytes
+                                if isinstance(cached_channels, bytes):
+                                    cached_channels = cached_channels.decode("utf-8")
+                                # Parse JSON (cached_channels is now str)
+                                channels_list = json.loads(str(cached_channels))
+                                chats = channels_list
+                                log.info(
+                                    "[DIALOGS-HANDLER] Served %d channels from Redis cache",
+                                    len(chats),
                                 )
-                                chats.append(
-                                    {
-                                        "id": getattr(entity, "id", 0),
-                                        "name": name,
-                                        "type": chat_type,
-                                        "username": getattr(entity, "username", None),
-                                    }
+                            else:
+                                log.warning(
+                                    "[DIALOGS-HANDLER] Cache ready but no channels data found"
                                 )
+                        else:
+                            # Cache not ready yet - return empty with status
+                            log.info(
+                                "[DIALOGS-HANDLER] Cache not ready, returning building status"
+                            )
 
                         # Send response
                         response_key = f"tgsentinel:response:get_dialogs:{request_id}"
@@ -1921,10 +3058,15 @@ async def _run():
                 await asyncio.sleep(5)
 
     async def telegram_users_handler():
-        """Handle Telegram users discovery requests from UI."""
-        log.info(
-            "[USERS-HANDLER] Starting users handler (pattern: tgsentinel:telegram_users_request:*)"
-        )
+        """Handle Telegram users discovery requests from UI.
+
+        Serves from Redis cache instantly if available, otherwise indicates cache is building.
+        """
+        log.info("[USERS-HANDLER] Starting users handler (serving from Redis cache)")
+
+        REDIS_USERS_KEY = "tgsentinel:cached_users"
+        REDIS_CACHE_READY_KEY = "tgsentinel:cache_ready"
+
         while True:
             try:
                 await handshake_gate.wait()
@@ -1961,51 +3103,55 @@ async def _run():
 
                         log.info("[USERS-HANDLER] Processing request_id=%s", request_id)
 
-                        # Fetch dialogs
-                        log.debug(
-                            "[USERS-HANDLER] Fetching dialogs from cache/Telegram"
-                        )
-                        from telethon.tl.types import User
+                        # Check if cache is ready
+                        cache_ready = r.get(REDIS_CACHE_READY_KEY)
 
-                        dialogs = await _get_cached_dialogs()
-                        log.info(
-                            "[USERS-HANDLER] Got %d dialogs, filtering for User entities",
-                            len(dialogs),
-                        )
-                        users = []
+                        if cache_ready:
+                            # Serve from cache instantly
+                            log.debug("[USERS-HANDLER] Serving from Redis cache")
+                            cached_users = r.get(REDIS_USERS_KEY)
 
-                        for dialog in dialogs:
-                            entity = dialog.entity
-
-                            # Include private chats with users (bots included for discovery)
-                            if isinstance(entity, User):
-                                # Get user name
-                                name_parts = []
-                                if hasattr(entity, "first_name") and entity.first_name:
-                                    name_parts.append(entity.first_name)
-                                if hasattr(entity, "last_name") and entity.last_name:
-                                    name_parts.append(entity.last_name)
-
-                                display_name = (
-                                    " ".join(name_parts)
-                                    if name_parts
-                                    else (
-                                        entity.username
-                                        if hasattr(entity, "username")
-                                        and entity.username
-                                        else f"User {entity.id}"
-                                    )
+                            if cached_users:
+                                if isinstance(cached_users, bytes):
+                                    cached_users = cached_users.decode()
+                                # Type cast: Redis returns str after decode
+                                users = json.loads(str(cached_users))
+                                log.info(
+                                    "[USERS-HANDLER] \u2713 Served %d users from cache",
+                                    len(users),
                                 )
+                            else:
+                                # Cache key exists but no data (edge case)
+                                log.warning(
+                                    "[USERS-HANDLER] Cache ready but no data found"
+                                )
+                                users = []
+                        else:
+                            # Cache not ready yet - return status message
+                            log.info(
+                                "[USERS-HANDLER] Cache not ready, returning building status"
+                            )
+                            users = []
 
-                                users.append(
+                            # Send a status response indicating cache is building
+                            response_key = (
+                                f"tgsentinel:telegram_users_response:{request_id}"
+                            )
+                            r.setex(
+                                response_key,
+                                30,
+                                json.dumps(
                                     {
-                                        "id": entity.id,
-                                        "name": display_name,
-                                        "username": getattr(entity, "username", None),
-                                        "phone": getattr(entity, "phone", None),
-                                        "bot": getattr(entity, "bot", False),
+                                        "status": "cache_building",
+                                        "message": "Users cache is being built. Please wait...",
+                                        "users": [],
                                     }
-                                )
+                                ),
+                            )
+
+                            # Delete the request key
+                            r.delete(key)
+                            continue
 
                         # Send response
                         response_key = (
@@ -2067,6 +3213,11 @@ async def _run():
             try:
                 await asyncio.sleep(60)  # Save every 60 seconds
 
+                # Only save session if we're authorized (avoid recreating files after logout)
+                if not authorized:
+                    log.debug("Session persistence skipped (not authorized)")
+                    continue
+
                 # Explicitly save session to SQLite
                 try:
                     if hasattr(client, "session") and hasattr(client.session, "save"):  # type: ignore[misc]
@@ -2102,6 +3253,7 @@ async def _run():
             "telegram_dialogs_handler",
             "telegram_users_handler",
             "session_persistence_handler",
+            "channels_users_cache_refresher",
         ]
 
         results = await asyncio.gather(
@@ -2115,6 +3267,7 @@ async def _run():
             telegram_dialogs_handler(),
             telegram_users_handler(),
             session_persistence_handler(),
+            channels_users_cache_refresher(),
             return_exceptions=True,
         )
 

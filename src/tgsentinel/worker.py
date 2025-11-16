@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import io
 import json
 import logging
 from pathlib import Path
@@ -267,15 +269,46 @@ async def process_loop(
                                 log.warning(
                                     "Could not determine our_user_id after reconnect"
                                 )
-                            # Download user avatar if available
-                            avatar_path = None
+                            # Download user avatar if available and store in Redis
+                            avatar_url = "/static/images/logo.png"
                             try:
                                 photos = await client.get_profile_photos("me", limit=1)  # type: ignore[misc]
                                 if photos:
-                                    avatar_filename = "user_avatar.jpg"
-                                    avatar_path = f"/app/data/{avatar_filename}"
-                                    await client.download_profile_photo("me", file=avatar_path)  # type: ignore[misc]
-                                    avatar_path = f"/data/{avatar_filename}"
+                                    # Download avatar to memory instead of disk
+                                    avatar_bytes = io.BytesIO()
+                                    try:
+                                        await client.download_profile_photo("me", file=avatar_bytes)  # type: ignore[misc]
+                                        avatar_bytes.seek(0)
+                                        avatar_data = avatar_bytes.read()
+                                        if not avatar_data:
+                                            log.debug(
+                                                "Avatar download returned empty data"
+                                            )
+                                            continue
+
+                                        avatar_b64 = base64.b64encode(
+                                            avatar_data
+                                        ).decode("utf-8")
+
+                                        # Store in Redis with user_id key
+                                        if our_user_id and r:
+                                            redis_key = (
+                                                f"tgsentinel:user_avatar:{our_user_id}"
+                                            )
+                                            r.set(
+                                                redis_key, avatar_b64, ex=3600
+                                            )  # 1 hour TTL
+                                            avatar_url = (
+                                                f"/api/avatar/user/{our_user_id}"
+                                            )
+                                            log.info(
+                                                f"Stored user avatar in Redis: {redis_key}"
+                                            )
+                                    except Exception as avatar_dl_err:
+                                        log.debug(
+                                            "Could not download user avatar: %s",
+                                            avatar_dl_err,
+                                        )
                             except Exception as avatar_err:
                                 log.debug(
                                     "Could not refresh user avatar: %s", avatar_err
@@ -287,7 +320,7 @@ async def process_loop(
                                 "last_name": getattr(me, "last_name", ""),
                                 "phone": getattr(me, "phone", ""),
                                 "user_id": getattr(me, "id", None),
-                                "avatar": avatar_path or "/static/images/logo.png",
+                                "avatar": avatar_url,
                             }
                             r.set("tgsentinel:user_info", json.dumps(ui))
                         except Exception as me_err:

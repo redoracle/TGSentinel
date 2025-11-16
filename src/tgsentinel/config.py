@@ -115,6 +115,40 @@ def _env_float(name: str, default: float) -> float:
 
 
 def load_config(path="config/tgsentinel.yml") -> AppCfg:
+    # Ensure config directory exists
+    config_dir = os.path.dirname(path)
+    if config_dir and not os.path.exists(config_dir):
+        os.makedirs(config_dir, exist_ok=True)
+
+    # Create default config if it doesn't exist
+    if not os.path.exists(path):
+        default_config = """# TG Sentinel Configuration
+# This file is auto-generated on first startup
+
+# Channels to monitor (can be updated via UI)
+channels: []
+
+# Telegram session file path (relative to app root)
+telegram:
+  session: "data/tgsentinel.session"
+
+# Alert settings
+alerts:
+  enabled: true
+  min_score: 0.7
+
+# Digest settings
+digest:
+  hourly: true
+  daily: true
+  
+# Logging
+logging:
+  level: "INFO"
+"""
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(default_config)
+
     with open(path, "r", encoding="utf-8") as f:
         y = yaml.safe_load(f)
 

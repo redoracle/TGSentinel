@@ -27,14 +27,6 @@ def _make_app():
     os.environ["TG_API_HASH"] = "hash"
     os.environ["DB_URI"] = "sqlite:///:memory:"
 
-    # Clear any cached module
-    import sys
-
-    if "app" in sys.modules:
-        del sys.modules["app"]
-    if "ui.app" in sys.modules:
-        del sys.modules["ui.app"]
-
     # Mock config to return test values
     cfg = MagicMock()
     cfg.channels = []
@@ -43,27 +35,29 @@ def _make_app():
     cfg.api_id = 123456
     cfg.api_hash = "hash"
 
-    # Patch Redis connection BEFORE importing/initializing the app
-    with (
-        patch("app.load_config", return_value=cfg),
-        patch("ui.app.redis") as mock_redis_module,
-    ):
-        # Create a mock Redis class that returns a working mock client
+    # Import and reset the app module (don't delete from sys.modules)
+    import ui.app
+    import app as flask_app  # type: ignore
+
+    # Reset module state for test isolation
+    ui.app.reset_for_testing()
+
+    # Temporarily patch config and Redis during initialization
+    original_config = ui.app.config
+    ui.app.config = cfg
+
+    # Patch Redis to avoid real connection attempts
+    with patch("ui.app.redis") as mock_redis_module:
         mock_redis_class = MagicMock()
         mock_client = MagicMock()
         mock_client.ping = MagicMock(return_value=True)
         mock_redis_class.Redis.return_value = mock_client
         mock_redis_module.Redis = mock_redis_class.Redis
 
-        import app as flask_app  # type: ignore
+        ui.app.init_app()
 
-        # Reset module state for test isolation
-        flask_app.reset_for_testing()
-        flask_app.init_app()
-
-        # Return the app for use outside the context manager
-        # Note: redis patches only apply during _make_app(), tests must patch redis_client separately
-        return flask_app.app
+    # Return the app for testing
+    return flask_app.app
 
 
 def _mock_redis_for_auth(response_data, context_data=None):

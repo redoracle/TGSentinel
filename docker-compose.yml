@@ -5,7 +5,9 @@ services:
     ports: ["6379:6379"]
     command: ["redis-server", "--save", "60", "1000", "--appendonly", "yes"]
     volumes:
-      - ./data/redis:/data
+      - tgsentinel_redis_data:/data
+    networks:
+      - tgsentinel_net
 
   sentinel:
     build:
@@ -16,11 +18,16 @@ services:
     env_file: [.env]
     environment:
       - SESSION_WAIT_SECS=300
+      - TG_SESSION_PATH=/app/data/tgsentinel.session
+      - DB_URI=sqlite:////app/data/sentinel.db
+      - SENTINEL_API_PORT=8080
     volumes:
-      - ./config:/app/config:rw
-      - ./data:/app/data
+      - tgsentinel_sentinel_config:/app/config
+      - tgsentinel_sentinel_data:/app/data
     depends_on:
       - redis
+    networks:
+      - tgsentinel_net
 
   ui:
     build:
@@ -34,13 +41,33 @@ services:
     env_file: [.env]
     environment:
       - UI_PORT=5000
+      - UI_DB_URI=sqlite:////app/data/ui.db
+      - SENTINEL_API_BASE_URL=http://sentinel:8080/api
     volumes:
-      - ./config:/app/config
-      - ./data:/app/data
+      - tgsentinel_ui_config:/app/config
+      - tgsentinel_ui_data:/app/data
     depends_on:
       - redis
       - sentinel
+    networks:
+      - tgsentinel_net
 
   # Optional: expose Prometheus metrics via textfile collector or a tiny HTTP
   # metrics endpoint. For simplicity, metrics are logged; integrate with your
   # existing Prometheus stack if desired.
+
+volumes:
+  tgsentinel_redis_data:
+    driver: local
+  tgsentinel_sentinel_data:
+    driver: local
+  tgsentinel_sentinel_config:
+    driver: local
+  tgsentinel_ui_data:
+    driver: local
+  tgsentinel_ui_config:
+    driver: local
+
+networks:
+  tgsentinel_net:
+    driver: bridge

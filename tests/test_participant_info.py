@@ -24,6 +24,52 @@ def mock_config():
 
 
 @pytest.fixture
+def app_with_channels(mock_config):
+    """Create Flask app instance with channels configured."""
+    import sys
+    from pathlib import Path
+    from unittest.mock import patch
+
+    ui_path = Path(__file__).parent.parent / "ui"
+    sys.path.insert(0, str(ui_path))
+
+    # Create config with our test channels
+    test_config = MagicMock()
+    test_config.channels = mock_config.channels
+    test_config.db_uri = "sqlite:///:memory:"
+    test_config.redis = {
+        "host": "localhost",
+        "port": 6379,
+        "db": 15,
+        "stream": "sentinel:messages",
+    }
+    mock_alerts = MagicMock()
+    mock_alerts.mode = "dm"
+    test_config.alerts = mock_alerts
+
+    with patch("app.load_config", return_value=test_config):
+        import app as flask_app  # type: ignore[import-not-found]
+        import ui.app
+
+        # Save original config
+        original_config = ui.app.config
+
+        # Reset module state
+        flask_app.reset_for_testing()
+
+        # Set the config directly on the ui.app module
+        ui.app.config = test_config
+
+        flask_app.app.config["TESTING"] = True
+        flask_app.app.config["TGSENTINEL_CONFIG"] = test_config
+
+        yield flask_app.app
+
+        # Restore original config
+        ui.app.config = original_config
+
+
+@pytest.fixture
 def mock_redis():
     """Mock Redis client."""
     return MagicMock(spec=Redis)
@@ -55,31 +101,20 @@ class TestParticipantInfoAPI:
         data = response.get_json()
         assert "error" in data
 
-    @pytest.mark.xfail(
-        reason="Config patching for channels not working - module-level global issue"
-    )
-    def test_chat_info_without_user_id_from_config(self, app, client, mock_config):
+    def test_chat_info_without_user_id_from_config(
+        self, app_with_channels, mock_config
+    ):
         """Test getting chat info without user_id returns config data."""
-        # Import ui.app module to access global config
-        import ui.app
+        client = app_with_channels.test_client()
 
-        # Modify the existing config's channels instead of replacing the whole config
-        original_channels = ui.app.config.channels if ui.app.config else []
-        if ui.app.config:
-            ui.app.config.channels = mock_config.channels
+        response = client.get("/api/participant/info?chat_id=123456")
+        assert response.status_code == 200
+        data = response.get_json()
 
-        try:
-            response = client.get("/api/participant/info?chat_id=123456")
-            assert response.status_code == 200
-            data = response.get_json()
-
-            assert "chat" in data
-            assert data["chat"]["id"] == 123456
-            assert data["chat"]["title"] == "Test Channel"
-            assert "type" in data["chat"]
-        finally:
-            if ui.app.config:
-                ui.app.config.channels = original_channels
+        assert "chat" in data
+        assert data["chat"]["id"] == 123456
+        assert data["chat"]["title"] == "Test Channel"
+        assert "type" in data["chat"]
 
     def test_chat_info_without_user_id_fallback(self, app, client):
         """Test chat info fallback when not in config."""
@@ -727,20 +762,20 @@ class TestAvatarFunctionality:
         # Mock xrevrange to return activity data
         mock_redis.xrevrange.return_value = [("msg-1", activity_data)]
 
-        # Mock avatar cache
-        def get_side_effect(key):
+        # Mock avatar cache - Redis stores base64 data, UI checks exists() and generates URL
+        def exists_side_effect(key):
             if key == "tgsentinel:user_avatar:12345":
-                return b"/data/avatars/user_12345.jpg"
-            return None
+                return True
+            return False
 
-        mock_redis.get.side_effect = get_side_effect
+        mock_redis.exists.side_effect = exists_side_effect
 
         # Save original state
         original_redis = ui.app.redis_client
-        original_initialized = flask_app._is_initialized
+        original_initialized = ui.app._is_initialized
 
         # Set up mocks - mark as initialized to prevent init_app() from resetting redis_client
-        flask_app._is_initialized = True
+        ui.app._is_initialized = True
         ui.app.redis_client = mock_redis
 
         try:
@@ -753,12 +788,13 @@ class TestAvatarFunctionality:
 
             entry = data["entries"][0]
             assert "avatar_url" in entry, f"Entry keys: {entry.keys()}, entry: {entry}"
-            assert entry["avatar_url"] == "/data/avatars/user_12345.jpg"
+            # With new architecture, avatar_url should be the API endpoint when avatar exists in Redis
+            assert entry["avatar_url"] == "/api/avatar/user/12345"
             assert entry["sender_id"] == 12345
             assert entry["sender"] == "Test User"
         finally:
             ui.app.redis_client = original_redis
-            flask_app._is_initialized = original_initialized
+            ui.app._is_initialized = original_initialized
 
     def test_avatar_url_missing_when_not_cached(self, app, client):
         """Test that avatar_url is None when not in Redis cache."""
@@ -778,12 +814,12 @@ class TestAvatarFunctionality:
         }
 
         mock_redis.xrevrange.return_value = [("msg-1", activity_data)]
-        mock_redis.get.return_value = None  # No avatar cached
+        mock_redis.exists.return_value = False  # No avatar cached
 
         original_redis = ui.app.redis_client
-        original_initialized = flask_app._is_initialized
+        original_initialized = ui.app._is_initialized
 
-        flask_app._is_initialized = True
+        ui.app._is_initialized = True
         ui.app.redis_client = mock_redis
 
         try:
@@ -796,7 +832,7 @@ class TestAvatarFunctionality:
             assert entry["avatar_url"] is None
         finally:
             ui.app.redis_client = original_redis
-            flask_app._is_initialized = original_initialized
+            ui.app._is_initialized = original_initialized
 
     def test_avatar_cache_key_format(self):
         """Test that avatar cache keys follow correct format."""
@@ -810,15 +846,15 @@ class TestAvatarFunctionality:
         assert f"tgsentinel:user_avatar:{67890}" == "tgsentinel:user_avatar:67890"
 
     def test_avatar_url_path_format(self):
-        """Test that avatar URLs follow correct path format."""
+        """Test that avatar URLs follow correct API endpoint format."""
         sender_id = 12345
-        expected_url = f"/data/avatars/user_{sender_id}.jpg"
+        expected_url = f"/api/avatar/user/{sender_id}"
 
-        assert expected_url == "/data/avatars/user_12345.jpg"
+        assert expected_url == "/api/avatar/user/12345"
 
-        # Verify it's a valid relative path that can be served
-        assert expected_url.startswith("/data/")
-        assert expected_url.endswith(".jpg")
+        # Verify it's a valid API endpoint path
+        assert expected_url.startswith("/api/avatar/")
+        assert "user" in expected_url or "chat" in expected_url
 
     def test_multiple_users_with_different_avatars(self, app, client):
         """Test activity feed with multiple users having different avatar states."""
@@ -872,19 +908,19 @@ class TestAvatarFunctionality:
         mock_redis.xrevrange.return_value = activities
 
         # Mock avatars for users 111 and 333, but not 222
-        def get_side_effect(key):
+        def exists_side_effect(key):
             if key == "tgsentinel:user_avatar:111":
-                return b"/data/avatars/user_111.jpg"
+                return True
             elif key == "tgsentinel:user_avatar:333":
-                return b"/data/avatars/user_333.jpg"
-            return None
+                return True
+            return False
 
-        mock_redis.get.side_effect = get_side_effect
+        mock_redis.exists.side_effect = exists_side_effect
 
         original_redis = ui.app.redis_client
-        original_initialized = flask_app._is_initialized
+        original_initialized = ui.app._is_initialized
 
-        flask_app._is_initialized = True
+        ui.app._is_initialized = True
         ui.app.redis_client = mock_redis
 
         try:
@@ -894,20 +930,20 @@ class TestAvatarFunctionality:
 
             assert len(data["entries"]) == 3
 
-            # Check first user has avatar
+            # Check first user has avatar (new format: API endpoint)
             assert data["entries"][0]["sender_id"] == 111
-            assert data["entries"][0]["avatar_url"] == "/data/avatars/user_111.jpg"
+            assert data["entries"][0]["avatar_url"] == "/api/avatar/user/111"
 
             # Check second user has no avatar
             assert data["entries"][1]["sender_id"] == 222
             assert data["entries"][1]["avatar_url"] is None
 
-            # Check third user has avatar
+            # Check third user has avatar (new format: API endpoint)
             assert data["entries"][2]["sender_id"] == 333
-            assert data["entries"][2]["avatar_url"] == "/data/avatars/user_333.jpg"
+            assert data["entries"][2]["avatar_url"] == "/api/avatar/user/333"
         finally:
             ui.app.redis_client = original_redis
-            flask_app._is_initialized = original_initialized
+            ui.app._is_initialized = original_initialized
 
     def test_avatar_with_bytes_response(self, app, client):
         """Test handling of avatar URL when Redis returns bytes."""
@@ -928,13 +964,13 @@ class TestAvatarFunctionality:
 
         mock_redis.xrevrange.return_value = [("msg-1", activity_data)]
 
-        # Redis returns bytes (common behavior)
-        mock_redis.get.return_value = b"/data/avatars/user_12345.jpg"
+        # Redis exists check returns True when avatar is cached
+        mock_redis.exists.return_value = True
 
         original_redis = ui.app.redis_client
-        original_initialized = flask_app._is_initialized
+        original_initialized = ui.app._is_initialized
 
-        flask_app._is_initialized = True
+        ui.app._is_initialized = True
         ui.app.redis_client = mock_redis
 
         try:
@@ -943,12 +979,11 @@ class TestAvatarFunctionality:
             data = response.get_json()
 
             entry = data["entries"][0]
-            # Should handle bytes and convert to string
-            assert entry["avatar_url"] is not None
-            assert "user_12345.jpg" in str(entry["avatar_url"])
+            # Should generate API endpoint URL when avatar exists in Redis
+            assert entry["avatar_url"] == "/api/avatar/user/12345"
         finally:
             ui.app.redis_client = original_redis
-            flask_app._is_initialized = original_initialized
+            ui.app._is_initialized = original_initialized
 
     def test_avatar_error_handling(self, app, client):
         """Test that avatar fetch errors don't break activity feed."""
@@ -969,13 +1004,13 @@ class TestAvatarFunctionality:
 
         mock_redis.xrevrange.return_value = [("msg-1", activity_data)]
 
-        # Simulate Redis error when fetching avatar
-        mock_redis.get.side_effect = Exception("Redis connection error")
+        # Simulate Redis error when checking avatar existence
+        mock_redis.exists.side_effect = Exception("Redis connection error")
 
         original_redis = ui.app.redis_client
-        original_initialized = flask_app._is_initialized
+        original_initialized = ui.app._is_initialized
 
-        flask_app._is_initialized = True
+        ui.app._is_initialized = True
         ui.app.redis_client = mock_redis
 
         try:
@@ -993,7 +1028,7 @@ class TestAvatarFunctionality:
             assert entry["avatar_url"] is None
         finally:
             ui.app.redis_client = original_redis
-            flask_app._is_initialized = original_initialized
+            ui.app._is_initialized = original_initialized
 
     def test_avatar_without_sender_id(self, app, client):
         """Test activity entry without sender_id doesn't try to fetch avatar."""
@@ -1015,9 +1050,9 @@ class TestAvatarFunctionality:
         mock_redis.xrevrange.return_value = [("msg-1", activity_data)]
 
         original_redis = ui.app.redis_client
-        original_initialized = flask_app._is_initialized
+        original_initialized = ui.app._is_initialized
 
-        flask_app._is_initialized = True
+        ui.app._is_initialized = True
         ui.app.redis_client = mock_redis
 
         try:
@@ -1032,7 +1067,7 @@ class TestAvatarFunctionality:
             # (it might be called for other things, so we just check the result)
         finally:
             ui.app.redis_client = original_redis
-            flask_app._is_initialized = original_initialized
+            ui.app._is_initialized = original_initialized
 
     def test_avatar_ttl_is_one_hour(self):
         """Test that avatar cache TTL is set correctly (1 hour = 3600 seconds)."""
@@ -1048,17 +1083,18 @@ class TestAvatarFunctionality:
         # - Keeping avatars reasonably up-to-date
 
     def test_avatar_path_security(self):
-        """Test that avatar paths don't allow directory traversal."""
+        """Test that avatar API endpoints are safe."""
         sender_id = 12345
-        avatar_url = f"/data/avatars/user_{sender_id}.jpg"
+        avatar_url = f"/api/avatar/user/{sender_id}"
 
         # Should not contain path traversal characters
         assert ".." not in avatar_url
         assert "~" not in avatar_url
 
-        # Should be a safe relative path
+        # Should be a safe API endpoint
+        assert avatar_url.startswith("/api/avatar/")
         assert not avatar_url.startswith("/etc/")
         assert not avatar_url.startswith("/var/")
 
         # Should only contain expected pattern
-        assert avatar_url.count("/") == 3  # /data/avatars/user_*.jpg
+        assert avatar_url.count("/") == 4  # /api/avatar/user/{id}

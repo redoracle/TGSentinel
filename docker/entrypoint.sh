@@ -1,12 +1,17 @@
 #!/bin/sh
-# Copy session from volume to local filesystem to avoid Docker for Mac locking issues
-if [ -f "/app/data/tgsentinel.session" ] && [ ! -f "/tmp/tgsentinel.session" ]; then
-    cp /app/data/tgsentinel.session /tmp/tgsentinel.session
-    cp /app/data/tgsentinel.session-journal /tmp/tgsentinel.session-journal 2>/dev/null || true
-fi
-
-# Update config to use /tmp session
-export TG_SESSION_OVERRIDE="/tmp/tgsentinel.session"
+# TG Sentinel Entrypoint
+#
+# ARCHITECTURAL NOTE (Dual-DB Architecture):
+# - Sentinel container: owns /app/data/tgsentinel.session (exclusive access)
+# - UI container: owns /app/data/ui.db (exclusive access)
+# - Volumes are separate (tgsentinel_sentinel_data vs tgsentinel_ui_data)
+# - No session file copying or sharing between containers
+#
+# The legacy workaround for "Docker for Mac locking issues" is removed.
+# If SQLite locking occurs, the solution is:
+# 1. Use WAL mode (Write-Ahead Logging) in Telethon
+# 2. Ensure proper connection management
+# 3. Never have multiple processes access the same SQLite file
 
 # Run the main command
 exec "$@"

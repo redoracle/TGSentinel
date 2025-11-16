@@ -89,13 +89,13 @@ async def _init_client(session_path: str, api_id: int, api_hash: str) -> Telegra
             f"Error: Session at {session_path}.session is not authorized. "
             "Use tools/generate_session.py to create a valid session."
         )
-        await client.disconnect()
+        client.disconnect()  # disconnect() is synchronous
         sys.exit(1)
 
     me = await client.get_me()
     if not isinstance(me, User):
         print("Error: Could not fetch account info for session:", session_path)
-        await client.disconnect()
+        client.disconnect()  # disconnect() is synchronous
         sys.exit(1)
 
     username = f"@{me.username}" if me.username else None
@@ -192,8 +192,44 @@ async def main_async() -> int:
         me_a = await client_a.get_me()
         me_b = await client_b.get_me()
 
-        target_a_to_b = me_b.id
-        target_b_to_a = me_a.id
+        # Type assertions to help Pylance understand these are User objects
+        if not isinstance(me_a, User) or not isinstance(me_b, User):
+            print("Error: Could not fetch user information")
+            return 1
+
+        # Use username if available, fallback to user ID
+        # For fresh sessions, username is more reliable than user ID
+        target_a_to_b = me_b.username if me_b.username else me_b.id
+        target_b_to_a = me_a.username if me_a.username else me_a.id
+
+        # Pre-fetch entities to populate the session cache
+        # This is critical for fresh sessions that don't have the entities cached yet
+        try:
+            if args.direction in ("a-to-b", "both"):
+                await client_a.get_entity(target_a_to_b)
+            if args.direction in ("b-to-a", "both"):
+                await client_b.get_entity(target_b_to_a)
+        except Exception as entity_err:
+            print(f"Warning: Could not pre-fetch entities: {entity_err}")
+            # Try fetching dialogs to populate entity cache
+            try:
+                print("Attempting to fetch dialogs to populate entity cache...")
+                await client_a.get_dialogs(limit=20)
+                await client_b.get_dialogs(limit=20)
+                # Retry entity fetch
+                if args.direction in ("a-to-b", "both"):
+                    await client_a.get_entity(target_a_to_b)
+                if args.direction in ("b-to-a", "both"):
+                    await client_b.get_entity(target_b_to_a)
+                print("Entity cache populated successfully after fetching dialogs")
+            except Exception as dialog_err:
+                print(f"Error: Could not populate entity cache: {dialog_err}")
+                print("\nTo fix this:")
+                print(
+                    "1. Ensure the two accounts have sent at least one message to each other before"
+                )
+                print("2. Or use accounts that are in each other's contacts")
+                return 1
 
         total_batches = args.count
         if messages:
@@ -232,8 +268,8 @@ async def main_async() -> int:
         print("\nInterrupted by user, stopping simulation.")
         return 0
     finally:
-        await client_a.disconnect()
-        await client_b.disconnect()
+        client_a.disconnect()  # disconnect() is synchronous
+        client_b.disconnect()  # disconnect() is synchronous
 
 
 def main() -> None:

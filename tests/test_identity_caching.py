@@ -12,6 +12,7 @@ def _make_app():
     os.environ["TG_API_ID"] = "123456"
     os.environ["TG_API_HASH"] = "hash"
     os.environ["DB_URI"] = "sqlite:///:memory:"
+    os.environ["UI_DB_URI"] = "sqlite:///:memory:"
 
     # Clear any cached module
     import sys
@@ -22,7 +23,7 @@ def _make_app():
     # Mock config to return test values
     with patch("ui.app.load_config") as mock_load:
         cfg = MagicMock()
-        cfg.channels = []
+        cfg.channels = []  # Empty list to avoid serialization issues
         cfg.db_uri = "sqlite:///:memory:"
         cfg.redis = {"host": "localhost", "port": 6379, "stream": "tgsentinel:messages"}
         cfg.api_id = 123456
@@ -49,7 +50,7 @@ def test_user_info_has_required_fields_for_ui():
         "last_name": "User",
         "phone": "+1234567890",
         "user_id": 12345,
-        "avatar": "/data/user_avatar.jpg",
+        "avatar": "/api/avatar/user/12345",
     }
 
     mock_redis = MagicMock()
@@ -69,7 +70,7 @@ def test_user_info_has_required_fields_for_ui():
         assert loaded.get("last_name") == "User"
         assert loaded.get("phone") is not None  # May be formatted
         assert loaded.get("user_id") == 12345
-        assert loaded.get("avatar") == "/data/user_avatar.jpg"
+        assert loaded.get("avatar") == "/api/avatar/user/12345"
     finally:
         ui.app.redis_client = original_redis
 
@@ -86,7 +87,7 @@ def test_session_info_endpoint_returns_identity():
         "last_name": "Doe",
         "phone": "+12025551234",
         "user_id": 99999,
-        "avatar": "/data/user_avatar.jpg",
+        "avatar": "/api/avatar/user/99999",
     }
 
     mock_redis = MagicMock()
@@ -101,7 +102,7 @@ def test_session_info_endpoint_returns_identity():
 
         data = response.get_json()
         assert data["username"] == "john_doe"
-        assert data["avatar"] == "/data/user_avatar.jpg"
+        assert data["avatar"] == "/api/avatar/user/99999"
         assert data["phone_masked"] is not None  # Phone should be masked
     finally:
         flask_app.redis_client = original_redis
@@ -157,7 +158,7 @@ def test_identity_fields_consistency():
         "last_name": "User",
         "phone": "+1234567890",
         "user_id": 12345,
-        "avatar": "/data/user_avatar.jpg",
+        "avatar": "/api/avatar/user/12345",
     }
 
     # Verify all expected fields are present
@@ -191,7 +192,7 @@ def test_avatar_path_formats():
     from ui.app import _load_cached_user_info, redis_client as original_redis
 
     test_cases = [
-        "/data/user_avatar.jpg",  # Downloaded avatar
+        "/api/avatar/user/123",  # Avatar from Redis via API
         "/static/images/logo.png",  # Fallback logo
         "https://example.com/avatar.jpg",  # External URL (if supported)
     ]

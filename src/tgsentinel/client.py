@@ -93,13 +93,25 @@ def make_client(cfg: AppCfg) -> TelegramClient:
 
     client = TelegramClient(session_path, cfg.api_id, cfg.api_hash)
 
-    # Ensure session file has correct permissions for multi-container access
+    # Enable WAL mode for session database to prevent corruption during concurrent operations
+    # WAL (Write-Ahead Logging) allows multiple readers and one writer without blocking
     try:
+        import sqlite3
+
         session_file = Path(session_path)
         if session_file.exists():
+            # Set permissions for multi-container access
             os.chmod(session_file, 0o660)
-    except Exception:
-        pass
+            # Enable WAL mode
+            conn = sqlite3.connect(str(session_file))
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute(
+                "PRAGMA synchronous=NORMAL"
+            )  # Balance between safety and performance
+            conn.close()
+            log.debug("Enabled WAL mode for session database: %s", session_path)
+    except Exception as exc:
+        log.warning("Could not enable WAL mode for session: %s", exc)
 
     return client
 
@@ -125,6 +137,9 @@ async def _cache_avatar(
     Returns:
         Avatar URL if successfully cached, None otherwise
     """
+    import base64
+    import io
+
     if not photo:
         return None
 
@@ -133,57 +148,28 @@ async def _cache_avatar(
         is_chat = entity_id < 0
         prefix = "chat" if is_chat else "user"
         cache_key = f"tgsentinel:{prefix}_avatar:{entity_id}"
-        data_dir = os.path.join("/app", "data", "avatars")
-        avatar_file = os.path.join(data_dir, f"{prefix}_{entity_id}.jpg")
-        avatar_url = f"/data/avatars/{prefix}_{entity_id}.jpg"
+        avatar_url = f"/api/avatar/{prefix}/{abs(entity_id)}"
 
-        # Check both Redis cache and filesystem existence
+        # Check if avatar is already cached in Redis
         redis_cached = r.exists(cache_key)
-        file_exists = os.path.exists(avatar_file)
 
-        # If file exists but Redis key is missing, restore Redis cache
-        if file_exists and not redis_cached:
+        # Download if not in Redis
+        if not redis_cached:
             try:
-                r.setex(cache_key, 3600, avatar_url)  # Cache for 1 hour
-                # For private chats (positive IDs), set a chat_avatar alias too
+                # Download to memory instead of filesystem
+                avatar_bytes = io.BytesIO()
+                await client.download_profile_photo(entity_id, file=avatar_bytes)
+
+                # Encode as base64 and store in Redis
+                avatar_bytes.seek(0)
+                avatar_b64 = base64.b64encode(avatar_bytes.read()).decode("utf-8")
+                r.set(cache_key, avatar_b64)  # No TTL
+
+                # For private chats (positive IDs), also expose under chat_avatar key
                 if not is_chat:
-                    r.setex(f"tgsentinel:chat_avatar:{entity_id}", 3600, avatar_url)
-                log.debug(
-                    "Restored Redis cache for existing avatar: %s %s", prefix, entity_id
-                )
-            except Exception as cache_err:
-                log.debug("Could not restore Redis cache: %s", cache_err)
+                    r.set(f"tgsentinel:chat_avatar:{entity_id}", avatar_b64)  # No TTL
 
-        # Download if either Redis or file is missing
-        if not redis_cached or not file_exists:
-            try:
-                # Ensure data directory exists
-                os.makedirs(data_dir, exist_ok=True)
-
-                # Download to temporary file for atomic operation
-                temp_file = f"{avatar_file}.tmp"
-
-                # Download profile photo
-                await client.download_profile_photo(entity_id, file=temp_file)
-
-                # Atomically rename to final location
-                try:
-                    os.replace(temp_file, avatar_file)
-
-                    # Only set Redis key after successful file write
-                    r.setex(cache_key, 3600, avatar_url)  # Cache for 1 hour
-                    # For private chats (positive IDs), also expose under chat_avatar key
-                    if not is_chat:
-                        r.setex(f"tgsentinel:chat_avatar:{entity_id}", 3600, avatar_url)
-                    log.debug("Cached avatar for %s %s", prefix, entity_id)
-                except Exception as rename_err:
-                    # Clean up temp file if rename failed
-                    try:
-                        if os.path.exists(temp_file):
-                            os.remove(temp_file)
-                    except Exception:
-                        pass
-                    raise rename_err
+                log.debug("Cached avatar in Redis for %s %s", prefix, entity_id)
 
             except Exception as photo_err:
                 log.debug("Could not download profile photo: %s", photo_err)
@@ -243,11 +229,19 @@ def _safe_get_forward_from(message):
 
 def start_ingestion(cfg: AppCfg, client, r: Redis) -> None:
     stream = cfg.redis["stream"]
+    log.info("Starting message ingestion handler (stream=%s)", stream)
 
-    listener = events.NewMessage()
+    # Listen for INCOMING messages (not outgoing)
+    listener = events.NewMessage(incoming=True, outgoing=False)
 
     async def handler(event):
         m = event.message
+        log.info(
+            "Received new message: chat_id=%s, sender_id=%s, msg_id=%s",
+            event.chat_id,
+            m.sender_id,
+            m.id,
+        )
         try:
             # Fetch sender entity to get proper name information
             sender_name = ""
@@ -287,6 +281,49 @@ def start_ingestion(cfg: AppCfg, client, r: Redis) -> None:
                             log.debug("Could not cache avatar: %s", avatar_err)
             except Exception as sender_err:
                 log.debug("Could not fetch sender: %s", sender_err)
+
+            # Fallback: if sender_name is still empty and we have sender_id, try getting entity directly
+            if not sender_name and sender_id:
+                try:
+                    # Try to get entity from client cache or fetch it
+                    entity = await client.get_entity(sender_id)
+                    if entity:
+                        if hasattr(entity, "first_name"):
+                            name_parts = []
+                            if entity.first_name:
+                                name_parts.append(entity.first_name)
+                            if hasattr(entity, "last_name") and entity.last_name:
+                                name_parts.append(entity.last_name)
+                            sender_name = " ".join(name_parts)
+                        elif hasattr(entity, "title"):
+                            sender_name = entity.title or ""
+                        elif hasattr(entity, "username"):
+                            sender_name = (
+                                f"@{entity.username}" if entity.username else ""
+                            )
+                except Exception as entity_err:
+                    log.debug(
+                        "Could not fetch entity by ID %s: %s", sender_id, entity_err
+                    )
+
+            # Last resort: check Redis participant cache
+            if not sender_name and sender_id and event.chat_id:
+                try:
+                    cache_key = f"tgsentinel:participant:{event.chat_id}:{sender_id}"
+                    cached = r.get(cache_key)
+                    if cached:
+                        # Ensure we have a string for json.loads
+                        cached_str: str
+                        if isinstance(cached, bytes):
+                            cached_str = cached.decode("utf-8")
+                        elif isinstance(cached, str):
+                            cached_str = cached
+                        else:
+                            cached_str = str(cached)
+                        participant_info = json.loads(cached_str)
+                        sender_name = participant_info.get("name", "")
+                except Exception as cache_err:
+                    log.debug("Could not get sender name from cache: %s", cache_err)
 
             # Fetch chat entity to get proper chat title and cache chat type
             chat_title = ""
@@ -346,6 +383,33 @@ def start_ingestion(cfg: AppCfg, client, r: Redis) -> None:
             except Exception as chat_err:
                 log.debug("Could not fetch chat: %s", chat_err)
 
+            # Fallback: if chat_title is still empty, try getting entity directly
+            if not chat_title and event.chat_id:
+                try:
+                    # Try to get entity from client cache or fetch it
+                    entity = await client.get_entity(event.chat_id)
+                    if entity:
+                        if hasattr(entity, "title") and entity.title:
+                            chat_title = entity.title
+                        elif hasattr(entity, "first_name") and entity.first_name:
+                            chat_title = entity.first_name
+                            if hasattr(entity, "last_name") and entity.last_name:
+                                chat_title += f" {entity.last_name}"
+                        elif hasattr(entity, "username"):
+                            chat_title = (
+                                f"@{entity.username}" if entity.username else ""
+                            )
+                except Exception as entity_err:
+                    log.debug(
+                        "Could not fetch chat entity by ID %s: %s",
+                        event.chat_id,
+                        entity_err,
+                    )
+
+            # For private chats, if chat_title is still empty, use sender_name as fallback
+            if not chat_title and event.chat_id > 0 and sender_name:
+                chat_title = sender_name
+
             payload = {
                 "chat_id": event.chat_id,
                 "chat_title": chat_title,
@@ -393,15 +457,30 @@ def start_ingestion(cfg: AppCfg, client, r: Redis) -> None:
             if event.chat_id > 0:
                 # This is a private chat - check if user is in monitored list
                 monitored_ids = {u.id for u in cfg.monitored_users}
+                log.info(
+                    "Private chat check: chat_id=%s, monitored_ids=%s",
+                    event.chat_id,
+                    monitored_ids,
+                )
                 if monitored_ids and event.chat_id not in monitored_ids:
-                    log.debug(
-                        "Skipping private message from unmonitored user %s",
+                    log.info(
+                        "Skipping private message from unmonitored user %s (not in %s)",
                         event.chat_id,
+                        monitored_ids,
                     )
                     return
+                log.info(
+                    "Private message ALLOWED from monitored user %s", event.chat_id
+                )
 
             r.xadd(
                 stream, {"json": json.dumps(payload)}, maxlen=100000, approximate=True
+            )
+            log.info(
+                "Message ingested: chat=%s, sender=%s (%s)",
+                chat_title or event.chat_id,
+                sender_name or m.sender_id,
+                m.id,
             )
         except Exception as e:
             log.exception("ingest_error: %s", e)
@@ -426,3 +505,5 @@ def start_ingestion(cfg: AppCfg, client, r: Redis) -> None:
 
     if not registered:
         raise RuntimeError("Could not register ingestion handler")
+
+    log.info("Message ingestion handler registered successfully")
