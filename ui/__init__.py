@@ -11,24 +11,20 @@ This package primarily exists so that:
 
 from __future__ import annotations
 
+import importlib
 import sys as _sys
 
-# If the top-level module ``app`` is already loaded and points at our
-# `ui/app.py`, alias it as ``ui.app`` so there is a single shared module
-# instance regardless of how it was imported.
-_top = _sys.modules.get("app")
-if _top is not None:
-    _top_file = getattr(_top, "__file__", "") or ""
-    # Normalize path for cross-platform compatibility
-    import os
+# Ensure that importing ``ui.app`` always resolves to the same module
+# object as a bare ``import app`` when the UI directory is on sys.path.
+try:  # pragma: no cover - import glue
+    _app = importlib.import_module("app")
+    _sys.modules.setdefault("ui.app", _app)
+except Exception:
+    # In environments where ``app`` cannot be imported yet (e.g. tooling
+    # importing ``ui`` very early), we simply leave the alias unset.
+    _app = None  # type: ignore[assignment]
 
-    _top_file_normalized = _top_file.replace("\\", "/")
-    if _top_file_normalized.endswith("/ui/app.py") and "ui.app" not in _sys.modules:
-        _sys.modules["ui.app"] = _top
-
-# Expose the app submodule as an attribute when available. This ensures
-# that ``import ui.app`` followed by ``ui.app`` works even when the
-# module was originally imported as plain ``app``.
-_sub = _sys.modules.get("ui.app")
-if _sub is not None:
-    app = _sub  # type: ignore[assignment]
+# Also expose the app module as an attribute of the ``ui`` package so that
+# patch targets like ``patch('ui.app.load_config')`` work as expected.
+if _app is not None:
+    app = _app  # type: ignore[assignment]

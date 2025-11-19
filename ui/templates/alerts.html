@@ -6,16 +6,22 @@
     <div class="col-12">
         <article class="card" aria-labelledby="alerts-table-heading">
             <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
-                <div>
-                    <h1 class="card-title mb-0" id="alerts-table-heading">Alerts Feed</h1>
-                    <small class="text-muted">Sortable table of triggered notifications</small>
-                </div>
+                <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#alerts-table-body" aria-expanded="true" aria-controls="alerts-table-body" style="text-decoration: none; color: inherit;">
+                    <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+                    <div>
+                        <h1 class="card-title mb-0" id="alerts-table-heading">Alerts Feed</h1>
+                        <small class="text-muted">Sortable table of triggered notifications</small>
+                    </div>
+                </button>
                 <div class="d-flex gap-2">
+                    <a href="/docs#alerts-api" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                        <i class="bi bi-info-circle"></i>
+                    </a>
                     <button class="btn btn-outline-primary btn-sm" type="button" id="btn-export-alerts">Export CSV</button>
                     <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-alerts">Refresh</button>
                 </div>
             </div>
-            <div class="card-body table-responsive">
+            <div class="collapse show card-body table-responsive" id="alerts-table-body">
                 <table class="table align-middle mb-0" id="alerts-table">
                                 <thead>
                 <tr>
@@ -41,7 +47,7 @@
                                 data-bs-title="{{ (alert.message_text or alert.excerpt) | e }}">
                                 {{ alert.excerpt }}
                             </td>
-                            <td data-label="Score"><span class="badge bg-danger" style="z-index: 1;">{{ '%.2f'|format(alert.score) }}</span></td>
+                            <td data-label="Score"><span class="badge bg-danger z-index-1">{{ '%.2f'|format(alert.score) }}</span></td>
                             <td data-label="Trigger">{{ alert.trigger or 'N/A' }}</td>
                             {% set _date = alert.created_at.split(' ')[0] if alert.created_at else '' %}
                             {% set _time = alert.created_at.split(' ')[1] if alert.created_at and alert.created_at.split(' ')|length > 1 else '' %}
@@ -81,21 +87,29 @@
 <section class="row g-4">
     <div class="col-12 col-xl-7">
         <article class="card" aria-labelledby="digest-timeline-heading">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <div>
-                    <h2 class="card-title mb-0" id="digest-timeline-heading">Digest Timeline</h2>
-                    <small class="text-muted">Aggregated alert batches</small>
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#digest-timeline-body" aria-expanded="true" aria-controls="digest-timeline-body" style="text-decoration: none; color: inherit;">
+                    <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+                    <div>
+                        <h2 class="card-title mb-0" id="digest-timeline-heading">Digest Timeline</h2>
+                        <small class="text-muted">Aggregated alert batches</small>
+                    </div>
+                </button>
+                <div class="d-flex gap-2">
+                    <a href="/docs#digest-api" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                        <i class="bi bi-info-circle"></i>
+                    </a>
+                    <button class="btn btn-outline-primary btn-sm" type="button" id="btn-download-digest">Download JSON</button>
                 </div>
-                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-download-digest">Download JSON</button>
             </div>
-            <div class="card-body">
+            <div class="collapse show card-body" id="digest-timeline-body">
                 <div class="timeline" id="digest-timeline" role="list">
                     {%- for digest in digests %}
                     <div class="card mb-3" role="listitem">
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <h3 class="h5 mb-0">{{ digest.date }}</h3>
-                                <span class="badge bg-info" style="z-index: 1;">{{ digest.items }} messages</span>
+                                <span class="badge bg-info z-index-1">{{ digest.items }} messages</span>
                             </div>
                             <p class="mb-0 text-muted">Average score: {{ digest.avg_score }}</p>
                         </div>
@@ -109,10 +123,19 @@
     </div>
     <div class="col-12 col-xl-5">
         <article class="card h-100" aria-labelledby="quick-actions-heading">
-            <div class="card-header">
-                <h2 class="card-title mb-0" id="quick-actions-heading">Quick Actions</h2>
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#quick-actions-body" aria-expanded="true" aria-controls="quick-actions-body" style="text-decoration: none; color: inherit;">
+                    <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+                    <div>
+                        <h2 class="card-title mb-0" id="quick-actions-heading">Quick Actions</h2>
+                        <small class="text-muted">Bulk operations on alerts and channels</small>
+                    </div>
+                </button>
+                <a href="/docs#quick-actions" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                    <i class="bi bi-info-circle"></i>
+                </a>
             </div>
-            <div class="card-body">
+            <div class="collapse show card-body" id="quick-actions-body">
                 <div class="d-grid gap-3">
                     <button class="btn btn-outline-primary btn-action" type="button" data-action="mute">Mute Selected Channel</button>
                     <button class="btn btn-outline-primary btn-action" type="button" data-action="lower-threshold">Lower Importance Threshold</button>
@@ -131,8 +154,8 @@
 
 {% block extra_scripts %}
 <script>
-    const alertsEndpoint = "{{ url_for('api_recent_alerts') }}";
-    const digestsEndpoint = "{{ url_for('api_alert_digests') }}";
+    const alertsEndpoint = "{{ url_for('dashboard.recent_alerts') }}";
+    const digestsEndpoint = "{{ url_for('dashboard.alert_digests') }}";
 
     function escapeHtml(value) {
         if (value === null || value === undefined) {
@@ -304,7 +327,7 @@
             }
             
             try {
-                const response = await fetch("{{ url_for('api_alert_feedback') }}", {
+                const response = await fetch("{{ url_for('admin.submit_alert_feedback') }}", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
@@ -348,10 +371,8 @@
         document.getElementById("btn-download-digest")?.addEventListener("click", refreshDigests);
         document.getElementById("btn-export-alerts")?.addEventListener("click", async () => {
             try {
-                // Trigger a file download by navigating to the export endpoint
-                const href = "{{ url_for('api_export_alerts') }}?limit=1000";
-                window.open(href, "_blank");
-                showToast("Export started", "info");
+                // TODO: Implement export_alerts endpoint
+                showToast("Export feature not yet implemented", "warning");
             } catch (err) {
                 console.error("Export failed", err);
                 showToast("Export failed", "error");

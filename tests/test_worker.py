@@ -15,6 +15,9 @@ from tgsentinel.config import AlertsCfg, AppCfg, ChannelRule, DigestCfg
 from tgsentinel.heuristics import HeuristicResult
 
 
+pytestmark = pytest.mark.integration
+
+
 def _make_cfg(
     *,
     mode: str = "both",

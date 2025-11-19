@@ -7,6 +7,7 @@ import pytest
 from tgsentinel.semantic import _try_import_model, load_interests, score_text
 
 
+@pytest.mark.unit
 class TestTryImportModel:
     """Test model import functionality."""
 

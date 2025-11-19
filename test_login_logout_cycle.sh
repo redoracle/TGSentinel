@@ -156,9 +156,11 @@ test_session() {
     fi
     
     # Step 8: Wait for logout to process
+    # Logout involves: disconnect (up to 10s timeout) + cleanup wait (3.5s) + file deletion
+    # Total minimum time: ~14 seconds to be safe
     echo ""
-    echo "Step 8: Waiting 5s for logout to complete..."
-    sleep 5
+    echo "Step 8: Waiting 15s for logout to complete..."
+    sleep 15
     
     # Step 9: Check Redis worker_status after logout
     echo ""

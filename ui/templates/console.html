@@ -5,10 +5,19 @@
 <section class="row g-4 mb-4">
     <div class="col-12 col-xl-7">
         <article class="card h-100" aria-labelledby="log-tail-heading">
-            <div class="card-header">
-                <h1 class="card-title mb-0" id="log-tail-heading">Real-time Log Tail</h1>
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#log-tail-body" aria-expanded="true" aria-controls="log-tail-body" style="text-decoration: none; color: inherit;">
+                    <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+                    <div>
+                        <h1 class="card-title mb-0" id="log-tail-heading">Real-time Log Tail</h1>
+                        <small class="text-muted">Live system event stream</small>
+                    </div>
+                </button>
+                <a href="/docs#console-logs" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                    <i class="bi bi-info-circle"></i>
+                </a>
             </div>
-            <div class="card-body">
+            <div class="collapse show card-body" id="log-tail-body">
                 <div class="logs-console" id="log-console" role="log" aria-label="Real-time log console" aria-live="polite">
                     <div class="log-entry log-info"><span class="log-time">--:--</span> <span class="log-message">Console ready. Recent events will appear here.</span></div>
                 </div>
@@ -17,10 +26,19 @@
     </div>
     <div class="col-12 col-xl-5">
         <article class="card h-100" aria-labelledby="command-center-heading">
-            <div class="card-header">
-                <h2 class="card-title mb-0" id="command-center-heading">Command Center</h2>
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#command-center-body" aria-expanded="true" aria-controls="command-center-body" style="text-decoration: none; color: inherit;">
+                    <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+                    <div>
+                        <h2 class="card-title mb-0" id="command-center-heading">Command Center</h2>
+                        <small class="text-muted">Execute system commands and quick actions</small>
+                    </div>
+                </button>
+                <a href="/docs#console-commands" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                    <i class="bi bi-info-circle"></i>
+                </a>
             </div>
-            <div class="card-body d-grid gap-3">
+            <div class="collapse show card-body d-grid gap-3" id="command-center-body">
                 <label class="form-label" for="console-command">Command bar</label>
                 <input class="form-control" id="console-command" type="text" placeholder="/restart">
                 <button class="btn btn-outline-primary" type="button" id="btn-run-command">Execute</button>
@@ -46,10 +64,19 @@
 <section class="row g-4">
     <div class="col-12 col-xl-6">
         <article class="card h-100" aria-labelledby="maintenance-heading">
-            <div class="card-header">
-                <h2 class="card-title mb-0" id="maintenance-heading">Maintenance Actions</h2>
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#maintenance-body" aria-expanded="true" aria-controls="maintenance-body" style="text-decoration: none; color: inherit;">
+                    <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+                    <div>
+                        <h2 class="card-title mb-0" id="maintenance-heading">Maintenance Actions</h2>
+                        <small class="text-muted">Database optimization and log management</small>
+                    </div>
+                </button>
+                <a href="/docs#maintenance" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                    <i class="bi bi-info-circle"></i>
+                </a>
             </div>
-            <div class="card-body d-grid gap-2">
+            <div class="collapse show card-body d-grid gap-2" id="maintenance-body">
                 <div class="d-flex align-items-center gap-2">
                     <button class="btn btn-outline-primary flex-grow-1" type="button" data-command="vacuum">Vacuum database</button>
                     <i class="bi bi-info-circle text-muted" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="left" title="Optimize SQLite database by rebuilding it. Reclaims free space and improves query performance."></i>
@@ -67,10 +94,19 @@
     </div>
     <div class="col-12 col-xl-6">
         <article class="card h-100" aria-labelledby="diagnostics-heading">
-            <div class="card-header">
-                <h2 class="card-title mb-0" id="diagnostics-heading">Diagnostics Export</h2>
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#diagnostics-body" aria-expanded="true" aria-controls="diagnostics-body" style="text-decoration: none; color: inherit;">
+                    <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+                    <div>
+                        <h2 class="card-title mb-0" id="diagnostics-heading">Diagnostics Export</h2>
+                        <small class="text-muted">Download system diagnostics for support</small>
+                    </div>
+                </button>
+                <a href="/docs#diagnostics" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                    <i class="bi bi-info-circle"></i>
+                </a>
             </div>
-            <div class="card-body d-grid gap-3">
+            <div class="collapse show card-body d-grid gap-3" id="diagnostics-body">
                 <p class="text-muted mb-0">Download anonymised telemetry snapshot for support.</p>
                 <div class="d-flex align-items-center gap-2">
                     <button class="btn btn-outline-primary flex-grow-1" type="button" id="btn-export-diagnostics">Export diagnostics</button>
@@ -80,12 +116,42 @@
         </article>
     </div>
 </section>
+
+<!-- Confirmation Modal for Dangerous Operations -->
+<div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="confirmationModalLabel">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    Confirm Dangerous Operation
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger mb-3">
+                    <strong>⚠️ WARNING: This action cannot be undone!</strong>
+                </div>
+                <p id="confirmationMessage" class="mb-3"></p>
+                <p class="mb-3">Type <strong class="text-danger">DELETE_ALL_DATA</strong> to confirm:</p>
+                <input type="text" class="form-control" id="confirmationInput" placeholder="DELETE_ALL_DATA" autocomplete="off">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="btnConfirmDanger" disabled>
+                    <i class="bi bi-trash-fill me-2"></i>
+                    Confirm & Execute
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
-    const commandEndpoint = "{{ url_for('api_console_command') }}";
-    const diagnosticsEndpoint = "{{ url_for('api_export_diagnostics') }}";
+    const commandEndpoint = "{{ url_for('console.api_console_command') }}";
+    const diagnosticsEndpoint = "{{ url_for('analytics.api_export_diagnostics') }}";
 
     function appendConsoleLog(message, level = "info") {
         const consoleEl = document.getElementById("log-console");
@@ -109,27 +175,77 @@
         consoleEl.scrollTop = consoleEl.scrollHeight;
     }
 
-    async function sendCommand(command) {
+    async function sendCommand(command, confirmed = false) {
         const trimmed = command.trim();
         if (!trimmed) {
             showToast("Enter a command", "warning");
             return;
         }
+        
+        // Check if this is a dangerous command requiring confirmation
+        const isDangerous = trimmed.toLowerCase().includes("/purge");
+        
+        if (isDangerous && !confirmed) {
+            // Show confirmation modal
+            const modal = new bootstrap.Modal(document.getElementById('confirmationModal'));
+            document.getElementById('confirmationMessage').textContent = 
+                `You are about to execute: ${trimmed}\n\nThis will DELETE ALL database data, Redis cache, and cannot be undone.`;
+            
+            // Store the command for later execution
+            document.getElementById('confirmationModal').dataset.pendingCommand = trimmed;
+            modal.show();
+            return;
+        }
+        
         appendConsoleLog(trimmed, "info");
         try {
+            const payload = { command: trimmed };
+            
+            // Add confirmation for dangerous commands
+            if (isDangerous && confirmed) {
+                payload.confirm = "DELETE_ALL_DATA";
+            }
+            
             const response = await fetch(commandEndpoint, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ command: trimmed }),
+                body: JSON.stringify(payload),
             });
             if (!response.ok) {
-                throw new Error("Command failed");
+                const errorData = await response.json().catch(() => ({ message: "Command failed" }));
+                throw new Error(errorData.message || "Command failed");
             }
-            const payload = await response.json();
-            appendConsoleLog(`Command accepted: ${payload.command}`, "success");
+            const result = await response.json();
+            
+            // Display command result with details
+            if (result.status === "accepted") {
+                let resultMessage = `✓ ${result.command}`;
+                
+                // Add specific result details based on command type
+                if (result.deleted !== undefined) {
+                    resultMessage += ` - Deleted: ${result.deleted} items`;
+                }
+                if (result.redis_cleared !== undefined) {
+                    resultMessage += `, Redis cleared: ${result.redis_cleared} keys`;
+                }
+                if (result.reclaimed_mb !== undefined) {
+                    resultMessage += ` - Reclaimed: ${result.reclaimed_mb.toFixed(2)} MB`;
+                }
+                if (result.message) {
+                    resultMessage += ` - ${result.message}`;
+                }
+                
+                appendConsoleLog(resultMessage, "success");
+                showToast("Command executed successfully", "success");
+            } else if (result.status === "confirmation_required") {
+                appendConsoleLog(`⚠️ ${result.message}`, "warning");
+                showToast(result.message, "warning");
+            } else {
+                appendConsoleLog(`Result: ${JSON.stringify(result)}`, "info");
+            }
         } catch (error) {
             console.error(error);
-            appendConsoleLog("Command failed", "error");
+            appendConsoleLog(`✗ Error: ${error.message}`, "error");
             showToast("Command execution failed", "error");
         }
     }
@@ -147,12 +263,15 @@
                 sendCommand(input.value);
             }
         });
-        document.querySelectorAll(".btn-action").forEach((button) => {
+        
+        // Single event listener for all command buttons
+        document.querySelectorAll("[data-command]").forEach((button) => {
             button.addEventListener("click", () => {
                 const command = button.getAttribute("data-command");
                 sendCommand(command);
             });
         });
+        
         document.getElementById("btn-export-diagnostics")?.addEventListener("click", async () => {
             appendConsoleLog("Generating diagnostics archive...", "info");
             try {
@@ -180,11 +299,32 @@
                 showToast("Export failed. Check console for details.", "error");
             }
         });
-        document.querySelectorAll("[data-command]").forEach((button) => {
-            button.addEventListener("click", () => {
-                const command = button.getAttribute("data-command");
-                appendConsoleLog(`Action requested: ${command}`, "warning");
-            });
+        
+        // Confirmation modal handlers
+        const confirmationInput = document.getElementById("confirmationInput");
+        const btnConfirm = document.getElementById("btnConfirmDanger");
+        const confirmationModal = document.getElementById("confirmationModal");
+        
+        // Enable/disable confirm button based on input
+        confirmationInput?.addEventListener("input", (e) => {
+            const isValid = e.target.value.trim() === "DELETE_ALL_DATA";
+            btnConfirm.disabled = !isValid;
+        });
+        
+        // Reset input when modal is closed
+        confirmationModal?.addEventListener("hidden.bs.modal", () => {
+            confirmationInput.value = "";
+            btnConfirm.disabled = true;
+        });
+        
+        // Handle confirmation
+        btnConfirm?.addEventListener("click", () => {
+            const command = confirmationModal.dataset.pendingCommand;
+            if (command && confirmationInput.value.trim() === "DELETE_ALL_DATA") {
+                const modal = bootstrap.Modal.getInstance(confirmationModal);
+                modal?.hide();
+                sendCommand(command, true); // Execute with confirmation
+            }
         });
     });
     

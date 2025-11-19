@@ -9,6 +9,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
+pytestmark = pytest.mark.integration
+
+
 def _make_app_with_config(tmp_path: Path):
     """Import UI app with a patched config and environment."""
     # Ensure secret for Flask app

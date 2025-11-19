@@ -16,14 +16,19 @@ services:
     image: tgsentinel/app:latest
     restart: on-failure
     env_file: [.env]
+    ports:
+      - "8080:8080"
     environment:
       - SESSION_WAIT_SECS=300
       - TG_SESSION_PATH=/app/data/tgsentinel.session
       - DB_URI=sqlite:////app/data/sentinel.db
       - SENTINEL_API_PORT=8080
+      - HF_HOME=/app/.cache/huggingface
+      - SENTENCE_TRANSFORMERS_HOME=/app/.cache/sentence_transformers
     volumes:
       - tgsentinel_sentinel_config:/app/config
       - tgsentinel_sentinel_data:/app/data
+      - tgsentinel_models_cache:/app/.cache
     depends_on:
       - redis
     networks:
@@ -44,7 +49,6 @@ services:
       - UI_DB_URI=sqlite:////app/data/ui.db
       - SENTINEL_API_BASE_URL=http://sentinel:8080/api
     volumes:
-      - tgsentinel_ui_config:/app/config
       - tgsentinel_ui_data:/app/data
     depends_on:
       - redis
@@ -65,7 +69,7 @@ volumes:
     driver: local
   tgsentinel_ui_data:
     driver: local
-  tgsentinel_ui_config:
+  tgsentinel_models_cache:
     driver: local
 
 networks:

@@ -56,6 +56,7 @@ class MonitoredUser:
     id: int
     name: str = ""
     username: str = ""
+    enabled: bool = True
 
 
 @dataclass
@@ -190,8 +191,13 @@ logging:
 
     channels = [ChannelRule(**c) for c in y.get("channels", [])]
     monitored_users = [MonitoredUser(**u) for u in y.get("monitored_users", [])]
+
+    # Get telegram session path with safe fallback
+    telegram_config = y.get("telegram", {})
+    telegram_session = telegram_config.get("session", "data/tgsentinel.session")
+
     return AppCfg(
-        telegram_session=y["telegram"]["session"],
+        telegram_session=telegram_session,
         api_id=api_id,
         api_hash=api_hash,
         alerts=alerts,

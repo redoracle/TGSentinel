@@ -10,13 +10,12 @@
 </head>
 <body>
   <!-- Login Modal (copied from base) -->
-  <div class="modal fade" id="loginModal" tabindex="-1" aria-labelledby="loginModalLabel" aria-hidden="true">
+  <div class="modal fade" id="loginModal" tabindex="-1" aria-labelledby="loginModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
         <div class="modal-header">
           <img src="{{ url_for('static', filename='images/logo.png') }}" alt="TG Sentinel" class="modal-logo me-3">
           <h5 class="modal-title" id="loginModalLabel">Authenticate Telegram Session</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
           <!-- Login Method Toggle -->
@@ -68,7 +67,6 @@
           <div id="loginAlert" class="alert d-none" role="alert"></div>
         </div>
         <div class="modal-footer align-items-center">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
           <button type="button" id="btnSendCode" class="btn btn-outline-primary">Send Code</button>
           <button type="button" id="btnVerifyCode" class="btn btn-primary d-none">Verify</button>
           <button type="button" id="btnResendCode" class="btn btn-link d-none">Resend code</button>
@@ -91,7 +89,10 @@
           return;
         }
         
-        const modal = new bootstrap.Modal(modalEl);
+        const modal = new bootstrap.Modal(modalEl, {
+          backdrop: 'static',
+          keyboard: false
+        });
         
         // Apply glass backdrop effect after modal is fully rendered
         const addGlassClass = () => {

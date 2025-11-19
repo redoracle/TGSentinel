@@ -169,7 +169,7 @@ ANOMALY_ALERT_RATE=0.3
 
 ### Profiles (Interests)
 
-- Profiles are named "interest" definitions persisted to `data/profiles.json`.
+- Profiles are named "interest" definitions persisted to `data/profiles.yml`.
 - Actions:
   - Toggle enabled/disabled.
   - View/edit: description, positive/negative samples, threshold, weight, keywords/channels/tags, notify‑always, include‑digest.
@@ -604,7 +604,7 @@ Via the Profiles page (`/profiles`):
 - Export/Import YAML
 - Test sample text against profile
 
-**Data persistence:** `data/profiles.json` (YAML format with file locking)
+**Data persistence:** `data/profiles.yml` (YAML format with file locking)
 
 ---
 
@@ -626,7 +626,7 @@ Files to back up:
 - `data/tgsentinel.session` (Telegram login session)
 - `data/sentinel.db` (alerts/history)
 - `config/tgsentinel.yml` (rules) and `.env` (secrets)
-- `data/profiles.json` (profiles store)
+- `data/profiles.yml` (interest profiles store, YAML format)
 - `data/alert_profiles.json` (alert profiles store)
 
 Housekeeping:

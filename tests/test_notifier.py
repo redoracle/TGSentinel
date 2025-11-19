@@ -7,6 +7,7 @@ import pytest
 from tgsentinel.notifier import notify_channel, notify_dm
 
 
+@pytest.mark.unit
 class TestNotifyDm:
     """Test DM notification functionality."""
 
@@ -135,6 +136,7 @@ class TestNotifyChannel:
         client.send_message.assert_called_once()
 
 
+@pytest.mark.unit
 class TestNotifierIntegration:
     """Integration tests for notifier module."""
 

@@ -10,6 +10,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
+pytestmark = pytest.mark.contract
+
+
 def test_config_ui_loads_env_vars_integration():
     """
     Integration test: Verify the config page JavaScript loads env vars from API.
@@ -67,12 +70,16 @@ def test_config_ui_loads_env_vars_integration():
                 similarity_threshold=0.42,
             )
 
-            with patch("app.load_config", return_value=mock_config):
-                import app as flask_app  # type: ignore[import-not-found]
+            with patch("ui.app.load_config", return_value=mock_config):
+                import ui.app as flask_app
 
+                # Reset and initialize
+                flask_app.reset_for_testing()
                 flask_app.app.config["TESTING"] = True
-                flask_app.config = mock_config
-                flask_app.redis_client = mock_redis_instance
+                flask_app.app.config["TGSENTINEL_CONFIG"] = mock_config
+
+                # Initialize app to register blueprints
+                flask_app.init_app()
 
                 with flask_app.app.test_client() as client:
                     # Test 1: API endpoint returns env vars
@@ -82,7 +89,8 @@ def test_config_ui_loads_env_vars_integration():
                     api_data = api_response.get_json()
                     assert api_data["telegram"]["api_id"] == "29548417"
                     assert api_data["telegram"]["api_hash"] == "test_hash_12345"
-                    assert api_data["telegram"]["phone_number"] == "+1234567890"
+                    # Phone is masked for security: +1234567890 -> +1*******90
+                    assert api_data["telegram"]["phone_number"] == "+1*******90"
                     assert api_data["alerts"]["mode"] == "both"
                     assert api_data["alerts"]["target_channel"] == "@test_bot"
 

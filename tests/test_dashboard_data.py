@@ -15,6 +15,9 @@ import pytest
 import redis
 
 
+pytestmark = pytest.mark.integration
+
+
 @pytest.fixture
 def test_db():
     """Create a temporary test database with messages table."""
@@ -174,6 +177,9 @@ def app_with_test_data(test_db, test_redis):
         with patch.object(flask_app.redis, "Redis", return_value=test_redis):
             flask_app.app.config["TESTING"] = True
             flask_app.config = mock_config
+
+            # Initialize app to register blueprints
+            flask_app.init_app()
 
             yield flask_app.app
 
@@ -337,15 +343,18 @@ def test_dashboard_activity_with_empty_redis(test_db, test_redis):
     ui_path = Path(__file__).parent.parent / "ui"
     sys.path.insert(0, str(ui_path))
 
-    mock_config = MagicMock()
-    mock_config.channels = []  # Empty channels list
-    mock_config.db_uri = f"sqlite:///{test_db}"
-    mock_config.redis = {
-        "host": "localhost",
-        "port": 6379,
-        "db": 15,
-        "stream": "sentinel:messages",
-    }
+    # Create a dict-like mock instead of MagicMock to avoid JSON serialization issues
+    class ConfigMock:
+        channels = []
+        db_uri = f"sqlite:///{test_db}"
+        redis = {
+            "host": "localhost",
+            "port": 6379,
+            "db": 15,
+            "stream": "sentinel:messages",
+        }
+
+    mock_config = ConfigMock()
 
     # Clear the Redis stream first
     test_redis.delete("sentinel:messages")

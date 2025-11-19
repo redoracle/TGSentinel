@@ -11,6 +11,9 @@ import pytest
 from redis import Redis
 
 
+pytestmark = pytest.mark.integration
+
+
 class TestTelegramUsersAPI:
     """Test the /api/telegram/users endpoint."""
 

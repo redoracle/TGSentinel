@@ -1,0 +1,442 @@
+/* Module 4 – Data Display & Activity
+   ========================================================================= */
+
+/* Blockchain Grid */
+.blockchain-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.blockchain-card {
+  background: var(--bg-elevated);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+  text-align: center;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  position: relative;
+  overflow: hidden;
+}
+
+.blockchain-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--primary-gradient);
+  opacity: 0;
+  transition: var(--transition-smooth);
+}
+
+.blockchain-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--primary-color);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+}
+
+.blockchain-card:hover::before {
+  opacity: 0.1;
+}
+
+.blockchain-card.selected {
+  border-color: var(--primary-color);
+  background: rgba(102, 126, 234, 0.1);
+  box-shadow: 0 0 20px rgba(102, 126, 234, 0.3);
+}
+
+.blockchain-icon {
+  font-size: 2.5rem !important;
+  margin-bottom: 0.75rem;
+  background: var(--primary-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Charts */
+.chart-container {
+  position: relative;
+  height: 320px;
+  width: 100%;
+  margin: 0;
+  padding: 1rem;
+  /* Slightly darker to improve contrast against blue bars */
+  background: rgba(0, 0, 0, 0.28);
+  border-radius: var(--radius-md);
+}
+
+/* Higher specificity selector to override Chart.js default inline styles
+   without using !important. This ensures our responsive sizing takes precedence
+   over library defaults while maintaining proper CSS cascade. */
+.chart-container > canvas {
+  max-width: 100%;
+  width: 100%;
+  height: 100%;
+}
+
+/* Compact chart for smaller cards */
+.chart-container.compact {
+  height: 300px;
+  padding: 0.75rem;
+}
+
+/* Subtle drop-shadow for charts needing separation (e.g., donut) */
+.shadow-soft {
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
+}
+
+/* Tables */
+.table {
+  color: var(--text-primary);
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.table thead th {
+  /* Visual style; sticky behavior and background are defined later to avoid duplication */
+  color: var(--text-primary);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  padding: 1rem;
+}
+
+.table tbody tr {
+  background: var(--bg-elevated);
+  transition: var(--transition-smooth);
+}
+
+.table tbody tr:hover {
+  background: rgba(102, 126, 234, 0.1);
+  box-shadow: var(--shadow-sm);
+}
+
+.table tbody td {
+  border-color: var(--border-color);
+  padding: 1rem;
+  vertical-align: middle;
+}
+
+/* Status Indicators */
+.status-online,
+.real-time-indicator.connected {
+  color: var(--success-color);
+  animation: pulse-glow 2s infinite;
+}
+
+.status-offline,
+.real-time-indicator.disconnected {
+  color: var(--danger-color);
+}
+
+.status-processing {
+  color: var(--warning-color);
+  animation: pulse-glow 1s infinite;
+}
+
+/* Default pulse-glow using GPU-accelerated filter instead of text-shadow */
+@keyframes pulse-glow {
+  0%,
+  100% {
+    opacity: 1;
+    filter: drop-shadow(0 0 4px currentColor);
+  }
+  50% {
+    opacity: 0.7;
+    filter: drop-shadow(0 0 8px currentColor);
+  }
+}
+
+/* Reduce animation for users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .status-online,
+  .real-time-indicator.connected,
+  .status-processing {
+    animation: none;
+    /* Use static subtle glow instead */
+    filter: drop-shadow(0 0 2px currentColor);
+  }
+}
+
+/* Optimize for low-end devices: smaller glow radius */
+@media (max-width: 768px), (max-resolution: 1dppx) {
+  @keyframes pulse-glow {
+    0%,
+    100% {
+      opacity: 1;
+      filter: drop-shadow(0 0 2px currentColor);
+    }
+    50% {
+      opacity: 0.8;
+      filter: drop-shadow(0 0 4px currentColor);
+    }
+  }
+}
+
+/* For very constrained devices: disable glow entirely, keep only opacity pulse */
+@media (max-width: 480px) and (max-resolution: 1dppx) {
+  @keyframes pulse-glow {
+    0%,
+    100% {
+      opacity: 1;
+      filter: none;
+    }
+    50% {
+      opacity: 0.7;
+      filter: none;
+    }
+  }
+}
+
+/* Progress Bars */
+.progress {
+  background: var(--bg-elevated);
+  border-radius: var(--radius-lg);
+  height: 8px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  background: var(--success-gradient);
+  background-size: 200% 100%;
+  box-shadow: 0 0 10px rgba(0, 242, 254, 0.5);
+  animation: progressShine 2s ease infinite;
+}
+
+@keyframes progressShine {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 100% 50%;
+  }
+}
+
+/* Resource Utilization Progress Bars */
+.resource-progress {
+  height: 28px;
+  min-height: 28px;
+}
+
+.resource-progress .progress-bar {
+  min-width: 4.5em;
+  line-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: visible;
+}
+
+/* Tooltip Info Icons */
+.info-tooltip-icon {
+  cursor: help;
+  color: var(--info-color);
+  font-size: 0.9rem;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
+}
+
+.info-tooltip-icon:hover {
+  opacity: 1;
+}
+
+/* Activity Feed */
+.activity-item {
+  background: var(--bg-elevated);
+  border-left: 3px solid var(--border-color);
+  padding: 1rem 1.25rem;
+  margin-bottom: 0.75rem;
+  border-radius: var(--radius-sm);
+  transition: var(--transition-smooth);
+  border-bottom: 1px solid rgba(102, 126, 234, 0.1);
+  overflow: visible; /* Ensure badges are not clipped */
+}
+
+.activity-item:last-child {
+  border-bottom: none;
+}
+
+.activity-item:hover {
+  border-left-color: var(--primary-color);
+  transform: translateX(8px);
+  background: rgba(102, 126, 234, 0.05);
+  box-shadow: var(--shadow-sm);
+}
+
+.activity-item .participant-link:hover {
+  color: var(--primary-color) !important;
+  text-decoration: none !important;
+}
+
+.activity-time {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+/* Activity feed message content - prevent text overflow */
+.activity-item p {
+  word-wrap: break-word;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  max-width: 100%;
+  hyphens: auto;
+}
+
+/* Avatar styling with image support */
+.activity-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 500;
+  flex-shrink: 0;
+  overflow: hidden;
+  background-color: var(--primary-color);
+  color: white;
+  cursor: pointer;
+  position: relative;
+}
+
+.activity-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+}
+
+.activity-avatar .avatar-initials {
+  position: relative;
+  z-index: 1;
+}
+
+/* Badges */
+.badge {
+  padding: 0.5em 1em;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  position: relative;
+  z-index: 10; /* Ensure badges appear above other content */
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.badge-success {
+  background: var(--success-gradient);
+}
+
+.badge-danger {
+  background: var(--secondary-gradient);
+}
+
+/* Loading Spinner */
+.spinner-border {
+  border-color: var(--primary-color);
+  border-right-color: transparent;
+  animation: spinner-border 0.75s linear infinite;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--primary-gradient);
+  border-radius: var(--radius-sm);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary-dark);
+}
+
+/* Container Improvements */
+.container-fluid {
+  padding: 1.5rem;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+/* Better row gutters for stats */
+.row {
+  --bs-gutter-x: 1rem;
+  --bs-gutter-y: 1rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .navbar-brand {
+    font-size: 1rem;
+  }
+
+  .stat-card .card-title {
+    font-size: 2rem;
+  }
+
+  .stat-card {
+    padding: 1rem 0.875rem;
+  }
+
+  .blockchain-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .container-fluid {
+    padding: 1rem;
+  }
+
+  .row {
+    --bs-gutter-x: 0.75rem;
+    --bs-gutter-y: 0.75rem;
+  }
+
+  h1 {
+    font-size: 2rem;
+  }
+  h2 {
+    font-size: 1.75rem;
+  }
+}
+
+@media (max-width: 576px) {
+  .stat-card .card-title {
+    font-size: 1.75rem;
+  }
+
+  .stat-card .card-text {
+    font-size: 0.75rem;
+  }
+
+  .stat-card small {
+    font-size: 0.65rem;
+  }
+
+  .col-md-3 {
+    flex: 0 0 50%;
+    max-width: 50%;
+  }
+}
+

@@ -17,13 +17,13 @@
 	<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 	{% block extra_head %}{% endblock %}
 </head>
-<body>
+<body{% block body_attrs %}{% endblock %}>
 		<nav class="navbar navbar-expand-lg sticky-top" aria-label="Primary navigation">
 			<div class="container-fluid">
 				<!-- Row 1: Brand & Auth Actions -->
 				<div class="ts-header-top">
 					<div class="ts-brand">
-						<a class="navbar-brand" href="{{ url_for('dashboard_view') }}">
+						<a class="navbar-brand" href="{{ url_for('views.dashboard') }}">
 							<img src="{{ url_for('static', filename='images/logo.png') }}" alt="TG Sentinel" class="navbar-logo" height="56" width="56">
 							<div>
 								<div class="navbar-brand-text">TG Sentinel</div>
@@ -47,7 +47,7 @@
 				<div class="collapse navbar-collapse" id="primaryNav">
 					<div class="ts-header-bottom">
 						<div class="ts-user-block ms-30 me-5">
-							<img id="user-avatar" src="{{ url_for('static', filename='images/logo.png') }}" alt="User avatar" class="rounded-circle ts-avatar">
+							<img id="user-avatar" src="{{ url_for('static', filename='images/logo.png') }}" data-default-src="{{ url_for('static', filename='images/logo.png') }}" loading="lazy" alt="User avatar" class="rounded-circle ts-avatar" role="img" aria-label="User avatar">
 							<div class="ts-user-text">
 								<div class="ts-username-row">
 									<span id="username-label" class="ts-username">loading...</span>
@@ -62,31 +62,31 @@
 
 						<ul class="navbar-nav ts-main-menu me-5">
 							<li class="nav-item">
-								<a class="nav-link {% if request.endpoint == 'dashboard_view' %}active{% endif %}" href="{{ url_for('dashboard_view') }}">Dashboard</a>
+								<a class="nav-link {% if request.endpoint == 'views.dashboard' %}active{% endif %}" href="{{ url_for('views.dashboard') }}">Dashboard</a>
 							</li>
 							<li class="nav-item">
-								<a class="nav-link {% if request.endpoint == 'alerts_view' %}active{% endif %}" href="{{ url_for('alerts_view') }}">Alerts</a>
+								<a class="nav-link {% if request.endpoint == 'views.alerts' %}active{% endif %}" href="{{ url_for('views.alerts') }}">Alerts</a>
 							</li>
 							<li class="nav-item dropdown">
-								<a class="nav-link dropdown-toggle {% if request.endpoint in ['config_view', 'profiles_view'] %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+								<a class="nav-link dropdown-toggle {% if request.endpoint in ['views.config', 'views.profiles'] %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
 									Configuration
 								</a>
 								<ul class="dropdown-menu">
-									<li><a class="dropdown-item {% if request.endpoint == 'config_view' %}active{% endif %}" href="{{ url_for('config_view') }}">Settings</a></li>
-									<li><a class="dropdown-item {% if request.endpoint == 'profiles_view' %}active{% endif %}" href="{{ url_for('profiles_view') }}">Profiles</a></li>
+									<li><a class="dropdown-item {% if request.endpoint == 'views.config' %}active{% endif %}" href="{{ url_for('views.config') }}">Settings</a></li>
+									<li><a class="dropdown-item {% if request.endpoint == 'views.profiles' %}active{% endif %}" href="{{ url_for('views.profiles') }}">Profiles</a></li>
 								</ul>
 							</li>
 							<li class="nav-item">
-								<a class="nav-link {% if request.endpoint == 'analytics_view' %}active{% endif %}" href="{{ url_for('analytics_view') }}">Analytics</a>
+								<a class="nav-link {% if request.endpoint == 'views.analytics' %}active{% endif %}" href="{{ url_for('views.analytics') }}">Analytics</a>
 							</li>
 							<li class="nav-item dropdown">
-								<a class="nav-link dropdown-toggle {% if request.endpoint in ['developer_view', 'docs_view', 'console_view'] %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+								<a class="nav-link dropdown-toggle {% if request.endpoint in ['views.developer', 'views.docs', 'views.console'] %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
 									Developer
 								</a>
 								<ul class="dropdown-menu">
-									<li><a class="dropdown-item {% if request.endpoint == 'developer_view' %}active{% endif %}" href="{{ url_for('developer_view') }}">Overview</a></li>
-									<li><a class="dropdown-item {% if request.endpoint == 'docs_view' %}active{% endif %}" href="{{ url_for('docs_view') }}">API Docs</a></li>
-									<li><a class="dropdown-item {% if request.endpoint == 'console_view' %}active{% endif %}" href="{{ url_for('console_view') }}">Console</a></li>
+									<li><a class="dropdown-item {% if request.endpoint == 'views.developer' %}active{% endif %}" href="{{ url_for('views.developer') }}">Overview</a></li>
+									<li><a class="dropdown-item {% if request.endpoint == 'views.docs' %}active{% endif %}" href="{{ url_for('views.docs') }}">API Docs</a></li>
+									<li><a class="dropdown-item {% if request.endpoint == 'views.console' %}active{% endif %}" href="{{ url_for('views.console') }}">Console</a></li>
 								</ul>
 							</li>
 						</ul>
@@ -126,22 +126,22 @@
 						</div>
 						<p class="mt-2">Loading participant information...</p>
 					</div>
+			</div>
+			<div class="modal-footer">
+				<div id="participantModalActions" class="me-auto">
+					<!-- Action buttons will be injected here dynamically -->
 				</div>
-				<div class="modal-footer">
-					<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-				</div>
+				<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
 			</div>
 		</div>
 	</div>
-
-	<!-- Login / Re-authentication Modal -->
-	<div class="modal fade" id="loginModal" tabindex="-1" aria-labelledby="loginModalLabel" aria-hidden="true">
+</div>	<!-- Login / Re-authentication Modal -->
+	<div class="modal fade" id="loginModal" tabindex="-1" aria-labelledby="loginModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
 		<div class="modal-dialog modal-dialog-centered">
 			<div class="modal-content">
 				<div class="modal-header">
 					<img src="{{ url_for('static', filename='images/logo.png') }}" alt="TG Sentinel" class="modal-logo me-3">
 					<h5 class="modal-title" id="loginModalLabel">Authenticate Telegram Session</h5>
-					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 				</div>
 				<div class="modal-body">
 					<!-- Login Method Toggle -->
@@ -193,7 +193,6 @@
 					<div id="loginAlert" class="alert d-none" role="alert"></div>
 				</div>
                 <div class="modal-footer align-items-center">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                     <button type="button" id="btnSendCode" class="btn btn-outline-primary">Send Code</button>
                     <button type="button" id="btnVerifyCode" class="btn btn-primary d-none">Verify</button>
                     <button type="button" id="btnResendCode" class="btn btn-link d-none">Resend code</button>
@@ -213,12 +212,14 @@
 					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 				</div>
 				<div class="modal-body">
-					<div id="unlockAlert" class="alert d-none" role="alert"></div>
-					<div class="mb-3">
-						<label for="unlockPassword" class="form-label">Password</label>
-						<input type="password" class="form-control" id="unlockPassword" placeholder="••••••••" autocomplete="current-password">
-						<div class="form-text">Enter the UI lock password to continue.</div>
-					</div>
+					<form id="unlockForm" onsubmit="return false;">
+						<div id="unlockAlert" class="alert d-none" role="alert"></div>
+						<div class="mb-3">
+							<label for="unlockPassword" class="form-label">Password</label>
+							<input type="password" class="form-control" id="unlockPassword" placeholder="••••••••" autocomplete="current-password" required>
+							<div class="form-text">Enter the UI lock password to continue.</div>
+						</div>
+					</form>
 				</div>
 				<div class="modal-footer">
 					<button type="button" id="btnUnlockNow" class="btn btn-primary">Unlock</button>
@@ -356,30 +357,81 @@
             }
         }
 
-	function populateSessionInfo(data) {
+	async function _fetchAvatarToElement(url, imgEl) {
+		// Fetch avatar as blob, validate content-type, then set src to blob URL.
+		// Returns true if avatar set, false otherwise.
+		if (!url || !imgEl) return false;
+		try {
+			// Use no-cache to avoid stale images served by proxies during rapid switches
+			const resp = await fetch(url, { cache: 'no-store', credentials: 'same-origin' });
+			if (!resp.ok) return false;
+			const ct = resp.headers.get('content-type') || '';
+			if (!ct.startsWith('image/')) return false;
+			const blob = await resp.blob();
+			const objectUrl = URL.createObjectURL(blob);
+			// Revoke previous object URL if present
+			const prev = imgEl.getAttribute('data-object-url');
+			if (prev) {
+				try { URL.revokeObjectURL(prev); } catch (e) {}
+			}
+			imgEl.setAttribute('data-object-url', objectUrl);
+			imgEl.src = objectUrl;
+			return true;
+		} catch (e) {
+			console.debug('Avatar fetch failed', e);
+			return false;
+		}
+	}
+
+	function _setDefaultAvatar(imgEl) {
+		if (!imgEl) return;
+		const def = imgEl.getAttribute('data-default-src') || "{{ url_for('static', filename='images/logo.png') }}";
+		// Clean up any previous object URL
+		const prev = imgEl.getAttribute('data-object-url');
+		if (prev) {
+			try { URL.revokeObjectURL(prev); } catch (e) {}
+			imgEl.removeAttribute('data-object-url');
+		}
+		imgEl.src = def;
+	}
+
+	async function populateSessionInfo(data) {
 		const avatarEl = document.getElementById("user-avatar");
 		const usernameEl = document.getElementById("username-label");
 		const phoneEl = document.getElementById("phone-mask");
 
+		// Handle authorized vs logged out state
+		if (data.authorized === false) {
+			// User is logged out - show login prompt state
+			if (usernameEl) usernameEl.textContent = "Not logged in";
+			if (phoneEl) phoneEl.textContent = "Login required";
+			if (avatarEl) _setDefaultAvatar(avatarEl);
+			return;
+		}
+
+		// User is authorized - populate with actual data
+		if (usernameEl && data.username) usernameEl.textContent = data.username;
+		if (phoneEl && data.phone_masked) phoneEl.textContent = data.phone_masked;
+
+		// Attempt to load avatar via fetch to validate image data and avoid browser caching issues
 		if (avatarEl && data.avatar) {
-			// Add cache-busting timestamp to force browser to reload avatar on user switch
-			const cacheBuster = '?t=' + Date.now();
-			avatarEl.src = data.avatar + cacheBuster;
+			const cacheBuster = (data.avatar.indexOf('?') === -1) ? ('?t=' + Date.now()) : ('&t=' + Date.now());
+			const avatarUrl = data.avatar + cacheBuster;
+			const ok = await _fetchAvatarToElement(avatarUrl, avatarEl);
+			if (!ok) {
+				// Fallback to default static image
+				_setDefaultAvatar(avatarEl);
+			}
+		} else if (avatarEl) {
+			_setDefaultAvatar(avatarEl);
 		}
-		if (usernameEl && data.username) {
-			usernameEl.textContent = data.username;
-		}
-		if (phoneEl && data.phone_masked) {
-			phoneEl.textContent = data.phone_masked;
-		}
+
 		// Update status based on connection state
-		if (data.connected) {
-			refreshWorkerStatus();
-		}
-	}		
+		if (data.connected) refreshWorkerStatus();
+	}
 	async function refreshSessionInfo() {
 			try {
-				const response = await fetch("{{ url_for('api_session_info') }}");
+				const response = await fetch("/api/session/info");
 				if (!response.ok) {
 					throw new Error(`HTTP ${response.status}`);
 				}
@@ -394,7 +446,8 @@
         document.addEventListener("DOMContentLoaded", () => {
             refreshSessionInfo();
             refreshWorkerStatus();
-            setInterval(refreshWorkerStatus, 5000);
+            // Status updates are handled via Socket.IO events (socket.on("status"))
+            // No polling needed - reduces unnecessary network traffic
 
 		// Logout button shows confirmation modal with glass effect
 		const logoutBtn = document.getElementById("btn-logout");
@@ -469,11 +522,32 @@
 							let lastStage = null;
 							let lastMessage = null;
 							
+							let progressPollActive = true;
+							
 							const checkProgress = async () => {
+								if (!progressPollActive) return;
+								
 								attempts++;
 								
 								try {
 									const progressResp = await fetch('/api/worker/logout-progress');
+									
+									// If 401 or 403, logout is complete - stop polling
+									if (progressResp.status === 401 || progressResp.status === 403) {
+										progressPollActive = false;
+										progress.updateProgress(100, 'Logout complete');
+										progress.addLog('Logout completed - session cleared', 'success');
+										
+										try { sessionStorage.clear(); } catch (_) {}
+										try { localStorage.setItem('tgsentinel:logout', String(Date.now())); } catch (_) {}
+										
+										setTimeout(() => {
+											if (progress) progress.hide();
+											window.location.href = '/logout';
+										}, 2000);
+										return;
+									}
+									
 									if (progressResp.ok) {
 										const progressData = await progressResp.json();
 										console.log('[LOGOUT] Progress data:', progressData);
@@ -494,39 +568,51 @@
 											}
 											
 											if (progressData.stage === 'completed' || percent >= 100) {
+												progressPollActive = false;
 												progress.addLog('Logout completed successfully!', 'success');
 												
 												// Clear local state
 												try { sessionStorage.clear(); } catch (_) {}
 												try { localStorage.setItem('tgsentinel:logout', String(Date.now())); } catch (_) {}
 												
-												// Wait longer for users to see completion (3.5 seconds)
+												// Wait for users to see completion
 												setTimeout(() => {
 													if (progress) progress.hide();
-													// Use redirect from sentinel or fallback to /logout
-													const redirectUrl = progressData.redirect || '/logout';
-													window.location.href = redirectUrl;
-												}, 3500);
+													window.location.href = '/logout';
+												}, 2000);
 												return;
 											}
 										}
 									}
 								} catch (pollErr) {
 									console.debug('Progress poll error:', pollErr);
-								}
-								
-								// Continue polling if not completed and under max attempts
-								if (attempts < maxAttempts) {
-									setTimeout(checkProgress, 500);
-								} else {
-									// Timeout - force redirect anyway
-									progress.addLog('Logout timeout - redirecting', 'warning');
-									setTimeout(() => {
-										if (progress) progress.hide();
+									// On network error, assume logout succeeded after a few attempts
+									if (attempts > 3) {
+										progressPollActive = false;
+										progress.addLog('Logout complete (connection closed)', 'success');
 										try { sessionStorage.clear(); } catch (_) {}
 										try { localStorage.setItem('tgsentinel:logout', String(Date.now())); } catch (_) {}
+										setTimeout(() => {
+											if (progress) progress.hide();
+											window.location.href = '/logout';
+										}, 1500);
+										return;
+									}
+								}
+								
+								// Continue polling if still active and under max attempts
+								if (progressPollActive && attempts < maxAttempts) {
+									setTimeout(checkProgress, 500);
+								} else if (attempts >= maxAttempts) {
+									// Timeout - assume logout succeeded
+									progressPollActive = false;
+									progress.addLog('Logout timeout - assuming complete', 'warning');
+									try { sessionStorage.clear(); } catch (_) {}
+									try { localStorage.setItem('tgsentinel:logout', String(Date.now())); } catch (_) {}
+									setTimeout(() => {
+										if (progress) progress.hide();
 										window.location.href = '/logout';
-									}, 500);
+									}, 1000);
 								}
 							};
 							
@@ -573,6 +659,7 @@
 			const modal = new bootstrap.Modal(document.getElementById("participantModal"));
 			const modalLabel = document.getElementById("participantModalLabel");
 			const modalBody = document.getElementById("participantModalBody");
+			const modalActions = document.getElementById("participantModalActions");
 			
 			// Set title based on type
 			if (infoType === 'user') {
@@ -591,7 +678,22 @@
 					<p class="mt-2 text-muted">Fetching information...</p>
 				</div>
 			`;
+			modalActions.innerHTML = ''; // Clear actions while loading
 			modal.show();
+			
+			// Fetch monitored lists from Sentinel API
+			let monitoredChannels = [];
+			let monitoredUsers = [];
+			try {
+				const configResponse = await fetch('/api/config/current');
+				if (configResponse.ok) {
+					const config = await configResponse.json();
+					monitoredChannels = config.channels || [];
+					monitoredUsers = config.monitored_users || [];
+				}
+			} catch (err) {
+				console.warn("Failed to fetch monitored lists:", err);
+			}
 			
 			// Fetch participant info
 			try {
@@ -666,8 +768,10 @@
 					}
 					
 					displayParticipantInfo(retryResult, modalBody, infoType);
+					renderModalActions(retryResult, modalActions, monitoredChannels, monitoredUsers, infoType);
 				} else {
 					displayParticipantInfo(result, modalBody, infoType);
+					renderModalActions(result, modalActions, monitoredChannels, monitoredUsers, infoType);
 				}
 			} catch (error) {
 				console.error("Failed to fetch participant info:", error);
@@ -679,6 +783,112 @@
 				`;
 			}
 		});
+		
+		function renderModalActions(data, container, monitoredChannels, monitoredUsers, infoType) {
+			container.innerHTML = '';
+			
+			// Add channel button (if chat data available)
+			if (data.chat && data.chat.id && (infoType === 'chat' || !infoType)) {
+				const chatId = data.chat.id;
+				const chatName = data.chat.title || data.chat.username || `Chat ${chatId}`;
+				const isMonitored = monitoredChannels.some(ch => ch.id === chatId);
+				
+				const channelBtn = document.createElement('button');
+				channelBtn.className = `btn btn-sm ${isMonitored ? 'btn-success' : 'btn-outline-primary'} me-2`;
+				channelBtn.innerHTML = isMonitored 
+					? '<i class="bi bi-check-circle-fill me-1"></i>Monitored Channel'
+					: '<i class="bi bi-plus-circle me-1"></i>Add to Monitored Channels';
+				channelBtn.disabled = isMonitored;
+				
+				if (!isMonitored) {
+					channelBtn.onclick = async () => {
+						channelBtn.disabled = true;
+						channelBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Adding...';
+						
+						try {
+							const response = await fetch('/api/config/channels/add', {
+								method: 'POST',
+								headers: { 'Content-Type': 'application/json' },
+								body: JSON.stringify({
+									channels: [{ id: chatId, name: chatName }]
+								})
+							});
+							
+							if (response.ok) {
+								channelBtn.className = 'btn btn-sm btn-success me-2';
+								channelBtn.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i>Monitored Channel';
+							} else {
+								channelBtn.disabled = false;
+								channelBtn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Failed';
+								setTimeout(() => {
+									channelBtn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Add to Monitored Channels';
+								}, 2000);
+							}
+						} catch (err) {
+							console.error("Failed to add channel:", err);
+							channelBtn.disabled = false;
+							channelBtn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Add to Monitored Channels';
+						}
+					};
+				}
+				
+				container.appendChild(channelBtn);
+			}
+			
+			// Add user button (if user data available)
+			if (data.user && data.user.id && (infoType === 'user' || !infoType)) {
+				const userId = data.user.id;
+				const userName = data.user.name || data.user.first_name || data.user.username || `User ${userId}`;
+				const userUsername = data.user.username || '';
+				const isMonitored = monitoredUsers.some(u => u.id === userId);
+				
+				const userBtn = document.createElement('button');
+				userBtn.className = `btn btn-sm ${isMonitored ? 'btn-success' : 'btn-outline-primary'}`;
+				userBtn.innerHTML = isMonitored 
+					? '<i class="bi bi-check-circle-fill me-1"></i>Monitored User'
+					: '<i class="bi bi-person-plus me-1"></i>Add to Monitored Users';
+				userBtn.disabled = isMonitored;
+				
+				if (!isMonitored) {
+					userBtn.onclick = async () => {
+						userBtn.disabled = true;
+						userBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Adding...';
+						
+						try {
+							const response = await fetch('/api/config/save', {
+								method: 'POST',
+								headers: { 'Content-Type': 'application/json' },
+								body: JSON.stringify({
+									monitored_users: [...monitoredUsers, {
+										id: userId,
+										name: userName,
+										username: userUsername,
+										enabled: true
+									}]
+								})
+							});
+							
+							if (response.ok) {
+								userBtn.className = 'btn btn-sm btn-success';
+								userBtn.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i>Monitored User';
+							} else {
+								userBtn.disabled = false;
+								userBtn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Failed';
+								setTimeout(() => {
+									userBtn.innerHTML = '<i class="bi bi-person-plus me-1"></i>Add to Monitored Users';
+								}, 2000);
+							}
+						} catch (err) {
+							console.error("Failed to add user:", err);
+							userBtn.disabled = false;
+							userBtn.innerHTML = '<i class="bi bi-person-plus me-1"></i>Add to Monitored Users';
+						}
+					};
+				}
+				
+				container.appendChild(userBtn);
+			}
+		}
 		
 		function displayParticipantInfo(data, container, infoType) {
 			// Handle explicit error payloads from API
@@ -1292,6 +1502,7 @@
 		let reconnectToastShown = false;
 
 		socket.on("connect", () => {
+			refreshSessionInfo();
 			refreshWorkerStatus();
 			if (reconnectToastShown) {
 				showToast("Dashboard link re-established", "success");
@@ -1310,7 +1521,10 @@
 			showToast("Real-time updates paused", "warning");
 		});
 
-		socket.on("status", () => refreshWorkerStatus());
+		socket.on("status", () => {
+			refreshSessionInfo();
+			refreshWorkerStatus();
+		});
 		socket.on("error", (payload) => {
 			const message = payload && payload.message ? payload.message : "Unknown socket error";
 			showToast(message, "error");
@@ -1319,7 +1533,10 @@
         socket.on("dashboard:update", () => {
             const event = new CustomEvent("tgsentinel:dashboard-update");
             document.dispatchEvent(event);
-            try { refreshWorkerStatus(); } catch(e) {}
+            try { 
+				refreshSessionInfo();
+				refreshWorkerStatus(); 
+			} catch(e) {}
         });            
 		});
 	</script>
@@ -1330,7 +1547,10 @@
     <script>
       document.addEventListener('DOMContentLoaded', ()=>{
         try {
-          const modal = new bootstrap.Modal(document.getElementById('loginModal'));
+          const modal = new bootstrap.Modal(document.getElementById('loginModal'), {
+            backdrop: 'static',
+            keyboard: false
+          });
           modal.show();
         } catch (e) {}
         // Ensure session info still populates header for visual context

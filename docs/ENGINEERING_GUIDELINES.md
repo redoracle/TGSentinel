@@ -280,7 +280,7 @@ Under `/app/data` (mounted to `./data` via Docker):
 - Telegram session: `tgsentinel.session` (path from YAML).
 - Avatars cache: `data/avatars/*` (optional).
 - Alert profiles store: `data/alert_profiles.json` (per-channel heuristic profiles).
-- Interest profiles store: `data/profiles.json` (semantic AI profiles, YAML format).
+- Interest profiles store: `data/profiles.yml` (semantic AI profiles, YAML format).
 - Reload marker: `.reload_config`.
 
 ---
@@ -332,7 +332,7 @@ Under `/app/data` (mounted to `./data` via Docker):
 - `/alerts`: alerted messages + daily digest summary.
 - `/config`: edit runtime config (alerts/digest), channels management (add/delete), monitored users management (add/delete), semantic interests overview, and quick actions (save, clean DB, restart sentinel).
 - `/analytics`: quick metrics (rate/latency/resources) and keyword frequency, anomaly detection with configurable thresholds.
-- `/profiles`: interest profiles CRUD persisted to `data/profiles.json` (YAML content). Toggle/rename/import/export/test sample; legacy `interests[]` auto‑migrates on demand. Also manages alert profiles with backtesting.
+- `/profiles`: interest profiles CRUD persisted to `data/profiles.yml` (YAML format). Toggle/rename/import/export/test sample; legacy `interests[]` auto‑migrates on demand. Also manages alert profiles with backtesting.
 - `/console`: log stream placeholder and diagnostics export.
 - `/docs`: UI page that links to API base/API docs (static).
 
@@ -462,7 +462,7 @@ python -m pytest -q
 - ML model training with examples
 - Context and meaning detection
 - Works across all channels
-- Storage: `data/profiles.json`
+- Storage: `data/profiles.yml`
 
 ### Alert Profile Schema
 

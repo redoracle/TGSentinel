@@ -13,6 +13,7 @@ from tgsentinel.config import (
 )
 
 
+@pytest.mark.unit
 class TestLoadConfig:
     """Test configuration loading."""
 

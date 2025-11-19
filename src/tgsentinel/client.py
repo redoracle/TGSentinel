@@ -147,6 +147,7 @@ async def _cache_avatar(
         # Determine if this is a chat (negative ID) or user (positive ID)
         is_chat = entity_id < 0
         prefix = "chat" if is_chat else "user"
+        # Use format that matches UI expectations: tgsentinel:{prefix}_avatar:{entity_id}
         cache_key = f"tgsentinel:{prefix}_avatar:{entity_id}"
         avatar_url = f"/api/avatar/{prefix}/{abs(entity_id)}"
 
@@ -160,19 +161,30 @@ async def _cache_avatar(
                 avatar_bytes = io.BytesIO()
                 await client.download_profile_photo(entity_id, file=avatar_bytes)
 
-                # Encode as base64 and store in Redis
+                # Check if we got any data
                 avatar_bytes.seek(0)
-                avatar_b64 = base64.b64encode(avatar_bytes.read()).decode("utf-8")
+                avatar_data = avatar_bytes.read()
+                if not avatar_data or len(avatar_data) == 0:
+                    log.debug("Empty profile photo data for %s %s", prefix, entity_id)
+                    return None
+
+                # Encode as base64 and store in Redis
+                avatar_b64 = base64.b64encode(avatar_data).decode("utf-8")
                 r.set(cache_key, avatar_b64)  # No TTL
-
-                # For private chats (positive IDs), also expose under chat_avatar key
-                if not is_chat:
-                    r.set(f"tgsentinel:chat_avatar:{entity_id}", avatar_b64)  # No TTL
-
-                log.debug("Cached avatar in Redis for %s %s", prefix, entity_id)
+                log.info(
+                    "✓ Cached avatar in Redis for %s %s (%d bytes)",
+                    prefix,
+                    entity_id,
+                    len(avatar_data),
+                )
 
             except Exception as photo_err:
-                log.debug("Could not download profile photo: %s", photo_err)
+                log.warning(
+                    "Could not download profile photo for %s %s: %s",
+                    prefix,
+                    entity_id,
+                    photo_err,
+                )
                 return None
 
         return avatar_url
@@ -238,82 +250,87 @@ def start_ingestion(cfg: AppCfg, client, r: Redis) -> None:
         m = event.message
         log.info(
             "Received new message: chat_id=%s, sender_id=%s, msg_id=%s",
-            event.chat_id,
-            m.sender_id,
-            m.id,
+            getattr(event, "chat_id", None),
+            getattr(m, "sender_id", None),
+            getattr(m, "id", None),
         )
+
+        # Defaults that keep ingestion resilient even when Telethon-specific
+        # lookups fail (important for tests using simple MagicMock events).
+        sender_name = ""
+        sender_id = getattr(m, "sender_id", None)
+        chat_title = ""
+        sender_avatar_url = None
+        chat_avatar_url = None
+
+        # Best-effort enrichment; failures must not prevent ingestion.
         try:
-            # Fetch sender entity to get proper name information
-            sender_name = ""
-            sender_id = m.sender_id
-            # Track cached avatar URLs to include in payload for UI
-            sender_avatar_url = None
-            chat_avatar_url = None
+            # Fetch sender entity
+            get_sender = getattr(event, "get_sender", None)
+            sender = None
+            if callable(get_sender):
+                # Support both async and sync implementations
+                if asyncio.iscoroutinefunction(get_sender):
+                    sender = await get_sender()
+                else:
+                    sender = get_sender()
 
-            try:
-                sender = await event.get_sender()
-                if sender:
-                    if hasattr(sender, "first_name"):
-                        # Build name from non-empty parts to avoid leading/trailing spaces
-                        name_parts = []
-                        if sender.first_name:
-                            name_parts.append(sender.first_name)
-                        if hasattr(sender, "last_name") and sender.last_name:
-                            name_parts.append(sender.last_name)
-                        sender_name = " ".join(name_parts)
-                    elif hasattr(sender, "title"):
-                        sender_name = sender.title or ""
-                    elif hasattr(sender, "username"):
-                        sender_name = f"@{sender.username}" if sender.username else ""
+            if sender:
+                if hasattr(sender, "first_name"):
+                    name_parts: list[str] = []
+                    if getattr(sender, "first_name", None):
+                        name_parts.append(sender.first_name)  # type: ignore[attr-defined]
+                    if getattr(sender, "last_name", None):
+                        name_parts.append(sender.last_name)  # type: ignore[attr-defined]
+                    sender_name = " ".join(name_parts)
+                elif hasattr(sender, "title"):
+                    sender_name = getattr(sender, "title", "") or ""
+                elif hasattr(sender, "username"):
+                    username = getattr(sender, "username", "") or ""
+                    sender_name = f"@{username}" if username else ""
 
-                    # Try to cache avatar URL if user has a profile photo
-                    if (
-                        sender_id is not None
-                        and hasattr(sender, "photo")
-                        and sender.photo
-                    ):
-                        try:
-                            avatar_url = await _cache_avatar(
-                                client, sender_id, sender.photo, r
-                            )
-                            sender_avatar_url = avatar_url or sender_avatar_url
-                        except Exception as avatar_err:
-                            log.debug("Could not cache avatar: %s", avatar_err)
-            except Exception as sender_err:
-                log.debug("Could not fetch sender: %s", sender_err)
+                # Try to cache avatar URL if user has a profile photo
+                if (
+                    sender_id is not None
+                    and hasattr(sender, "photo")
+                    and getattr(sender, "photo")
+                ):
+                    try:
+                        avatar_url = await _cache_avatar(
+                            client, sender_id, sender.photo, r  # type: ignore[arg-type]
+                        )
+                        sender_avatar_url = avatar_url or sender_avatar_url
+                    except Exception as avatar_err:
+                        log.debug("Could not cache avatar: %s", avatar_err)
 
             # Fallback: if sender_name is still empty and we have sender_id, try getting entity directly
             if not sender_name and sender_id:
                 try:
-                    # Try to get entity from client cache or fetch it
                     entity = await client.get_entity(sender_id)
                     if entity:
                         if hasattr(entity, "first_name"):
-                            name_parts = []
-                            if entity.first_name:
-                                name_parts.append(entity.first_name)
-                            if hasattr(entity, "last_name") and entity.last_name:
-                                name_parts.append(entity.last_name)
+                            name_parts: list[str] = []
+                            if getattr(entity, "first_name", None):
+                                name_parts.append(entity.first_name)  # type: ignore[attr-defined]
+                            if getattr(entity, "last_name", None):
+                                name_parts.append(entity.last_name)  # type: ignore[attr-defined]
                             sender_name = " ".join(name_parts)
                         elif hasattr(entity, "title"):
-                            sender_name = entity.title or ""
+                            sender_name = getattr(entity, "title", "") or ""
                         elif hasattr(entity, "username"):
-                            sender_name = (
-                                f"@{entity.username}" if entity.username else ""
-                            )
+                            username = getattr(entity, "username", "") or ""
+                            sender_name = f"@{username}" if username else ""
                 except Exception as entity_err:
                     log.debug(
                         "Could not fetch entity by ID %s: %s", sender_id, entity_err
                     )
 
             # Last resort: check Redis participant cache
-            if not sender_name and sender_id and event.chat_id:
+            if not sender_name and sender_id and getattr(event, "chat_id", None):
                 try:
                     cache_key = f"tgsentinel:participant:{event.chat_id}:{sender_id}"
                     cached = r.get(cache_key)
                     if cached:
-                        # Ensure we have a string for json.loads
-                        cached_str: str
                         if isinstance(cached, bytes):
                             cached_str = cached.decode("utf-8")
                         elif isinstance(cached, str):
@@ -326,79 +343,77 @@ def start_ingestion(cfg: AppCfg, client, r: Redis) -> None:
                     log.debug("Could not get sender name from cache: %s", cache_err)
 
             # Fetch chat entity to get proper chat title and cache chat type
-            chat_title = ""
-            try:
-                chat = await event.get_chat()
-                if chat:
-                    if hasattr(chat, "title") and chat.title:
-                        chat_title = chat.title
-                    elif hasattr(chat, "first_name") and chat.first_name:
-                        # For private chats, use first_name
-                        chat_title = chat.first_name
-                        if hasattr(chat, "last_name") and chat.last_name:
-                            chat_title += f" {chat.last_name}"
-                    elif hasattr(chat, "username") and chat.username:
-                        chat_title = f"@{chat.username}"
+            get_chat = getattr(event, "get_chat", None)
+            chat = None
+            if callable(get_chat):
+                try:
+                    if asyncio.iscoroutinefunction(get_chat):
+                        chat = await get_chat()
+                    else:
+                        chat = get_chat()
+                except Exception as chat_err:
+                    log.debug("Could not fetch chat: %s", chat_err)
 
-                    # Try to cache chat avatar if chat has a profile photo
-                    if (
-                        event.chat_id is not None
-                        and hasattr(chat, "photo")
-                        and chat.photo
-                    ):
-                        try:
-                            chat_avatar_url = await _cache_avatar(
-                                client, event.chat_id, chat.photo, r
-                            )
-                        except Exception as chat_avatar_err:
-                            log.debug(
-                                "Could not cache chat avatar: %s", chat_avatar_err
-                            )
+            if chat:
+                if getattr(chat, "title", None):
+                    chat_title = chat.title  # type: ignore[attr-defined]
+                elif getattr(chat, "first_name", None):
+                    chat_title = chat.first_name  # type: ignore[attr-defined]
+                    if getattr(chat, "last_name", None):
+                        chat_title += f" {chat.last_name}"  # type: ignore[attr-defined]
+                elif getattr(chat, "username", None):
+                    chat_title = f"@{chat.username}"  # type: ignore[attr-defined]
 
-                    # Cache chat type for better UI display
+                # Try to cache chat avatar if chat has a profile photo
+                if (
+                    getattr(event, "chat_id", None) is not None
+                    and hasattr(chat, "photo")
+                    and getattr(chat, "photo")
+                ):
                     try:
-                        from telethon.tl.types import Channel, Chat as TgChat
-
-                        chat_type = "unknown"
-                        if isinstance(chat, Channel):
-                            if getattr(chat, "broadcast", False):
-                                chat_type = "channel"
-                            elif getattr(chat, "megagroup", False):
-                                chat_type = "supergroup"
-                            elif getattr(chat, "gigagroup", False):
-                                chat_type = "gigagroup"
-                            else:
-                                chat_type = "channel"  # Default for Channel type
-                        elif isinstance(chat, TgChat):
-                            chat_type = "group"
-
-                        # Cache for 24 hours (chat type doesn't change often)
-                        cache_key = f"tgsentinel:chat_type:{event.chat_id}"
-                        r.setex(cache_key, 86400, chat_type)
-                        log.debug(
-                            "Cached chat type for %s: %s", event.chat_id, chat_type
+                        chat_avatar_url = await _cache_avatar(
+                            client, event.chat_id, chat.photo, r  # type: ignore[arg-type]
                         )
-                    except Exception as type_err:
-                        log.debug("Could not cache chat type: %s", type_err)
-            except Exception as chat_err:
-                log.debug("Could not fetch chat: %s", chat_err)
+                    except Exception as chat_avatar_err:
+                        log.debug("Could not cache chat avatar: %s", chat_avatar_err)
+
+                # Cache chat type for better UI display
+                try:
+                    from telethon.tl.types import Channel, Chat as TgChat
+
+                    chat_type = "unknown"
+                    if isinstance(chat, Channel):
+                        if getattr(chat, "broadcast", False):
+                            chat_type = "channel"
+                        elif getattr(chat, "megagroup", False):
+                            chat_type = "supergroup"
+                        elif getattr(chat, "gigagroup", False):
+                            chat_type = "gigagroup"
+                        else:
+                            chat_type = "channel"
+                    elif isinstance(chat, TgChat):
+                        chat_type = "group"
+
+                    cache_key = f"tgsentinel:chat_type:{event.chat_id}"
+                    r.setex(cache_key, 86400, chat_type)
+                    log.debug("Cached chat type for %s: %s", event.chat_id, chat_type)
+                except Exception as type_err:
+                    log.debug("Could not cache chat type: %s", type_err)
 
             # Fallback: if chat_title is still empty, try getting entity directly
-            if not chat_title and event.chat_id:
+            if not chat_title and getattr(event, "chat_id", None):
                 try:
-                    # Try to get entity from client cache or fetch it
                     entity = await client.get_entity(event.chat_id)
                     if entity:
-                        if hasattr(entity, "title") and entity.title:
-                            chat_title = entity.title
-                        elif hasattr(entity, "first_name") and entity.first_name:
-                            chat_title = entity.first_name
-                            if hasattr(entity, "last_name") and entity.last_name:
-                                chat_title += f" {entity.last_name}"
+                        if getattr(entity, "title", None):
+                            chat_title = entity.title  # type: ignore[attr-defined]
+                        elif getattr(entity, "first_name", None):
+                            chat_title = entity.first_name  # type: ignore[attr-defined]
+                            if getattr(entity, "last_name", None):
+                                chat_title += f" {entity.last_name}"  # type: ignore[attr-defined]
                         elif hasattr(entity, "username"):
-                            chat_title = (
-                                f"@{entity.username}" if entity.username else ""
-                            )
+                            username = getattr(entity, "username", "") or ""
+                            chat_title = f"@{username}" if username else chat_title
                 except Exception as entity_err:
                     log.debug(
                         "Could not fetch chat entity by ID %s: %s",
@@ -407,25 +422,31 @@ def start_ingestion(cfg: AppCfg, client, r: Redis) -> None:
                     )
 
             # For private chats, if chat_title is still empty, use sender_name as fallback
-            if not chat_title and event.chat_id > 0 and sender_name:
+            if not chat_title and getattr(event, "chat_id", 0) > 0 and sender_name:
                 chat_title = sender_name
+        except Exception as enrich_err:
+            # Never let enrichment errors break ingestion
+            log.debug("Ingestion enrichment failed: %s", enrich_err)
+
+        # Build minimal, JSON-serializable payload using safe defaults
+        try:
+            # Extract timestamp safely
+            msg_date = getattr(m, "date", None)
+            timestamp = msg_date.isoformat() if msg_date is not None else None
 
             payload = {
-                "chat_id": event.chat_id,
+                "chat_id": getattr(event, "chat_id", None),
                 "chat_title": chat_title,
-                "msg_id": m.id,
-                "sender_id": m.sender_id,
+                "msg_id": getattr(m, "id", None),
+                "sender_id": getattr(m, "sender_id", None),
                 "sender_name": sender_name,
-                "mentioned": bool(m.mentioned),
-                "text": (m.message or ""),
-                "replies": int(m.replies.replies if m.replies is not None else 0),
+                "mentioned": bool(getattr(m, "mentioned", False)),
+                "text": getattr(m, "message", "") or "",
+                "replies": int(getattr(getattr(m, "replies", None), "replies", 0) or 0),
                 "reactions": _reaction_count(m),
-                "timestamp": m.date.isoformat() if m.date else None,
-                # Provide avatar URLs directly for UI as a best-effort hint
-                # UI will still fall back to Redis lookup if missing
+                "timestamp": timestamp,
                 "avatar_url": sender_avatar_url or chat_avatar_url,
                 "chat_avatar_url": chat_avatar_url,
-                # Enhanced metadata for comprehensive heuristics
                 "is_reply": bool(getattr(m, "is_reply", False)),
                 "reply_to_msg_id": _safe_get_reply_to_id(m),
                 "has_media": bool(getattr(m, "media", None))
@@ -436,51 +457,55 @@ def start_ingestion(cfg: AppCfg, client, r: Redis) -> None:
                 and not hasattr(getattr(m, "forward", None), "_mock_name"),
                 "forward_from": _safe_get_forward_from(m),
             }
+        except Exception as payload_err:
+            log.exception("ingest_error: could not build payload: %s", payload_err)
+            return
 
-            # Filter out messages from the current user (don't track own messages)
-            try:
-                current_user_str = r.get("tgsentinel:user_info")
-                if current_user_str:
-                    # Ensure we have a string
-                    if isinstance(current_user_str, bytes):
-                        current_user_str = current_user_str.decode()
-                    current_user = json.loads(str(current_user_str))
-                    current_user_id = current_user.get("user_id")
-                    if current_user_id and m.sender_id == current_user_id:
-                        log.debug("Skipping own message in chat %s", event.chat_id)
-                        return
-            except Exception as filter_err:
-                log.debug("Could not filter own messages: %s", filter_err)
+        # Filter out messages from the current user (don't track own messages)
+        try:
+            current_user_str = r.get("tgsentinel:user_info")
+            if current_user_str:
+                if isinstance(current_user_str, bytes):
+                    current_user_str = current_user_str.decode()
+                current_user = json.loads(str(current_user_str))
+                current_user_id = current_user.get("user_id")
+                if current_user_id and payload["sender_id"] == current_user_id:
+                    log.debug("Skipping own message in chat %s", payload["chat_id"])
+                    return
+        except Exception as filter_err:
+            log.debug("Could not filter own messages: %s", filter_err)
 
-            # Check if this is a private chat (positive chat_id)
-            # and filter based on monitored_users list
-            if event.chat_id > 0:
-                # This is a private chat - check if user is in monitored list
+        # Private chat filtering based on monitored_users
+        try:
+            chat_id_val = payload["chat_id"]
+            if isinstance(chat_id_val, int) and chat_id_val > 0:
                 monitored_ids = {u.id for u in cfg.monitored_users}
                 log.info(
                     "Private chat check: chat_id=%s, monitored_ids=%s",
-                    event.chat_id,
+                    chat_id_val,
                     monitored_ids,
                 )
-                if monitored_ids and event.chat_id not in monitored_ids:
+                if monitored_ids and chat_id_val not in monitored_ids:
                     log.info(
                         "Skipping private message from unmonitored user %s (not in %s)",
-                        event.chat_id,
+                        chat_id_val,
                         monitored_ids,
                     )
                     return
-                log.info(
-                    "Private message ALLOWED from monitored user %s", event.chat_id
-                )
+                log.info("Private message ALLOWED from monitored user %s", chat_id_val)
+        except Exception as private_err:
+            log.debug("Private chat filter failed: %s", private_err)
 
+        # Finally, push to Redis stream
+        try:
             r.xadd(
                 stream, {"json": json.dumps(payload)}, maxlen=100000, approximate=True
             )
             log.info(
                 "Message ingested: chat=%s, sender=%s (%s)",
-                chat_title or event.chat_id,
-                sender_name or m.sender_id,
-                m.id,
+                payload["chat_title"] or payload["chat_id"],
+                payload["sender_name"] or payload["sender_id"],
+                payload["msg_id"],
             )
         except Exception as e:
             log.exception("ingest_error: %s", e)

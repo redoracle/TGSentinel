@@ -6,6 +6,7 @@ from sqlalchemy import text
 from tgsentinel.store import init_db, mark_alerted, upsert_message
 
 
+@pytest.mark.unit
 class TestInitDb:
     """Test database initialization."""
 

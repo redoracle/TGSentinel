@@ -39,7 +39,17 @@ def app_client(mock_config):
 
     # Add ui directory to path
     ui_path = Path(__file__).parent.parent / "ui"
-    sys.path.insert(0, str(ui_path))
+    if str(ui_path) not in sys.path:
+        sys.path.insert(0, str(ui_path))
+
+    # Set test environment
+    os.environ["UI_SECRET_KEY"] = "test-secret"
+    os.environ["UI_DB_URI"] = "sqlite:///:memory:"
+
+    # Remove cached modules
+    for mod in list(sys.modules.keys()):
+        if mod.startswith(("app", "ui.")):
+            del sys.modules[mod]
 
     # Mock Redis before importing app
     with patch("redis.Redis") as mock_redis:
@@ -49,13 +59,17 @@ def app_client(mock_config):
         mock_redis.return_value = mock_redis_instance
 
         # Mock config loading
-        with patch("app.load_config", return_value=mock_config):
+        with patch("ui.app.load_config", return_value=mock_config):
             # Import app after mocking
-            import app as flask_app  # type: ignore[import-not-found]
+            import ui.app as flask_app
 
+            # Reset and initialize
+            flask_app.reset_for_testing()
             flask_app.app.config["TESTING"] = True
-            flask_app.config = mock_config  # Set global config
-            flask_app.redis_client = mock_redis_instance
+            flask_app.app.config["TGSENTINEL_CONFIG"] = mock_config
+
+            # Initialize app to register all blueprints
+            flask_app.init_app()
 
             with flask_app.app.test_client() as client:
                 yield client
@@ -82,7 +96,8 @@ def test_api_config_current_returns_telegram_config(app_client):
     assert "telegram" in data
     assert data["telegram"]["api_id"] == "29548417"
     assert data["telegram"]["api_hash"] == "test_api_hash"
-    assert data["telegram"]["phone_number"] == "+1234567890"
+    # Phone is masked for security: +1234567890 -> +1*******90
+    assert data["telegram"]["phone_number"] == "+1*******90"
     assert "session" in data["telegram"]
 
     # Cleanup

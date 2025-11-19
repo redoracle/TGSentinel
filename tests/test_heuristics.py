@@ -5,6 +5,7 @@ import pytest
 from tgsentinel.heuristics import HeuristicResult, content_hash, run_heuristics
 
 
+@pytest.mark.unit
 class TestContentHash:
     """Test content hashing functionality."""
 
@@ -30,6 +31,7 @@ class TestContentHash:
         assert hash1 != hash2
 
 
+@pytest.mark.unit
 class TestRunHeuristics:
     """Test heuristic evaluation logic."""
 

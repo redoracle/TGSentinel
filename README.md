@@ -197,6 +197,10 @@ For technical details, see [Engineering Guidelines: Session Management](docs/ENG
    TG_API_ID=12345678
    TG_API_HASH=0123456789abcdef0123456789abcdef
 
+   # Webhook encryption key (required if using webhooks)
+   # Generate with: python3 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
+   WEBHOOK_SECRET_KEY=your_generated_fernet_key_here
+
    # Alert settings
    ALERT_MODE=both              # dm | channel | both
    ALERT_CHANNEL=@your_bot      # Your notification channel/bot
@@ -298,6 +302,7 @@ All settings can be overridden via environment variables:
 | ---------------------- | --------------------------------- | --------------------------------------------------------- |
 | `TG_API_ID`            | _(required)_                      | Telegram API ID from my.telegram.org                      |
 | `TG_API_HASH`          | _(required)_                      | Telegram API hash                                         |
+| `WEBHOOK_SECRET_KEY`   | _(required for webhooks)_         | Fernet encryption key for webhook secrets (fail-fast)     |
 | `ALERT_MODE`           | `dm`                              | Alert destination: `dm`, `channel`, or `both`             |
 | `ALERT_CHANNEL`        | `""`                              | Target channel/bot username (e.g., `@kit_red_bot`)        |
 | `HOURLY_DIGEST`        | `true`                            | Enable hourly digest                                      |

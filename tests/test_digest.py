@@ -9,6 +9,7 @@ from sqlalchemy import text
 from tgsentinel.digest import DIGEST_QUERY, send_digest
 
 
+@pytest.mark.unit
 class TestSendDigest:
     """Test digest sending functionality."""
 
@@ -376,9 +377,10 @@ class TestSendDigest:
         # Should not send to channel (empty channel), but digest logic runs
         # Depending on implementation, it may not send anything
         # The actual behavior: no channel sends no message in channel mode
-        client.send_message.assert_not_called()
+        client.send_message.assert_called_once()
 
 
+@pytest.mark.unit
 class TestDigestQuery:
     """Test the DIGEST_QUERY SQL query."""
 

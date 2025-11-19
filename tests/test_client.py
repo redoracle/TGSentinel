@@ -9,6 +9,7 @@ from tgsentinel.client import _reaction_count, make_client, start_ingestion
 from tgsentinel.config import AlertsCfg, AppCfg, DigestCfg
 
 
+@pytest.mark.integration
 class TestMakeClient:
     """Test client creation."""
 

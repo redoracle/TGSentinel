@@ -7,6 +7,7 @@ import pytest
 from tgsentinel.metrics import _counters, dump, inc
 
 
+@pytest.mark.unit
 class TestMetricsInc:
     """Test metrics increment functionality."""
 

@@ -35,11 +35,22 @@
 <section class="row g-4 mb-4">
     <div class="col-12 col-xl-7">
         <article class="card h-100" aria-labelledby="performance-chart-heading">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h2 class="card-title mb-0" id="performance-chart-heading">Performance Metrics</h2>
-                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-performance">Refresh</button>
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#performance-chart-body" aria-expanded="true" aria-controls="performance-chart-body" style="text-decoration: none; color: inherit;">
+                    <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+                    <div>
+                        <h2 class="card-title mb-0" id="performance-chart-heading">Performance Metrics</h2>
+                        <small class="text-muted">Real-time system performance trends</small>
+                    </div>
+                </button>
+                <div class="d-flex gap-2">
+                    <a href="/docs#performance-metrics" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                        <i class="bi bi-info-circle"></i>
+                    </a>
+                    <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-performance">Refresh</button>
+                </div>
             </div>
-            <div class="card-body">
+            <div class="collapse show card-body" id="performance-chart-body">
                 <div class="chart-container">
                     <canvas id="performance-chart" aria-label="Performance chart" role="img"></canvas>
                 </div>
@@ -48,11 +59,22 @@
     </div>
     <div class="col-12 col-xl-5">
         <article class="card h-100" aria-labelledby="resource-utilisation-heading">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h2 class="card-title mb-0" id="resource-utilisation-heading">Resource Utilisation</h2>
-                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-resources">Refresh</button>
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#resource-utilisation-body" aria-expanded="true" aria-controls="resource-utilisation-body" style="text-decoration: none; color: inherit;">
+                    <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+                    <div>
+                        <h2 class="card-title mb-0" id="resource-utilisation-heading">Resource Utilisation</h2>
+                        <small class="text-muted">CPU, memory, and Redis usage</small>
+                    </div>
+                </button>
+                <div class="d-flex gap-2">
+                    <a href="/docs#resource-metrics" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                        <i class="bi bi-info-circle"></i>
+                    </a>
+                    <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-resources">Refresh</button>
+                </div>
             </div>
-            <div class="card-body">
+            <div class="collapse show card-body" id="resource-utilisation-body">
                 <ul class="list-unstyled mb-0" id="resource-list">
                     <li class="mb-3">
                         <p class="text-muted mb-1">CPU usage</p>
@@ -81,11 +103,22 @@
 <section class="row g-4 mb-4">
     <div class="col-12 col-xl-6">
         <article class="card h-100" aria-labelledby="keyword-heatmap-heading">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h2 class="card-title mb-0" id="keyword-heatmap-heading">Keyword Heatmap</h2>
-                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-keywords">Refresh</button>
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#keyword-heatmap-body" aria-expanded="true" aria-controls="keyword-heatmap-body" style="text-decoration: none; color: inherit;">
+                    <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+                    <div>
+                        <h2 class="card-title mb-0" id="keyword-heatmap-heading">Keyword Heatmap</h2>
+                        <small class="text-muted">Frequency of detected keywords</small>
+                    </div>
+                </button>
+                <div class="d-flex gap-2">
+                    <a href="/docs#keyword-heatmap" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                        <i class="bi bi-info-circle"></i>
+                    </a>
+                    <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-keywords">Refresh</button>
+                </div>
             </div>
-            <div class="card-body">
+            <div class="collapse show card-body" id="keyword-heatmap-body">
                 <div class="chart-container compact">
                     <canvas id="keywords-chart" aria-label="Keyword heatmap" role="img"></canvas>
                 </div>
@@ -94,10 +127,19 @@
     </div>
     <div class="col-12 col-xl-6">
         <article class="card h-100" aria-labelledby="channel-impact-heading">
-            <div class="card-header">
-                <h2 class="card-title mb-0" id="channel-impact-heading">Channel Impact</h2>
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#channel-impact-body" aria-expanded="true" aria-controls="channel-impact-body" style="text-decoration: none; color: inherit;">
+                    <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+                    <div>
+                        <h2 class="card-title mb-0" id="channel-impact-heading">Channel Impact</h2>
+                        <small class="text-muted">Alert distribution by channel</small>
+                    </div>
+                </button>
+                <a href="/docs#channel-impact" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                    <i class="bi bi-info-circle"></i>
+                </a>
             </div>
-            <div class="card-body">
+            <div class="collapse show card-body" id="channel-impact-body">
                 <div class="chart-container compact">
                     <canvas id="channel-chart" class="shadow-soft" aria-label="Channel impact" role="img"></canvas>
                 </div>
@@ -135,13 +177,21 @@
 
 {% block extra_scripts %}
 <script>
-    const metricsEndpoint = "{{ url_for('api_analytics_metrics') }}";
-    const keywordsEndpoint = "{{ url_for('api_analytics_keywords') }}";
-    const anomaliesEndpoint = "{{ url_for('api_analytics_anomalies') }}";
+    const metricsEndpoint = "{{ url_for('dashboard.analytics_metrics') }}";
+    const keywordsEndpoint = "{{ url_for('dashboard.analytics_keywords') }}";
+    const anomaliesEndpoint = "{{ url_for('analytics.api_analytics_anomalies') }}";
 
     let performanceChart;
     let keywordChart;
     let channelChart;
+
+    // Rolling window for historical metrics (stores last 6 data points = 12 minutes at 2min refresh)
+    const MAX_HISTORY_POINTS = 6;
+    let metricsHistory = {
+        timestamps: [],
+        messagesPerMin: [],
+        latency: []
+    };
 
     function ensureChart(ctx, config) {
         if (!ctx) {
@@ -154,6 +204,23 @@
         return ctx._chartRef;
     }
 
+    function updateMetricsHistory(messagesPerMin, latency) {
+        // Add new data point
+        const now = new Date();
+        const timeLabel = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        
+        metricsHistory.timestamps.push(timeLabel);
+        metricsHistory.messagesPerMin.push(messagesPerMin);
+        metricsHistory.latency.push(latency);
+
+        // Keep only last MAX_HISTORY_POINTS
+        if (metricsHistory.timestamps.length > MAX_HISTORY_POINTS) {
+            metricsHistory.timestamps.shift();
+            metricsHistory.messagesPerMin.shift();
+            metricsHistory.latency.shift();
+        }
+    }
+
     async function refreshPerformance() {
         try {
             const response = await fetch(metricsEndpoint);
@@ -161,27 +228,39 @@
                 throw new Error("metrics fetch failed");
             }
             const payload = await response.json();
-            // Update only performance-related metrics (KPIs + line chart)
-            document.getElementById("metric-mpm").textContent = payload.messages_per_min ?? 0;
-            document.getElementById("metric-latency").textContent = `${(payload.semantic_latency ?? 0).toFixed(3)}s`;
+            
+            const messagesPerMin = payload.messages_per_min ?? 0;
+            const latency = payload.semantic_latency ?? 0;
+            
+            // Update KPI displays
+            document.getElementById("metric-mpm").textContent = messagesPerMin;
+            document.getElementById("metric-latency").textContent = `${latency.toFixed(3)}s`;
 
+            // Update historical data
+            updateMetricsHistory(messagesPerMin, latency);
+
+            // Render chart with real historical data
             const ctx = document.getElementById("performance-chart");
             performanceChart = ensureChart(ctx, {
                 type: "line",
                 data: {
-                    labels: ["-5m", "-4m", "-3m", "-2m", "-1m", "now"],
+                    labels: metricsHistory.timestamps,
                     datasets: [
                         {
                             label: "Messages/min",
-                            data: [12, 18, 16, 19, 21, payload.messages_per_min || 0],
+                            data: metricsHistory.messagesPerMin,
                             borderColor: "#7d8bff",
-                            fill: false,
+                            backgroundColor: "rgba(125, 139, 255, 0.1)",
+                            fill: true,
+                            tension: 0.4,
                         },
                         {
                             label: "Latency (s)",
-                            data: [0.42, 0.38, 0.35, 0.4, 0.37, payload.semantic_latency || 0],
+                            data: metricsHistory.latency,
                             borderColor: "#f5576c",
-                            fill: false,
+                            backgroundColor: "rgba(245, 87, 108, 0.1)",
+                            fill: true,
+                            tension: 0.4,
                         },
                     ],
                 },

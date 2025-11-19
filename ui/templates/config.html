@@ -4,15 +4,20 @@
 {% block content %}
 <form id="config-form" class="d-grid gap-4" novalidate>
     <section class="card" aria-labelledby="telegram-config-heading">
-        <div class="card-header d-flex justify-content-between align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#telegram-config-body" aria-expanded="false" aria-controls="telegram-config-body">
-            <div>
-                <h1 class="card-title mb-0" id="telegram-config-heading">
-                    <i class="bi bi-chevron-right collapse-icon me-2"></i>
-                    Telegram Account
-                </h1>
-                <small class="text-muted">Manage MTProto authentication</small>
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#telegram-config-body" aria-expanded="false" aria-controls="telegram-config-body" style="text-decoration: none; color: inherit;">
+                <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+                <div>
+                    <h1 class="card-title mb-0" id="telegram-config-heading">Telegram Account</h1>
+                    <small class="text-muted">Manage MTProto authentication</small>
+                </div>
+            </button>
+            <div class="d-flex gap-2">
+                <a href="/docs#telegram-config" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                    <i class="bi bi-info-circle"></i>
+                </a>
+                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-reauth">Reauthenticate</button>
             </div>
-            <button class="btn btn-outline-primary btn-sm" type="button" id="btn-reauth" onclick="event.stopPropagation();">Reauthenticate</button>
         </div>
         <div class="collapse card-body" id="telegram-config-body">
             <div class="row g-4">
@@ -44,17 +49,22 @@
     </section>
 
     <section class="card" aria-labelledby="alerts-settings-heading">
-        <div class="card-header d-flex justify-content-between align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#alerts-settings-body" aria-expanded="false" aria-controls="alerts-settings-body">
-            <div>
-                <h2 class="card-title mb-0" id="alerts-settings-heading">
-                    <i class="bi bi-chevron-right collapse-icon me-2"></i>
-                    Alerts & Notifications
-                </h2>
-                <small class="text-muted">Configure alert destinations and delivery</small>
-            </div>
-            <button class="btn btn-primary btn-sm" type="button" id="btn-save-alerts" onclick="event.stopPropagation();">
-                <span aria-hidden="true">✓</span> Apply Changes
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#alerts-settings-body" aria-expanded="false" aria-controls="alerts-settings-body" style="text-decoration: none; color: inherit;">
+                <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+                <div>
+                    <h2 class="card-title mb-0" id="alerts-settings-heading">Alerts & Notifications</h2>
+                    <small class="text-muted">Configure alert destinations and delivery</small>
+                </div>
             </button>
+            <div class="d-flex gap-2">
+                <a href="/docs#alerts-config" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                    <i class="bi bi-info-circle"></i>
+                </a>
+                <button class="btn btn-primary btn-sm" type="button" id="btn-save-alerts">
+                    <span aria-hidden="true">✓</span> Apply Changes
+                </button>
+            </div>
         </div>
         <div class="collapse card-body" id="alerts-settings-body">
             <div class="row g-4">
@@ -101,17 +111,22 @@
     </section>
 
     <section class="card" aria-labelledby="scoring-settings-heading">
-        <div class="card-header d-flex justify-content-between align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#scoring-settings-body" aria-expanded="false" aria-controls="scoring-settings-body">
-            <div>
-                <h2 class="card-title mb-0" id="scoring-settings-heading">
-                    <i class="bi bi-chevron-right collapse-icon me-2"></i>
-                    Importance & Scoring
-                </h2>
-                <small class="text-muted">Tune relevance thresholds and heuristics</small>
-            </div>
-            <button class="btn btn-primary btn-sm" type="button" id="btn-save-scoring" onclick="event.stopPropagation();">
-                <span aria-hidden="true">✓</span> Apply Changes
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#scoring-settings-body" aria-expanded="false" aria-controls="scoring-settings-body" style="text-decoration: none; color: inherit;">
+                <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+                <div>
+                    <h2 class="card-title mb-0" id="scoring-settings-heading">Importance & Scoring</h2>
+                    <small class="text-muted">Tune relevance thresholds and heuristics</small>
+                </div>
             </button>
+            <div class="d-flex gap-2">
+                <a href="/docs#scoring-config" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                    <i class="bi bi-info-circle"></i>
+                </a>
+                <button class="btn btn-primary btn-sm" type="button" id="btn-save-scoring">
+                    <span aria-hidden="true">✓</span> Apply Changes
+                </button>
+            </div>
         </div>
         <div class="collapse card-body" id="scoring-settings-body">
             <div class="row g-4">
@@ -183,21 +198,24 @@
     </section>
 
     <section class="card" aria-labelledby="channel-management-heading">
-        <div class="card-header d-flex justify-content-between align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#channel-management-body" aria-expanded="false" aria-controls="channel-management-body">
-            <div>
-                <h2 class="card-title mb-0" id="channel-management-heading">
-                    <i class="bi bi-chevron-right collapse-icon me-2"></i>
-                    Channels Management
-                </h2>
-                <small class="text-muted">Manage channels, rules, and exports</small>
-            </div>
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#channel-management-body" aria-expanded="false" aria-controls="channel-management-body" style="text-decoration: none; color: inherit;">
+                <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+                <div>
+                    <h2 class="card-title mb-0" id="channel-management-heading">Monitored Channels</h2>
+                    <small class="text-muted">Manage monitored Telegram channels and groups</small>
+                </div>
+            </button>
             <div class="d-flex gap-2">
-                <button class="btn btn-primary btn-sm" type="button" id="btn-add-channels" data-bs-toggle="modal" data-bs-target="#addChannelsModal" onclick="event.stopPropagation();">
+                <a href="/docs#channels-api" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                    <i class="bi bi-info-circle"></i>
+                </a>
+                <button class="btn btn-primary btn-sm" type="button" id="btn-add-channels" data-bs-toggle="modal" data-bs-target="#addChannelsModal">
                     <span aria-hidden="true">+</span> ADD
                 </button>
-                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-test-rules" onclick="event.stopPropagation();">Test rules</button>
-                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-reset-stats" onclick="event.stopPropagation();">Reset stats</button>
-                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-export-yaml" onclick="event.stopPropagation();">Export YAML</button>
+                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-test-rules">Test rules</button>
+                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-reset-stats">Reset stats</button>
+                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-export-yaml">Export YAML</button>
             </div>
         </div>
         <div class="collapse card-body table-responsive" id="channel-management-body">
@@ -236,7 +254,12 @@
                         <td>{{ channel.rate_limit }}</td>
                         <td>
                             <div class="form-check form-switch mb-0">
-                                <input class="form-check-input" name="channel_enabled_{{ loop.index0 }}" type="checkbox" id="channel-enabled-{{ loop.index0 }}" checked>
+                                <input class="form-check-input" 
+                                       name="channel_enabled_{{ loop.index0 }}" 
+                                       type="checkbox" 
+                                       id="channel-enabled-{{ loop.index0 }}" 
+                                       data-chat-id="{{ channel.chat_id }}"
+                                       {% if channel.enabled is not defined or channel.enabled %}checked{% endif %}>
                                 <label class="form-check-label visually-hidden" for="channel-enabled-{{ loop.index0 }}">Toggle {{ channel.name }}</label>
                             </div>
                         </td>
@@ -262,15 +285,100 @@
         </div>
     </section>
 
-    <section class="card" aria-labelledby="system-settings-heading">
-        <div class="card-header d-flex justify-content-between align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#system-settings-body" aria-expanded="false" aria-controls="system-settings-body">
-            <div>
-                <h2 class="card-title mb-0" id="system-settings-heading">
-                    <i class="bi bi-chevron-right collapse-icon me-2"></i>
-                    System Settings
-                </h2>
-                <small class="text-muted">Infrastructure and runtime options</small>
+    <section class="card" aria-labelledby="users-management-heading">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#users-management-body" aria-expanded="false" aria-controls="users-management-body" style="text-decoration: none; color: inherit;">
+                <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+                <div>
+                    <h2 class="card-title mb-0" id="users-management-heading">Monitored Users</h2>
+                    <small class="text-muted">Manage monitored individual Telegram users</small>
+                </div>
+            </button>
+            <div class="d-flex gap-2">
+                <a href="/docs#users-api" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                    <i class="bi bi-info-circle"></i>
+                </a>
+                <button class="btn btn-primary btn-sm" type="button" id="btn-add-users" data-bs-toggle="modal" data-bs-target="#addChannelsModal">
+                    <span aria-hidden="true">+</span> ADD
+                </button>
+                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-test-user-rules">Test rules</button>
+                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-reset-user-stats">Reset stats</button>
+                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-export-user-yaml">Export YAML</button>
             </div>
+        </div>
+        <div class="collapse card-body table-responsive" id="users-management-body">
+            <table class="table align-middle mb-0" id="users-table">
+                <thead>
+                    <tr>
+                        <th scope="col">User ID</th>
+                        <th scope="col">Name</th>
+                        <th scope="col">Username</th>
+                        <th scope="col">Enabled</th>
+                        <th scope="col">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {%- if monitored_users %}
+                        {%- for user in monitored_users %}
+                        <tr>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-primary copy-user-id" 
+                                        data-user-id="{{ user.id }}" 
+                                        title="Copy {{ user.id }}">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-clipboard" viewBox="0 0 16 16">
+                                        <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/>
+                                        <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/>
+                                    </svg>
+                                </button>
+                            </td>
+                            <td>{{ user.name }}</td>
+                            <td>{{ user.username or '-' }}</td>
+                            <td>
+                                <div class="form-check form-switch mb-0">
+                                    <input class="form-check-input" 
+                                           name="user_enabled_{{ loop.index0 }}" 
+                                           type="checkbox" 
+                                           id="user-enabled-{{ loop.index0 }}" 
+                                           data-user-id="{{ user.id }}"
+                                           {% if user.enabled is not defined or user.enabled %}checked{% endif %}>
+                                    <label class="form-check-label visually-hidden" for="user-enabled-{{ loop.index0 }}">Toggle {{ user.name }}</label>
+                                </div>
+                            </td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-outline-danger delete-user" 
+                                        data-user-id="{{ user.id }}" 
+                                        data-user-name="{{ user.name }}"
+                                        title="Delete User">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
+                                        <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                                        <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                        {%- endfor %}
+                    {%- else %}
+                    <tr>
+                        <td colspan="5" class="text-center text-muted">No users configured yet.</td>
+                    </tr>
+                    {%- endif %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="card" aria-labelledby="system-settings-heading">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#system-settings-body" aria-expanded="false" aria-controls="system-settings-body" style="text-decoration: none; color: inherit;">
+                <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+                <div>
+                    <h2 class="card-title mb-0" id="system-settings-heading">System Settings</h2>
+                    <small class="text-muted">Infrastructure and runtime options</small>
+                </div>
+            </button>
+            <a href="/docs#system-config" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                <i class="bi bi-info-circle"></i>
+            </a>
         </div>
         <div class="collapse card-body" id="system-settings-body">
             <div class="row g-4">
@@ -367,7 +475,7 @@
                                     <i class="bi bi-check-square me-1"></i>Select All
                                 </button>
                             </div>
-                            <div class="list-group" id="channels-checkboxes" style="max-height: 400px; overflow-y: auto;">
+                            <div class="list-group scrollable-list" id="channels-checkboxes">
                                 <!-- Channels will be populated here -->
                             </div>
                             <p class="text-muted small mt-3">Selected channels will be added with default settings (reaction threshold: 5, reply threshold: 3).</p>
@@ -394,7 +502,7 @@
                                     <i class="bi bi-check-square me-1"></i>Select All
                                 </button>
                             </div>
-                            <div class="list-group" id="users-checkboxes" style="max-height: 400px; overflow-y: auto;">
+                            <div class="list-group scrollable-list" id="users-checkboxes">
                                 <!-- Users will be populated here -->
                             </div>
                             <p class="text-muted small mt-3">Only messages from selected users will be monitored.</p>
@@ -424,22 +532,202 @@
     [aria-expanded="true"] .collapse-icon {
         transform: rotate(90deg);
     }
-    
-    /* Make card headers look clickable */
-    .card-header[data-bs-toggle="collapse"] {
-        user-select: none;
-    }
-    
-    .card-header[data-bs-toggle="collapse"]:hover {
-        background-color: rgba(var(--bs-primary-rgb), 0.05);
-    }
 </style>
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
     const form = document.getElementById("config-form");
-    const saveEndpoint = "{{ url_for('api_config_save') }}";
+    const saveEndpoint = "{{ url_for('config.api_config_save') }}";
+
+    /**
+     * Refresh the channels table by fetching the latest data from the API
+     * and re-rendering the table body. This avoids full page reloads.
+     */
+    async function refreshChannelsTable() {
+        try {
+            const response = await fetch("/api/config/channels");
+            if (!response.ok) {
+                throw new Error("Failed to fetch channels");
+            }
+            
+            const data = await response.json();
+            const channels = data.channels || [];
+            
+            // Get the table body
+            const tbody = document.querySelector("#channels-table tbody");
+            if (!tbody) {
+                console.error("Channels table body not found");
+                return;
+            }
+            
+            // Clear existing rows
+            tbody.innerHTML = "";
+            
+            // If no channels, show empty state
+            if (channels.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="9" class="text-center text-muted">No channels configured yet.</td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            // Render each channel
+            channels.forEach((channel, index) => {
+                const row = document.createElement("tr");
+                
+                // Determine button class based on chat_id (negative = group/channel, positive = user)
+                const buttonClass = channel.id < 0 ? "btn-info" : "btn-primary";
+                
+                row.innerHTML = `
+                    <td>
+                        <button type="button" class="btn btn-sm ${buttonClass} copy-chat-id" 
+                                data-chat-id="${channel.id}" 
+                                title="Copy ${channel.id}">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-clipboard" viewBox="0 0 16 16">
+                                <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/>
+                                <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/>
+                            </svg>
+                        </button>
+                    </td>
+                    <td>${escapeHtml(channel.name)}</td>
+                    <td>${escapeHtml((channel.vip_senders || []).join(', '))}</td>
+                    <td>${escapeHtml((channel.keywords || []).join(', '))}</td>
+                    <td>${channel.reaction_threshold || 5}</td>
+                    <td>${channel.reply_threshold || 3}</td>
+                    <td>${channel.rate_limit_per_hour || 10}</td>
+                    <td>
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" 
+                                   name="channel_enabled_${index}" 
+                                   type="checkbox" 
+                                   id="channel-enabled-${index}" 
+                                   data-chat-id="${channel.id}"
+                                   ${(channel.enabled === undefined || channel.enabled) ? 'checked' : ''}>
+                            <label class="form-check-label visually-hidden" for="channel-enabled-${index}">Toggle ${escapeHtml(channel.name)}</label>
+                        </div>
+                    </td>
+                    <td>
+                        <button type="button" class="btn btn-sm btn-outline-danger delete-channel" 
+                                data-chat-id="${channel.id}" 
+                                data-chat-name="${escapeHtml(channel.name)}"
+                                title="Delete Channel">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
+                                <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                                <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+                            </svg>
+                        </button>
+                    </td>
+                `;
+                
+                tbody.appendChild(row);
+            });
+            
+        } catch (error) {
+            console.error("Failed to refresh channels table:", error);
+            showToast("Could not refresh channels table", "error");
+        }
+    }
+    
+    /**
+     * Escape HTML special characters to prevent XSS
+     */
+    function escapeHtml(text) {
+        const map = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        };
+        return String(text).replace(/[&<>"']/g, m => map[m]);
+    }
+
+    /**
+     * Refresh the monitored users table by fetching the latest data from the API
+     * and re-rendering the table body. This avoids full page reloads.
+     */
+    async function refreshUsersTable() {
+        try {
+            const response = await fetch("/api/config/users");
+            if (!response.ok) {
+                throw new Error("Failed to fetch users");
+            }
+            
+            const data = await response.json();
+            const users = data.users || [];
+            
+            // Get the table body
+            const tbody = document.querySelector("#users-table tbody");
+            if (!tbody) {
+                console.error("Users table body not found");
+                return;
+            }
+            
+            // Clear existing rows
+            tbody.innerHTML = "";
+            
+            // If no users, show empty state
+            if (users.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="text-center text-muted">No users configured yet.</td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            // Render each user
+            users.forEach((user, index) => {
+                const row = document.createElement("tr");
+                
+                row.innerHTML = `
+                    <td>
+                        <button type="button" class="btn btn-sm btn-primary copy-user-id" 
+                                data-user-id="${user.id}" 
+                                title="Copy ${user.id}">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-clipboard" viewBox="0 0 16 16">
+                                <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/>
+                                <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/>
+                            </svg>
+                        </button>
+                    </td>
+                    <td>${escapeHtml(user.name)}</td>
+                    <td>${escapeHtml(user.username || '-')}</td>
+                    <td>
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" 
+                                   name="user_enabled_${index}" 
+                                   type="checkbox" 
+                                   id="user-enabled-${index}" 
+                                   data-user-id="${user.id}"
+                                   ${(user.enabled === undefined || user.enabled) ? 'checked' : ''}>
+                            <label class="form-check-label visually-hidden" for="user-enabled-${index}">Toggle ${escapeHtml(user.name)}</label>
+                        </div>
+                    </td>
+                    <td>
+                        <button type="button" class="btn btn-sm btn-outline-danger delete-user" 
+                                data-user-id="${user.id}" 
+                                data-user-name="${escapeHtml(user.name)}"
+                                title="Delete User">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
+                                <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                                <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+                            </svg>
+                        </button>
+                    </td>
+                `;
+                
+                tbody.appendChild(row);
+            });
+            
+        } catch (error) {
+            console.error("Failed to refresh users table:", error);
+            showToast("Could not refresh users table", "error");
+        }
+    }
 
     function collectPayload() {
         const payload = {};
@@ -529,7 +817,7 @@
             
             // Restart sentinel container to apply changes
             try {
-                const restartResponse = await fetch("{{ url_for('api_restart_sentinel') }}", {
+                const restartResponse = await fetch("{{ url_for('admin.restart_sentinel') }}", {
                     method: "POST",
                 });
                 
@@ -573,21 +861,112 @@
         });
         
         // Reauthentication button
-        document.getElementById("btn-reauth")?.addEventListener("click", () => {
-            showToast("Reauthentication initiated. Monitor logs for instructions.", "info");
+        document.getElementById("btn-reauth")?.addEventListener("click", async () => {
+            if (!confirm("This will log you out and require re-authentication. Continue?")) {
+                return;
+            }
+            
+            try {
+                const resp = await fetch("/session/relogin", { method: "POST" });
+                const data = await resp.json();
+                
+                if (!resp.ok) {
+                    throw new Error(data?.message || `HTTP ${resp.status}`);
+                }
+                
+                showToast("Session cleared. Redirecting to login...", "info");
+                
+                // Redirect to login after a brief delay
+                setTimeout(() => {
+                    window.location.href = "/login";
+                }, 1500);
+            } catch (e) {
+                console.error("Reauth error", e);
+                showToast("Failed to reauthenticate: " + e.message, "error");
+            }
         });
         
         // Test rules button
         document.getElementById("btn-test-rules")?.addEventListener("click", async () => {
             try {
-                const resp = await fetch("/api/config/rules/test", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({}) });
+                const resp = await fetch("/api/config/rules/test", { 
+                    method: "POST", 
+                    headers: {"Content-Type": "application/json"}, 
+                    body: JSON.stringify({}) 
+                });
                 const data = await resp.json();
+                
                 if (!resp.ok) throw new Error(data && data.message ? data.message : `HTTP ${resp.status}`);
+                
                 const tested = data?.tested ?? 0;
-                showToast(`Rules tested for ${tested} channel(s)`, "success");
+                const results = data?.results || [];
+                
+                // Create detailed results modal
+                let modalContent = `<div class="test-rules-results">`;
+                modalContent += `<p class="mb-3"><strong>Tested ${tested} channel(s)</strong></p>`;
+                
+                if (results.length === 0) {
+                    modalContent += `<p class="text-muted">No channels configured</p>`;
+                } else {
+                    results.forEach(result => {
+                        const hasMatches = result.matched_rules && result.matched_rules.length > 0;
+                        modalContent += `<div class="card mb-3">`;
+                        modalContent += `<div class="card-header">`;
+                        modalContent += `<strong>${result.channel_name}</strong> (ID: ${result.channel_id})`;
+                        modalContent += `</div>`;
+                        modalContent += `<div class="card-body">`;
+                        
+                        if (hasMatches) {
+                            modalContent += `<p class="text-success"><strong>Matched Keywords:</strong> ${result.matched_rules.join(", ")}</p>`;
+                        } else {
+                            modalContent += `<p class="text-muted">No matches found</p>`;
+                        }
+                        
+                        const diag = result.diagnostics || {};
+                        modalContent += `<div class="small text-muted mt-2">`;
+                        modalContent += `<div>Keywords: ${(diag.keywords || []).join(", ") || "none"}</div>`;
+                        modalContent += `<div>VIP Senders: ${(diag.vip_senders || []).join(", ") || "none"}</div>`;
+                        modalContent += `<div>Reaction Threshold: ${diag.reaction_threshold || 0}</div>`;
+                        modalContent += `<div>Reply Threshold: ${diag.reply_threshold || 0}</div>`;
+                        modalContent += `</div>`;
+                        modalContent += `</div></div>`;
+                    });
+                }
+                
+                modalContent += `</div>`;
+                
+                // Show in a Bootstrap modal
+                const existingModal = document.getElementById("testRulesModal");
+                if (existingModal) {
+                    existingModal.remove();
+                }
+                
+                const modalHtml = `
+                    <div class="modal fade" id="testRulesModal" tabindex="-1" aria-labelledby="testRulesModalLabel">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" id="testRulesModalLabel">Rule Test Results</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    ${modalContent}
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                document.body.insertAdjacentHTML("beforeend", modalHtml);
+                const modal = new bootstrap.Modal(document.getElementById("testRulesModal"));
+                modal.show();
+                
             } catch (e) {
                 console.error("Rules test error", e);
-                showToast("Failed to test rules", "error");
+                showToast("Failed to test rules: " + e.message, "error");
             }
         });
         // RESET STATS: best-effort clear of transient counters
@@ -643,7 +1022,7 @@
                 
                 // Restart sentinel container
                 try {
-                    const restartResponse = await fetch("{{ url_for('api_restart_sentinel') }}", {
+                    const restartResponse = await fetch("{{ url_for('admin.restart_sentinel') }}", {
                         method: "POST",
                     });
                     
@@ -690,7 +1069,7 @@
                 
                 // Restart sentinel container
                 try {
-                    const restartResponse = await fetch("{{ url_for('api_restart_sentinel') }}", {
+                    const restartResponse = await fetch("{{ url_for('admin.restart_sentinel') }}", {
                         method: "POST",
                     });
                     
@@ -716,7 +1095,7 @@
     
     async function loadCurrentConfig() {
         try {
-            const response = await fetch("{{ url_for('api_config_current') }}");
+            const response = await fetch("{{ url_for('config.api_config_current') }}");
             if (!response.ok) {
                 throw new Error("Failed to load configuration");
             }
@@ -948,7 +1327,7 @@
                 
                 // Get existing channel IDs
                 try {
-                    const configResponse = await fetch("{{ url_for('api_config_current') }}");
+                    const configResponse = await fetch("{{ url_for('config.api_config_current') }}");
                     if (configResponse.ok) {
                         const configData = await configResponse.json();
                         existingChannelIds = new Set((configData.channels || []).map(c => c.id));
@@ -958,7 +1337,7 @@
                 }
                 
                 try {
-                    const response = await fetch("{{ url_for('api_telegram_chats') }}");
+                    const response = await fetch("{{ url_for('telegram.api_telegram_chats') }}");
                     if (!response.ok) {
                         const errorData = await response.json().catch(() => ({}));
                         throw new Error(errorData.message || "Failed to fetch channels");
@@ -1048,7 +1427,7 @@
                 
                 // Add new channels
                 if (toAdd.length > 0) {
-                    const response = await fetch("{{ url_for('api_config_channels_add') }}", {
+                    const response = await fetch("{{ url_for('channels.add_channels') }}", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ channels: toAdd }),
@@ -1065,9 +1444,8 @@
                 
                 // Remove unchecked channels
                 if (toRemove.length > 0) {
-                    const deleteEndpointTemplate = "{{ url_for('api_config_channels_delete', chat_id='__CHAT_ID__') }}";
                     for (const channel of toRemove) {
-                        const deleteUrl = deleteEndpointTemplate.replace("__CHAT_ID__", encodeURIComponent(channel.id));
+                        const deleteUrl = `/api/config/channels/${encodeURIComponent(channel.id)}`;
                         const response = await fetch(deleteUrl, {
                             method: "DELETE",
                         });
@@ -1090,10 +1468,8 @@
                     modal.hide();
                 }
                 
-                // Reload page to show changes
-                setTimeout(() => {
-                    window.location.reload();
-                }, 1500);
+                // Refresh the channels table immediately
+                await refreshChannelsTable();
                 
             } catch (error) {
                 console.error("Failed to update channels:", error);
@@ -1327,10 +1703,8 @@
                         .then(data => {
                             showToast(`Channel "${chatName}" deleted successfully`, "success");
                             
-                            // Reload page to show updated channels
-                            setTimeout(() => {
-                                window.location.reload();
-                            }, 1500);
+                            // Refresh the channels table immediately
+                            refreshChannelsTable();
                         })
                         .catch(error => {
                             console.error("Failed to delete channel:", error);
@@ -1348,6 +1722,174 @@
                 }
             }
         });
+    }
+    
+    function initializeDeleteUserHandler() {
+        document.body.addEventListener("click", (e) => {
+            const deleteButton = e.target.closest(".delete-user");
+            if (deleteButton) {
+                const userId = deleteButton.dataset.userId;
+                const userName = deleteButton.dataset.userName;
+                
+                // Confirm deletion
+                if (confirm(`Are you sure you want to delete "${userName}" (ID: ${userId})?\n\nThis will remove the user from monitoring.`)) {
+                    // Disable button during deletion
+                    deleteButton.disabled = true;
+                    deleteButton.innerHTML = `
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    `;
+                    
+                    fetch(`/api/config/users/${userId}`, {
+                        method: "DELETE",
+                    })
+                        .then(response => {
+                            if (!response.ok) {
+                                return response.json().then(data => {
+                                    throw new Error(data.message || "Failed to delete user");
+                                });
+                            }
+                            return response.json();
+                        })
+                        .then(data => {
+                            showToast(`User "${userName}" deleted successfully`, "success");
+                            
+                            // Refresh the users table immediately
+                            refreshUsersTable();
+                        })
+                        .catch(error => {
+                            console.error("Failed to delete user:", error);
+                            showToast(error.message || "Could not delete user", "error");
+                            
+                            // Re-enable button
+                            deleteButton.disabled = false;
+                            deleteButton.innerHTML = `
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
+                                    <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                                    <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+                                </svg>
+                            `;
+                        });
+                }
+            }
+        });
+    }
+    
+    function initializeChannelEnabledToggleHandler() {
+        document.body.addEventListener("change", (e) => {
+            const toggle = e.target.closest("input[name^='channel_enabled_']");
+            if (toggle) {
+                const chatId = toggle.dataset.chatId;
+                
+                if (!chatId) {
+                    console.error("Could not determine chat_id for channel toggle");
+                    showToast("Failed to update channel: missing ID", "error");
+                    toggle.checked = !toggle.checked; // Rollback
+                    return;
+                }
+                
+                const enabled = toggle.checked;
+                const originalState = !enabled;
+                
+                // Disable toggle during request
+                toggle.disabled = true;
+                
+                fetch(`/api/config/channels/${chatId}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ enabled })
+                })
+                    .then(response => {
+                        if (!response.ok) {
+                            return response.json().then(data => {
+                                throw new Error(data.message || "Failed to update channel");
+                            });
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        showToast(`Channel ${enabled ? "enabled" : "disabled"}`, "success");
+                        toggle.disabled = false;
+                    })
+                    .catch(error => {
+                        console.error("Failed to update channel:", error);
+                        showToast(error.message || "Could not update channel", "error");
+                        
+                        // Rollback toggle state
+                        toggle.checked = originalState;
+                        toggle.disabled = false;
+                    });
+            }
+        });
+    }
+    
+    function initializeResetButtonHandler() {
+        // Override the default reset behavior to fetch from server
+        const resetButton = document.querySelector("button[type='reset']");
+        if (resetButton) {
+            resetButton.addEventListener("click", async (e) => {
+                e.preventDefault(); // Prevent default form reset
+                
+                if (!confirm("Reset all changes to current server configuration?")) {
+                    return;
+                }
+                
+                try {
+                    // Fetch current config from server
+                    const resp = await fetch("/api/config/current");
+                    if (!resp.ok) {
+                        throw new Error(`HTTP ${resp.status}`);
+                    }
+                    
+                    const config = await resp.json();
+                    
+                    // Populate form fields with server state
+                    if (config.telegram) {
+                        document.getElementById("phone-number").value = config.telegram.phone_number || "";
+                        document.getElementById("api-id").value = config.telegram.api_id || "";
+                        document.getElementById("api-hash").value = config.telegram.api_hash || "";
+                        document.getElementById("session-path").value = config.telegram.session || "";
+                    }
+                    
+                    if (config.alerts) {
+                        document.getElementById("alert-mode").value = config.alerts.mode || "dm";
+                        document.getElementById("target-channel").value = config.alerts.target_channel || "";
+                    }
+                    
+                    if (config.digest) {
+                        const digestSelect = document.getElementById("digest-frequency");
+                        if (digestSelect) {
+                            if (config.digest.hourly && config.digest.daily) {
+                                digestSelect.value = "both";
+                            } else if (config.digest.hourly) {
+                                digestSelect.value = "hourly";
+                            } else if (config.digest.daily) {
+                                digestSelect.value = "daily";
+                            } else {
+                                digestSelect.value = "hourly";
+                            }
+                        }
+                        document.getElementById("digest-top").value = config.digest.top_n || 10;
+                    }
+                    
+                    if (config.semantic) {
+                        document.getElementById("similarity-threshold").value = config.semantic.similarity_threshold || 0.42;
+                        document.getElementById("similarity-value").textContent = (config.semantic.similarity_threshold || 0.42).toFixed(2);
+                    }
+                    
+                    if (config.redis) {
+                        document.getElementById("redis-host").value = config.redis.host || "redis";
+                        document.getElementById("redis-port").value = config.redis.port || 6379;
+                    }
+                    
+                    // Additional fields can be added as needed
+                    
+                    showToast("Configuration reset to server state", "info");
+                } catch (error) {
+                    console.error("Failed to reset config:", error);
+                    showToast("Could not fetch server configuration", "error");
+                }
+            });
+        }
     }
     
     function initializeSelectAllChannelsHandler() {
@@ -1386,7 +1928,7 @@
         
         // Get existing monitored user IDs
         try {
-            const configResponse = await fetch("{{ url_for('api_config_current') }}");
+            const configResponse = await fetch("{{ url_for('config.api_config_current') }}");
             if (configResponse.ok) {
                 const configData = await configResponse.json();
                 existingUserIds = new Set((configData.monitored_users || []).map(u => u.id));
@@ -1396,7 +1938,7 @@
         }
         
         try {
-            const response = await fetch("{{ url_for('api_telegram_users') }}");
+            const response = await fetch("{{ url_for('telegram.api_telegram_users') }}");
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
                 // Throw a rich error payload instead of mutating Error object
@@ -1530,7 +2072,7 @@
                 
                 // Add new users
                 if (toAdd.length > 0) {
-                    const response = await fetch("{{ url_for('api_config_users_add') }}", {
+                    const response = await fetch("{{ url_for('users.add_users') }}", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ users: toAdd }),
@@ -1547,9 +2089,8 @@
                 
                 // Remove unchecked users
                 if (toRemove.length > 0) {
-                    const deleteEndpointTemplate = "{{ url_for('api_config_users_delete', user_id='__USER_ID__') }}";
                     for (const user of toRemove) {
-                        const deleteUrl = deleteEndpointTemplate.replace("__USER_ID__", encodeURIComponent(user.id));
+                        const deleteUrl = `/api/config/users/${encodeURIComponent(user.id)}`;
                         const response = await fetch(deleteUrl, {
                             method: "DELETE",
                         });
@@ -1577,10 +2118,8 @@
                     modal.hide();
                 }
                 
-                // Reload page to show new users
-                setTimeout(() => {
-                    window.location.reload();
-                }, 1500);
+                // Refresh users table (not channels table - users are separate)
+                await refreshUsersTable();
                 
             } catch (error) {
                 console.error("Failed to add users:", error);
@@ -1772,10 +2311,10 @@
     
     function initializeDeleteUserHandler() {
         document.body.addEventListener("click", (e) => {
-            const deleteButton = e.target.closest(".delete-user-btn");
+            const deleteButton = e.target.closest(".delete-user");
             if (deleteButton) {
                 const userId = deleteButton.dataset.userId;
-                const userName = deleteButton.closest("tr")?.querySelector("td:nth-child(2)")?.textContent || `User ${userId}`;
+                const userName = deleteButton.dataset.userName || `User ${userId}`;
                 
                 if (confirm(`Are you sure you want to remove "${userName}" from monitoring?\n\nMessages from this user will no longer be tracked.`)) {
                     deleteButton.disabled = true;
@@ -1853,7 +2392,7 @@
                 button.disabled = true;
                 button.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Cleaning...';
                 
-                const response = await fetch("{{ url_for('api_clean_database') }}", {
+                const response = await fetch("{{ url_for('admin.clean_database') }}", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                 });
@@ -1890,12 +2429,38 @@
         initializeChannelSearchHandler();
         initializeCopyChannelIdHandler();
         initializeDeleteChannelHandler();
+        initializeChannelEnabledToggleHandler();
+        initializeResetButtonHandler();
         initializeSelectAllChannelsHandler();
         initializeUserHandlers();
         initializeUsersSearchHandler();
         initializeCopyUserIdHandler();
         initializeDeleteUserHandler();
         initializeCleanDbHandler();
+        
+        // Handle Add Channels button - switch to channels tab when clicked
+        const btnAddChannels = document.getElementById("btn-add-channels");
+        if (btnAddChannels) {
+            btnAddChannels.addEventListener("click", () => {
+                const channelsTab = document.getElementById("channels-tab");
+                if (channelsTab) {
+                    const tab = new bootstrap.Tab(channelsTab);
+                    tab.show();
+                }
+            });
+        }
+        
+        // Handle Add Users button - switch to users tab when clicked
+        const btnAddUsers = document.getElementById("btn-add-users");
+        if (btnAddUsers) {
+            btnAddUsers.addEventListener("click", () => {
+                const usersTab = document.getElementById("users-tab");
+                if (usersTab) {
+                    const tab = new bootstrap.Tab(usersTab);
+                    tab.show();
+                }
+            });
+        }
         
         // Initialize Bootstrap tooltips
         const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');

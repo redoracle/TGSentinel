@@ -81,10 +81,6 @@
                         </div>
                     </div>
                 </div>
-                <div class="mt-4">
-                    <p class="text-muted mb-1">Last checkpoint</p>
-                    <p class="mb-0" id="health-checkpoint">{{ health.last_checkpoint | default('None detected') }}</p>
-                </div>
             </div>
         </article>
     </div>
@@ -99,7 +95,12 @@
                     </div>
                 </button>
                 <div class="d-flex align-items-center gap-3">
-                    <div class="live-toggle-container">
+                    <select class="form-select form-select-sm" id="activity-filter" style="width: auto;" title="Filter activity feed">
+                        <option value="all">All chats</option>
+                        <option value="monitored-channels">Monitored channels only</option>
+                        <option value="monitored-users">Monitored users only</option>
+                    </select>
+                    <div class="live-toggle-container" data-bs-toggle="tooltip" data-bs-placement="left" title="When ON, the feed automatically refreshes every 5 seconds to show new messages in real-time">
                         <label class="live-toggle-label" for="live-toggle-switch">
                             <span class="live-toggle-text">Live:</span>
                             <div class="live-toggle-switch" role="switch" aria-checked="false" tabindex="0" id="live-toggle-switch" data-live="false">
@@ -211,7 +212,7 @@
                 <small class="text-muted">Digest of the most recent escalations</small>
             </div>
         </button>
-        <a class="btn btn-outline-primary btn-sm" href="{{ url_for('alerts_view') }}" id="btn-view-all-alerts">View all</a>
+        <a class="btn btn-outline-primary btn-sm" href="{{ url_for('views.alerts') }}" id="btn-view-all-alerts">View all</a>
     </div>
     <div class="collapse" id="latestAlertsCollapse">
         <div class="card-body table-responsive">
@@ -252,10 +253,10 @@
 
 {% block extra_scripts %}
 <script>
-    const summaryUrl = "{{ url_for('api_dashboard_summary') }}";
-    const healthUrl = "{{ url_for('api_system_health') }}";
-    const activityUrl = "{{ url_for('api_dashboard_activity') }}";
-    const alertsUrl = "{{ url_for('api_recent_alerts') }}";
+    const summaryUrl = "{{ url_for('dashboard.dashboard_summary') }}";
+    const healthUrl = "{{ url_for('dashboard.system_health') }}";
+    const activityUrl = "{{ url_for('dashboard.dashboard_activity') }}";
+    const alertsUrl = "{{ url_for('dashboard.recent_alerts') }}";
 
     async function updateSummary() {
         try {
@@ -284,7 +285,6 @@
             document.getElementById("health-db-size").textContent = `${data.database_size_mb ?? 0} MB`;
             document.getElementById("health-cpu").textContent = `${data.cpu_percent ?? "N/A"}${data.cpu_percent != null ? "%" : ""}`;
             document.getElementById("health-memory").textContent = `${data.memory_mb ?? "N/A"}${data.memory_mb != null ? " MB" : ""}`;
-            document.getElementById("health-checkpoint").textContent = data.last_checkpoint || "None detected";
         } catch (error) {
             console.error(error);
         }
@@ -488,6 +488,83 @@
         });
     }
 
+    // Store raw activity data for filtering
+    let rawActivityData = [];
+    let monitoredChannelIds = new Set();
+    let monitoredUserIds = new Set();
+
+    // Load monitored channels and users from config
+    async function loadMonitoredEntities() {
+        try {
+            const response = await fetch('/api/config/current');
+            if (response.ok) {
+                const data = await response.json();
+                
+                // Load monitored channels
+                if (data.channels) {
+                    data.channels.forEach(ch => {
+                        if (ch.id) {
+                            // Handle both positive and negative chat IDs
+                            monitoredChannelIds.add(parseInt(ch.id));
+                        }
+                    });
+                }
+                
+                // Load monitored users
+                if (data.monitored_users) {
+                    data.monitored_users.forEach(user => {
+                        if (user.id) {
+                            monitoredUserIds.add(parseInt(user.id));
+                        }
+                    });
+                }
+                
+                console.log(`[Activity Filter] Loaded ${monitoredChannelIds.size} monitored channels, ${monitoredUserIds.size} monitored users`);
+            } else {
+                console.error('Failed to fetch config:', response.status);
+            }
+        } catch (error) {
+            console.error("Failed to load monitored entities:", error);
+        }
+    }
+
+    function filterActivityData(entries, filterType) {
+        if (filterType === 'all') {
+            return entries;
+        }
+
+        return entries.filter(entry => {
+            const chatId = entry.chat_id ? parseInt(entry.chat_id) : null;
+            const senderId = entry.sender_id ? parseInt(entry.sender_id) : null;
+
+            if (filterType === 'monitored-channels') {
+                // Telegram ID format: messages use negative IDs (-1001523176225)
+                // Config stores positive IDs (1523176225)
+                // Convert negative to positive: remove -100 prefix
+                let normalizedChatId = chatId;
+                if (chatId && chatId < 0) {
+                    // Convert -1001523176225 to 1523176225
+                    const chatIdStr = Math.abs(chatId).toString();
+                    if (chatIdStr.startsWith('100')) {
+                        normalizedChatId = parseInt(chatIdStr.substring(3));
+                    }
+                }
+                
+                // Check both formats
+                return chatId && (
+                    monitoredChannelIds.has(chatId) ||           // Direct match (negative)
+                    monitoredChannelIds.has(normalizedChatId)    // Normalized match (positive)
+                );
+            } else if (filterType === 'monitored-users') {
+                // Show messages FROM monitored users (sender_id) regardless of which chat
+                // This catches monitored users posting in ANY channel or group
+                return senderId && monitoredUserIds.has(senderId);
+            }
+
+            return false;
+        });
+    }
+
     async function updateActivity() {
         try {
             const response = await fetch(`${activityUrl}?limit=10`);
@@ -495,7 +572,14 @@
                 throw new Error("activity fetch failed");
             }
             const data = await response.json();
-            renderActivity(data.entries || []);
+            rawActivityData = data.entries || [];
+            
+            // Apply current filter
+            const filterSelect = document.getElementById('activity-filter');
+            const filterType = filterSelect ? filterSelect.value : 'all';
+            const filteredData = filterActivityData(rawActivityData, filterType);
+            
+            renderActivity(filteredData);
         } catch (error) {
             console.error(error);
         }
@@ -604,6 +688,33 @@
         stopCollapseOnButton("btn-refresh-health");
         stopCollapseOnButton("btn-view-all-alerts");
         stopCollapseOnContainer(".live-toggle-container");
+
+        // Initialize activity filter
+        const activityFilter = document.getElementById("activity-filter");
+        if (activityFilter) {
+            // Prevent filter dropdown from toggling collapse
+            activityFilter.addEventListener("click", (e) => {
+                e.stopPropagation();
+            });
+            
+            // Load monitored entities on page load
+            loadMonitoredEntities();
+            
+            // Handle filter change
+            activityFilter.addEventListener("change", () => {
+                const filteredData = filterActivityData(rawActivityData, activityFilter.value);
+                renderActivity(filteredData);
+                
+                // Save filter preference
+                localStorage.setItem("tgsentinel:activity-filter", activityFilter.value);
+            });
+            
+            // Restore saved filter preference
+            const savedFilter = localStorage.getItem("tgsentinel:activity-filter");
+            if (savedFilter) {
+                activityFilter.value = savedFilter;
+            }
+        }
 
         document.getElementById("btn-refresh-health")?.addEventListener("click", async (ev) => {
             const btn = ev.currentTarget;

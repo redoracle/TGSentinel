@@ -13,6 +13,9 @@ import yaml
 from tgsentinel.config import AlertsCfg, AppCfg, DigestCfg
 
 
+pytestmark = pytest.mark.integration
+
+
 @pytest.fixture
 def mock_config():
     """Create a mock configuration object."""
@@ -39,7 +42,17 @@ def mock_config():
 def app_client(mock_config):
     """Create a Flask test client with mocked dependencies."""
     ui_path = Path(__file__).parent.parent / "ui"
-    sys.path.insert(0, str(ui_path))
+    if str(ui_path) not in sys.path:
+        sys.path.insert(0, str(ui_path))
+
+    # Set test environment variables
+    os.environ["UI_DB_URI"] = "sqlite:///:memory:"
+    os.environ["UI_SECRET_KEY"] = "test-secret-key"
+
+    # Remove cached modules to force fresh import
+    for mod in list(sys.modules.keys()):
+        if mod.startswith(("app", "ui.")):
+            del sys.modules[mod]
 
     with patch("redis.Redis") as mock_redis:
         mock_redis_instance = MagicMock()
@@ -47,12 +60,26 @@ def app_client(mock_config):
         mock_redis_instance.xlen.return_value = 0
         mock_redis.return_value = mock_redis_instance
 
-        with patch("app.load_config", return_value=mock_config):
-            import app as flask_app  # type: ignore[import-not-found]
+        with patch("ui.app.load_config", return_value=mock_config):
+            import ui.app as flask_app
 
+            # Reset state before initialization to prevent route conflicts
+            flask_app.reset_for_testing()
+
+            flask_app.app.config["TESTING"] = True
+            flask_app.app.config["TGSENTINEL_CONFIG"] = mock_config
+
+            # Initialize app which registers all blueprints
             flask_app.init_app()
+
             with flask_app.app.test_client() as client:
                 yield client
+
+    # Cleanup
+    if "UI_DB_URI" in os.environ:
+        del os.environ["UI_DB_URI"]
+    if "UI_SECRET_KEY" in os.environ:
+        del os.environ["UI_SECRET_KEY"]
 
 
 @pytest.fixture
@@ -93,8 +120,8 @@ class TestTelegramChatsEndpoint:
         with app_client.session_transaction() as sess:
             sess["telegram_authenticated"] = True
 
-        with patch("app.redis_client") as mock_redis:
-            # Mock Redis request/response pattern
+        # Mock the module-level redis_client in telegram_routes (injected via init_blueprint)
+        with patch("ui.api.telegram_routes.redis_client") as mock_redis:
             response_data = json.dumps(
                 {
                     "status": "ok",
@@ -109,8 +136,8 @@ class TestTelegramChatsEndpoint:
                 }
             )
 
-            # Mock get() to return response on second call (first is cache check)
-            mock_redis.get.side_effect = [None, response_data]
+            # Mock get() to return response immediately (sentinel responded)
+            mock_redis.get.return_value = response_data
             mock_redis.setex.return_value = True
             mock_redis.delete.return_value = True
 
@@ -129,9 +156,11 @@ class TestTelegramChatsEndpoint:
         with app_client.session_transaction() as sess:
             sess["telegram_authenticated"] = True
 
-        with patch("app.redis_client", None):
+        # Set module-level redis_client to None
+        with patch("ui.api.telegram_routes.redis_client", None):
             response = app_client.get("/api/telegram/chats")
 
+            # When redis is None, returns 503
             assert response.status_code == 503
             data = json.loads(response.data)
             assert data["status"] == "error"
@@ -142,7 +171,7 @@ class TestTelegramChatsEndpoint:
         with app_client.session_transaction() as sess:
             sess["telegram_authenticated"] = True
 
-        with patch("app.redis_client") as mock_redis:
+        with patch("ui.api.telegram_routes.redis_client") as mock_redis:
             # Mock no response from sentinel (timeout scenario)
             mock_redis.get.return_value = None
             mock_redis.setex.return_value = True
@@ -150,6 +179,7 @@ class TestTelegramChatsEndpoint:
 
             response = app_client.get("/api/telegram/chats")
 
+            # When sentinel doesn't respond within 30s, we get 504
             assert response.status_code == 504
             data = json.loads(response.data)
             assert data["status"] == "error"
@@ -160,18 +190,19 @@ class TestTelegramChatsEndpoint:
         with app_client.session_transaction() as sess:
             sess["telegram_authenticated"] = True
 
-        with patch("app.redis_client") as mock_redis:
+        with patch("ui.api.telegram_routes.redis_client") as mock_redis:
             # Mock error response from sentinel
             error_data = json.dumps(
                 {"status": "error", "error": "Failed to fetch dialogs"}
             )
 
-            mock_redis.get.side_effect = [None, error_data]
+            mock_redis.get.return_value = error_data
             mock_redis.setex.return_value = True
             mock_redis.delete.return_value = True
 
             response = app_client.get("/api/telegram/chats")
 
+            # Sentinel errors return 500
             assert response.status_code == 500
             data = json.loads(response.data)
             assert data["status"] == "error"
@@ -182,7 +213,7 @@ class TestTelegramChatsEndpoint:
         with app_client.session_transaction() as sess:
             sess["telegram_authenticated"] = True
 
-        with patch("app.redis_client") as mock_redis:
+        with patch("ui.api.telegram_routes.redis_client") as mock_redis:
             # Mock Redis response with multiple chat types
             response_data = json.dumps(
                 {
@@ -204,7 +235,7 @@ class TestTelegramChatsEndpoint:
                 }
             )
 
-            mock_redis.get.side_effect = [None, response_data]
+            mock_redis.get.return_value = response_data
             mock_redis.setex.return_value = True
             mock_redis.delete.return_value = True
 
@@ -356,7 +387,7 @@ class TestAddChannelsEndpoint:
         assert data["status"] == "error"
 
     def test_add_channels_config_not_found(self, app_client, mock_config, monkeypatch):
-        """Test error when config file doesn't exist."""
+        """Test that config file is created if it doesn't exist."""
         with tempfile.TemporaryDirectory() as tmpdir:
             monkeypatch.chdir(tmpdir)
 
@@ -368,10 +399,15 @@ class TestAddChannelsEndpoint:
                 content_type="application/json",
             )
 
-            assert response.status_code == 404
+            # The endpoint creates the config file if it doesn't exist
+            assert response.status_code == 200
             data = json.loads(response.data)
-            assert data["status"] == "error"
-            assert "not found" in data["message"].lower()
+            assert data["status"] == "ok"
+            assert data["added"] == 1
+
+            # Verify config was created
+            config_path = Path(tmpdir) / "config" / "tgsentinel.yml"
+            assert config_path.exists()
 
     def test_add_channels_preserves_existing_config(
         self, app_client, mock_config, monkeypatch

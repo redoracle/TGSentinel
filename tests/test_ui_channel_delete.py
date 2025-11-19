@@ -40,6 +40,14 @@ def app_client(mock_config):
     ui_path = Path(__file__).parent.parent / "ui"
     sys.path.insert(0, str(ui_path))
 
+    # Set test environment variables
+    os.environ["UI_DB_URI"] = "sqlite:///:memory:"
+    os.environ["UI_SECRET_KEY"] = "test-secret-key"
+
+    # Remove cached app module to force fresh import
+    if "app" in sys.modules:
+        del sys.modules["app"]
+
     with patch("redis.Redis") as mock_redis:
         mock_redis_instance = MagicMock()
         mock_redis_instance.ping.return_value = True
@@ -49,9 +57,21 @@ def app_client(mock_config):
         with patch("app.load_config", return_value=mock_config):
             import app as flask_app  # type: ignore[import-not-found]
 
+            # Reset state before initialization to prevent route conflicts
+            flask_app.reset_for_testing()
+
+            flask_app.app.config["TESTING"] = True
+            flask_app.app.config["TGSENTINEL_CONFIG"] = mock_config
+
             flask_app.init_app()
             with flask_app.app.test_client() as client:
                 yield client
+
+    # Cleanup
+    if "UI_DB_URI" in os.environ:
+        del os.environ["UI_DB_URI"]
+    if "UI_SECRET_KEY" in os.environ:
+        del os.environ["UI_SECRET_KEY"]
 
 
 class TestDeleteChannelEndpoint:

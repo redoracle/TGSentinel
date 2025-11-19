@@ -1,3 +1,9 @@
+import pytest
+
+
+pytestmark = pytest.mark.contract
+
+
 def test_dashboard_controls_present(client):
     resp = client.get("/")
     assert resp.status_code == 200

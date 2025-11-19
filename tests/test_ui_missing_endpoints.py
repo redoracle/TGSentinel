@@ -23,15 +23,9 @@ import pytest
 import yaml
 
 # Import Flask app components
-from ui.app import app, init_app
 
 
-@pytest.fixture
-def client():
-    """Create test client."""
-    app.config["TESTING"] = True
-    with app.test_client() as client:
-        yield client
+pytestmark = pytest.mark.contract
 
 
 class TestAlertsCsvExport:

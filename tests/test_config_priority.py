@@ -37,6 +37,7 @@ def temp_config_file():
     Path(config_path).unlink(missing_ok=True)
 
 
+@pytest.mark.unit
 def test_env_vars_override_yaml_alerts(temp_config_file):
     """Test that ALERT_MODE and ALERT_CHANNEL env vars override YAML."""
     os.environ["TG_API_ID"] = "12345"

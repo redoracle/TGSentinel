@@ -2,62 +2,97 @@
 
 import json
 import os
+import sys
 from contextlib import contextmanager
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 
+pytestmark = pytest.mark.integration
+
+
 @contextmanager
 def mock_redis_client(mock_client):
-    """Context manager to temporarily replace redis_client in the app module."""
+    """Context manager to temporarily replace redis_client and deps.redis_client."""
+    # Import both ui.app (actual implementation) and ui.core (deps)
     import ui.app
+    from ui.core.dependencies import Dependencies
 
     original_redis = ui.app.redis_client
+    deps = Dependencies.get_instance()
+    original_deps_redis = deps.redis_client
+
+    # Replace both references
     ui.app.redis_client = mock_client
+    deps.redis_client = mock_client
+
     try:
         yield
     finally:
         ui.app.redis_client = original_redis
+        deps.redis_client = original_deps_redis
 
 
 def _make_app():
+    """Create a test Flask app with proper configuration."""
+    # Set test environment
     os.environ["UI_SECRET_KEY"] = "test-secret"
     os.environ["TG_API_ID"] = "123456"
     os.environ["TG_API_HASH"] = "hash"
-    os.environ["DB_URI"] = "sqlite:///:memory:"
+    os.environ["UI_DB_URI"] = "sqlite:///:memory:"
+
+    # Ensure ui module path is available
+    ui_path = Path(__file__).parent.parent / "ui"
+    if str(ui_path) not in sys.path:
+        sys.path.insert(0, str(ui_path))
+
+    # Remove cached modules to force fresh import
+    for mod in list(sys.modules.keys()):
+        if mod.startswith(("app", "ui.")):
+            del sys.modules[mod]
 
     # Mock config to return test values
-    cfg = MagicMock()
-    cfg.channels = []
-    cfg.db_uri = "sqlite:///:memory:"
-    cfg.redis = {"host": "localhost", "port": 6379, "stream": "tgsentinel:messages"}
-    cfg.api_id = 123456
-    cfg.api_hash = "hash"
+    from tgsentinel.config import AppCfg, AlertsCfg, DigestCfg
 
-    # Import and reset the app module (don't delete from sys.modules)
-    import ui.app
-    import app as flask_app  # type: ignore
+    cfg = AppCfg(
+        telegram_session="/tmp/test.session",
+        api_id=123456,
+        api_hash="hash",
+        alerts=AlertsCfg(
+            mode="both",
+            target_channel="@test_bot",
+            digest=DigestCfg(hourly=True, daily=True, top_n=10),
+        ),
+        channels=[],
+        monitored_users=[],
+        interests=[],
+        redis={"host": "localhost", "port": 6379, "stream": "tgsentinel:messages"},
+        db_uri="sqlite:///:memory:",
+        embeddings_model="all-MiniLM-L6-v2",
+        similarity_threshold=0.42,
+    )
 
-    # Reset module state for test isolation
-    ui.app.reset_for_testing()
+    with patch("redis.Redis") as mock_redis:
+        mock_redis_instance = MagicMock()
+        mock_redis_instance.ping.return_value = True
+        mock_redis.return_value = mock_redis_instance
 
-    # Temporarily patch config and Redis during initialization
-    original_config = ui.app.config
-    ui.app.config = cfg
+        with patch("ui.app.load_config", return_value=cfg):
+            import ui.app as flask_app
 
-    # Patch Redis to avoid real connection attempts
-    with patch("ui.app.redis") as mock_redis_module:
-        mock_redis_class = MagicMock()
-        mock_client = MagicMock()
-        mock_client.ping = MagicMock(return_value=True)
-        mock_redis_class.Redis.return_value = mock_client
-        mock_redis_module.Redis = mock_redis_class.Redis
+            # Reset module state for test isolation
+            flask_app.reset_for_testing()
 
-        ui.app.init_app()
+            flask_app.app.config["TESTING"] = True
+            flask_app.app.config["TGSENTINEL_CONFIG"] = cfg
 
-    # Return the app for testing
-    return flask_app.app
+            # Initialize app to register blueprints
+            flask_app.init_app()
+
+            # Return the app for testing
+            return flask_app.app
 
 
 def _mock_redis_for_auth(response_data, context_data=None):
@@ -102,6 +137,7 @@ def test_login_start_requires_phone(missing_field):
 
     with mock_redis_client(mock_redis_instance):
         resp = client.post("/api/session/login/start", json=payload)
+        data = resp.get_json()
         assert resp.status_code == (400 if missing_field else 200)
         if missing_field:
             # Should not attempt Redis operations when field is missing
@@ -109,7 +145,7 @@ def test_login_start_requires_phone(missing_field):
         else:
             # Should successfully submit auth request when phone is present
             mock_redis_instance.rpush.assert_called_once()
-            assert resp.json["status"] == "ok"
+            assert data["status"] == "ok"
 
 
 def test_login_start_sends_code_and_stores_context():
@@ -159,9 +195,10 @@ def test_login_verify_success_sets_session_and_clears_context():
         {"status": "ok", "message": "Authenticated"}, {"phone_code_hash": "abc123"}
     )
 
+    # Patch in blueprint module where function is used after injection
     with (
         mock_redis_client(mock_redis),
-        patch("ui.app._wait_for_worker_authorization", return_value=True),
+        patch("ui.routes.session._wait_for_worker_authorization", return_value=True),
     ):
         resp = client.post(
             "/api/session/login/verify",
@@ -180,8 +217,9 @@ def test_relogin_and_logout_ok():
     app = _make_app()
     client = app.test_client()
 
+    # Patch in blueprint module where function is used after injection
     with patch(
-        "ui.app._invalidate_session", return_value={"file_removed": True}
+        "ui.routes.session._invalidate_session", return_value={"file_removed": True}
     ) as inv:
         r1 = client.post("/api/session/relogin")
         assert r1.status_code == 200

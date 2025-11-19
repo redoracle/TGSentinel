@@ -339,7 +339,7 @@ Keep these under backup:
 - `config/webhooks.yml`: webhook configurations (if used)
 - `data/tgsentinel.session`: Telegram session file
 - `data/sentinel.db`: alerts and feedback history
-- `data/profiles.json`: interest profiles
+- `data/profiles.yml`: interest profiles (YAML format)
 - `data/alert_profiles.json`: alert profiles
 
 ### Housekeeping

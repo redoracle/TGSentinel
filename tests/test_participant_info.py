@@ -7,6 +7,9 @@ import pytest
 from redis import Redis
 
 
+pytestmark = pytest.mark.integration
+
+
 @pytest.fixture
 def mock_config():
     """Mock configuration with channels."""
@@ -62,6 +65,9 @@ def app_with_channels(mock_config):
 
         flask_app.app.config["TESTING"] = True
         flask_app.app.config["TGSENTINEL_CONFIG"] = test_config
+
+        # Initialize app to register blueprints
+        flask_app.init_app()
 
         yield flask_app.app
 

@@ -14,6 +14,9 @@ import pytest
 from tgsentinel.config import AlertsCfg, AppCfg, DigestCfg
 
 
+pytestmark = pytest.mark.contract
+
+
 @pytest.fixture
 def mock_config():
     return AppCfg(
