@@ -12,12 +12,10 @@ import pytest
 import yaml
 from cryptography.fernet import Fernet
 
-
 pytestmark = pytest.mark.integration
 
 
 from cryptography.fernet import Fernet
-
 
 pytestmark = pytest.mark.integration
 
@@ -116,51 +114,6 @@ class TestWebhookTesting:
                         "timed out" in data["message"].lower()
                         or "timeout" in data["message"].lower()
                     )
-
-    @pytest.mark.skip(
-        reason="Webhook secret encryption needs proper reload of developer_routes module"
-    )
-    def test_test_webhook__with_secret__includes_signature(
-        self, client, mock_init, webhook_secret_key
-    ):
-        """Test webhook delivery includes HMAC signature when secret is configured."""
-        from cryptography.fernet import Fernet
-
-        # Encrypt the secret with the same key the app will use
-        cipher = Fernet(webhook_secret_key.encode())
-        encrypted_secret = cipher.encrypt(b"my-secret-key").decode()
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            webhooks_path = Path(tmpdir) / "webhooks.yml"
-            webhook_data = {
-                "webhooks": [
-                    {
-                        "service": "secure",
-                        "url": "https://example.com/webhook",
-                        "secret": encrypted_secret,  # Use encrypted secret
-                        "enabled": True,
-                    }
-                ]
-            }
-
-            with open(webhooks_path, "w") as f:
-                yaml.dump(webhook_data, f)
-
-            mock_response = Mock()
-            mock_response.status_code = 200
-            mock_response.elapsed.total_seconds.return_value = 0.1
-
-            with patch("ui.app.Path", return_value=webhooks_path):
-                with patch("requests.post", return_value=mock_response) as mock_post:
-                    response = client.post("/api/webhooks/secure/test")
-
-                    assert response.status_code == 200
-
-                    # Verify signature header was included
-                    call_args = mock_post.call_args
-                    headers = call_args[1]["headers"]
-                    assert "X-Webhook-Signature" in headers
-                    assert headers["X-Webhook-Signature"].startswith("sha256=")
 
     def test_test_all_webhooks__multiple_services__returns_all_results(
         self, client, mock_init

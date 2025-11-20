@@ -100,13 +100,16 @@ def test_session_info_endpoint_returns_identity():
     assert "avatar" in data
     assert "phone_masked" in data
     assert "authorized" in data
-    
+
     # When not authorized, should return fallback values
     # (This tests the contract, not implementation details)
+
+
 def test_logout_removes_identity_from_redis():
     """Test that logout removes user_info and avatar from Redis."""
     app = _make_app()
-    from ui.app import _invalidate_session, redis_client as original_redis
+    from ui.app import _invalidate_session
+    from ui.app import redis_client as original_redis
 
     mock_redis = MagicMock()
     mock_redis.delete.return_value = 1
@@ -186,7 +189,8 @@ def test_fallback_when_redis_unavailable():
 def test_avatar_path_formats():
     """Test that both avatar path formats are supported."""
     app = _make_app()
-    from ui.app import _load_cached_user_info, redis_client as original_redis
+    from ui.app import _load_cached_user_info
+    from ui.app import redis_client as original_redis
 
     test_cases = [
         "/api/avatar/user/123",  # Avatar from Redis via API

@@ -32,7 +32,6 @@ if str(SRC_PATH) not in sys.path:
 
 from ui.app import _validate_config_payload
 
-
 pytestmark = pytest.mark.integration
 
 
@@ -266,6 +265,7 @@ def test_populate_history_no_extra_fields():
 def test_database_indexes_created():
     """Test that required indexes are created in the database."""
     from sqlalchemy import text
+
     from tgsentinel.store import init_db
 
     # Create in-memory database
@@ -310,41 +310,7 @@ def test_indexes_are_idempotent():
 
 
 # ============================================================================
-# Test 5: Sentinel Restart Fallback
-# ============================================================================
-
-
-@pytest.mark.skip(reason="Flask app setup issues with multiple requests")
-@patch("app.init_db")
-@patch("app.redis")
-@patch("subprocess.run")
-def test_sentinel_restart_docker_compose_with_hyphen(
-    mock_run, mock_redis_module, mock_init_db
-):
-    """Test /api/sentinel/restart uses 'docker-compose' command."""
-    pass
-
-
-@pytest.mark.skip(reason="Flask app setup issues with multiple requests")
-@patch("app.init_db")
-@patch("app.redis")
-@patch("subprocess.run")
-def test_sentinel_restart_timeout_handling(mock_run, mock_redis_module, mock_init_db):
-    """Test /api/sentinel/restart handles timeout gracefully."""
-    pass
-
-
-@pytest.mark.skip(reason="Flask app setup issues with multiple requests")
-@patch("app.init_db")
-@patch("app.redis")
-@patch("subprocess.run")
-def test_sentinel_restart_command_not_found(mock_run, mock_redis_module, mock_init_db):
-    """Test /api/sentinel/restart handles missing docker-compose."""
-    pass
-
-
-# ============================================================================
-# Test 6: Integration Tests
+# Test 5: Integration Tests
 # ============================================================================
 
 

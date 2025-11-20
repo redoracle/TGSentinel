@@ -5,8 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tgsentinel.config import AlertsCfg, AppCfg, DigestCfg, SystemCfg, RedisCfg
-
+from tgsentinel.config import AlertsCfg, AppCfg, DigestCfg, RedisCfg, SystemCfg
 
 pytestmark = [pytest.mark.integration, pytest.mark.contract]
 

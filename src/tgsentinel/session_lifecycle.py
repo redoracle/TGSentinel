@@ -16,7 +16,8 @@ from typing import Any, Callable, Coroutine, Optional, Union
 
 from redis import Redis
 from telethon import TelegramClient
-from telethon.tl.types import User as TgUser, UserProfilePhoto
+from telethon.tl.types import User as TgUser
+from telethon.tl.types import UserProfilePhoto
 
 from .config import AppCfg
 from .redis_operations import RedisManager

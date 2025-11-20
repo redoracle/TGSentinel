@@ -1,6 +1,7 @@
 """Test digest trigger annotations formatting."""
 
 import json
+
 import pytest
 
 from tgsentinel.digest import format_alert_triggers

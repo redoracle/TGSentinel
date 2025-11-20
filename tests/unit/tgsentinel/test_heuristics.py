@@ -150,6 +150,8 @@ class TestRunHeuristics:
             keywords=["security"],
             react_thr=5,
             reply_thr=5,
+            importance_keywords=["important"],
+            security_keywords=["security"],
         )
         assert result.important is True
         assert len(result.reasons) >= 4
@@ -159,7 +161,7 @@ class TestRunHeuristics:
         assert "replies" in result.reasons
         assert "keywords" in result.reasons
         # New scoring: mention(2.0) + vip(1.0) + reactions(0.5) + replies(0.5) +
-        # importance keyword(1.0) + security(1.5) + keywords(0.5) = 6.9+
+        # importance keyword(0.9) + security(1.2) + keywords(0.8) = 6.9+
         assert result.pre_score >= 5.0  # Flexible threshold for accumulated score
 
     def test_no_triggers_not_important(self):

@@ -10,43 +10,43 @@ import json
 import logging
 import os
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict
-from datetime import datetime, timedelta, timezone
 
 from redis import Redis
 from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError
 from telethon.sessions import SQLiteSession
 
+from .api import (
+    set_config,
+    set_engine,
+    set_redis_client,
+    set_sentinel_state,
+    start_api_server,
+)
+from .auth_manager import AUTH_QUEUE_KEY, AUTH_RESPONSE_HASH, AuthManager
+from .cache_manager import channels_users_cache_refresher
 from .client import make_client, start_ingestion
 from .config import load_config
 from .digest import send_digest
 from .logging_setup import setup_logging
 from .metrics import dump, initialize_build_info
-from .store import init_db
-from .worker import process_loop
-from .api import (
-    start_api_server,
-    set_sentinel_state,
-    set_redis_client,
-    set_config,
-    set_engine,
-)
 from .participant_info import fetch_participant_info
-from .auth_manager import AuthManager, AUTH_QUEUE_KEY, AUTH_RESPONSE_HASH
-from .cache_manager import channels_users_cache_refresher
-from .session_manager import relogin_coordinator, session_persistence_handler
 from .redis_operations import RedisManager
-from .shutdown_coordinator import ShutdownCoordinator
 from .session_helpers import SessionHelpers
 from .session_lifecycle import SessionLifecycleManager
+from .session_manager import relogin_coordinator, session_persistence_handler
+from .shutdown_coordinator import ShutdownCoordinator
+from .store import init_db
 from .telegram_request_handlers import (
     ParticipantInfoHandler,
     TelegramChatsHandler,
     TelegramDialogsHandler,
     TelegramUsersHandler,
 )
+from .worker import process_loop
 from .worker_orchestrator import WorkerOrchestrator
 
 

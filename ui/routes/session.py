@@ -262,6 +262,8 @@ def session_upload():
                 try:
                     session["telegram_authenticated"] = True
                     session.permanent = True
+                    # Set unlocked flag to bypass UI lock after successful authentication
+                    session["ui_has_been_unlocked"] = True
                 except Exception:
                     pass
 
@@ -877,6 +879,8 @@ def session_login_verify():
 
         session["telegram_authenticated"] = True
         session.permanent = True
+        # Set unlocked flag to bypass UI lock after successful authentication
+        session["ui_has_been_unlocked"] = True
 
         return jsonify(
             {"status": "ok", "message": "Authenticated", "redirect": "/alerts"}

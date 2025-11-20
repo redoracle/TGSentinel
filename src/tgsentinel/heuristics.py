@@ -18,141 +18,9 @@ def content_hash(text: str) -> str:
     return hashlib.sha256((text or "").encode("utf-8")).hexdigest()
 
 
-# Default keyword patterns for comprehensive detection
-DEFAULT_ACTION_KEYWORDS = [
-    "can you",
-    "could you",
-    "please",
-    "need you to",
-    "would you",
-    "I need",
-    "we need",
-    "urgent request",
-    "asap",
-    "immediately",
-    "confirm",
-    "appointment",
-    "meeting",
-    "schedule",
-    "deadline",
-]
-
-DEFAULT_DECISION_KEYWORDS = [
-    "poll",
-    "vote",
-    "voting",
-    "proposal",
-    "approved",
-    "rejected",
-    "decision",
-    "consensus",
-    "agreement",
-    "resolution",
-    "policy change",
-    "new rule",
-    "updated procedure",
-    "governance",
-]
-
-DEFAULT_URGENCY_KEYWORDS = [
-    "urgent",
-    "emergency",
-    "critical",
-    "immediate",
-    "asap",
-    "now",
-    "breaking",
-    "alert",
-    "warning",
-    "attention required",
-]
-
-DEFAULT_IMPORTANCE_KEYWORDS = [
-    "important",
-    "crucial",
-    "essential",
-    "significant",
-    "must read",
-    "heads up",
-    "fyi",
-    "please note",
-    "be aware",
-    "you should know",
-    "update:",
-    "notice:",
-    "announcement:",
-]
-
-DEFAULT_RELEASE_KEYWORDS = [
-    "release",
-    "version",
-    "update available",
-    "new release",
-    "changelog",
-    "released",
-    "launch",
-    "deployment",
-    "rollout",
-    "new version",
-    "version released",
-]
-
-DEFAULT_SECURITY_KEYWORDS = [
-    "cve",
-    "vulnerability",
-    "exploit",
-    "security",
-    "breach",
-    "hack",
-    "compromised",
-    "alert",
-    "patch",
-    "fix",
-    "advisory",
-    "zero-day",
-    "malware",
-    "phishing",
-    "scam",
-]
-
-DEFAULT_RISK_KEYWORDS = [
-    "danger",
-    "risk",
-    "problem",
-    "issue",
-    "bug",
-    "error",
-    "failure",
-    "down",
-    "outage",
-    "incident",
-    "complaint",
-    "escalation",
-    "legal",
-    "lawsuit",
-    "violation",
-    "banned",
-    "suspended",
-]
-
-DEFAULT_OPPORTUNITY_KEYWORDS = [
-    "invitation",
-    "invite",
-    "opportunity",
-    "opening",
-    "position",
-    "hiring",
-    "job",
-    "beta",
-    "early access",
-    "exclusive",
-    "limited",
-    "offer",
-    "discount",
-    "free",
-    "giveaway",
-    "contest",
-]
+# Note: Default keyword lists have been removed.
+# Keywords must be explicitly configured via profiles in config/profiles.yml
+# or directly on channel/user rules in config/tgsentinel.yml
 
 
 @functools.lru_cache(maxsize=128)
@@ -320,8 +188,8 @@ def run_heuristics(
             reasons.append("direct-question")
             score += 1.2
 
-    # Action keywords detection
-    action_kw = action_keywords if action_keywords else DEFAULT_ACTION_KEYWORDS
+    # Action keywords detection (only if keywords are configured)
+    action_kw = action_keywords if action_keywords else []
     matched = _find_matched_keywords(text, action_kw)
     if matched:
         reasons.append("action-required")
@@ -329,7 +197,7 @@ def run_heuristics(
         trigger_annotations["action"] = matched
 
     # === CATEGORY 2: Decisions, Voting, and Direction Changes ===
-    decision_kw = decision_keywords if decision_keywords else DEFAULT_DECISION_KEYWORDS
+    decision_kw = decision_keywords if decision_keywords else []
     matched = _find_matched_keywords(text, decision_kw)
     if matched:
         reasons.append("decision")
@@ -337,16 +205,14 @@ def run_heuristics(
         trigger_annotations["decision"] = matched
 
     # === CATEGORY 4: Urgency & Importance Indicators ===
-    urgency_kw = urgency_keywords if urgency_keywords else DEFAULT_URGENCY_KEYWORDS
+    urgency_kw = urgency_keywords if urgency_keywords else []
     matched = _find_matched_keywords(text, urgency_kw)
     if matched:
         reasons.append("urgent")
         score += 1.5  # High priority
         trigger_annotations["urgency"] = matched
 
-    importance_kw = (
-        importance_keywords if importance_keywords else DEFAULT_IMPORTANCE_KEYWORDS
-    )
+    importance_kw = importance_keywords if importance_keywords else []
     matched = _find_matched_keywords(text, importance_kw)
     if matched:
         reasons.append("important")
@@ -354,14 +220,14 @@ def run_heuristics(
         trigger_annotations["importance"] = matched
 
     # === CATEGORY 5: Project & Interest Updates ===
-    release_kw = release_keywords if release_keywords else DEFAULT_RELEASE_KEYWORDS
+    release_kw = release_keywords if release_keywords else []
     matched = _find_matched_keywords(text, release_kw)
     if matched:
         reasons.append("release")
         score += 0.8
         trigger_annotations["release"] = matched
 
-    security_kw = security_keywords if security_keywords else DEFAULT_SECURITY_KEYWORDS
+    security_kw = security_keywords if security_keywords else []
     matched = _find_matched_keywords(text, security_kw)
     if matched:
         reasons.append("security")
@@ -380,7 +246,7 @@ def run_heuristics(
         score += 0.7
 
     # === CATEGORY 8: Risk or Incident Messages ===
-    risk_kw = risk_keywords if risk_keywords else DEFAULT_RISK_KEYWORDS
+    risk_kw = risk_keywords if risk_keywords else []
     matched = _find_matched_keywords(text, risk_kw)
     if matched:
         reasons.append("risk")
@@ -388,9 +254,7 @@ def run_heuristics(
         trigger_annotations["risk"] = matched
 
     # === CATEGORY 9: Opportunity Messages ===
-    opportunity_kw = (
-        opportunity_keywords if opportunity_keywords else DEFAULT_OPPORTUNITY_KEYWORDS
-    )
+    opportunity_kw = opportunity_keywords if opportunity_keywords else []
     matched = _find_matched_keywords(text, opportunity_kw)
     if matched:
         reasons.append("opportunity")

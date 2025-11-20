@@ -21,7 +21,6 @@ import pytest
 from flask import Flask
 from flask_socketio import SocketIOTestClient
 
-
 pytestmark = pytest.mark.e2e
 
 
@@ -91,7 +90,7 @@ def app_with_socketio(mock_redis, test_config_file):
 
         try:
             with patch("ui.app.redis_client", mock_redis):
-                from ui.app import app, socketio, init_app
+                from ui.app import app, init_app, socketio
 
                 init_app()
                 app.config["TESTING"] = True

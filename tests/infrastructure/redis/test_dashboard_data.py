@@ -15,7 +15,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 import redis
 
-
 pytestmark = pytest.mark.integration
 
 

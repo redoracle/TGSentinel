@@ -5,9 +5,9 @@ Check current Telegram rate limit status.
 Usage:
     python tools/check_rate_limit.py
 """
+import json
 import os
 import sys
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 

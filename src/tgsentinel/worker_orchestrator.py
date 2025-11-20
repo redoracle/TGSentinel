@@ -79,40 +79,54 @@ class WorkerOrchestrator:
 
     async def periodic_digest(self) -> None:
         """Send hourly digests periodically."""
+        # Only run if hourly digests are enabled
+        if not self.cfg.alerts.digest.hourly:
+            log.info("[DIGEST] Hourly digests disabled, worker sleeping")
+            while True:
+                await asyncio.sleep(3600)  # Check config every hour in case it changes
+                if self.cfg.alerts.digest.hourly:
+                    break
+
         while True:
-            if self.cfg.alerts.digest.hourly:
-                await self.handshake_gate.wait()
-                log.info("Sending hourly digest...")
-                current_client = self.client_ref()
-                await send_digest(
-                    self.engine,
-                    current_client,
-                    since_hours=1,
-                    top_n=self.cfg.alerts.digest.top_n,
-                    mode=self.cfg.alerts.mode,
-                    channel=self.cfg.alerts.target_channel,
-                    channels_config=self.cfg.channels,
-                    min_score=0.0,
-                )
+            await self.handshake_gate.wait()
+            log.info("Sending hourly digest...")
+            current_client = self.client_ref()
+            await send_digest(
+                self.engine,
+                current_client,
+                since_hours=1,
+                top_n=self.cfg.alerts.digest.top_n,
+                mode=self.cfg.alerts.mode,
+                channel=self.cfg.alerts.target_channel,
+                channels_config=self.cfg.channels,
+                min_score=0.0,
+            )
             await asyncio.sleep(3600)  # Every hour
 
     async def daily_digest(self) -> None:
         """Send daily digests periodically."""
+        # Only run if daily digests are enabled
+        if not self.cfg.alerts.digest.daily:
+            log.info("[DIGEST] Daily digests disabled, worker sleeping")
+            while True:
+                await asyncio.sleep(86400)  # Check config every 24h in case it changes
+                if self.cfg.alerts.digest.daily:
+                    break
+
         while True:
-            if self.cfg.alerts.digest.daily:
-                await self.handshake_gate.wait()
-                log.info("Sending daily digest...")
-                current_client = self.client_ref()
-                await send_digest(
-                    self.engine,
-                    current_client,
-                    since_hours=24,
-                    top_n=self.cfg.alerts.digest.top_n,
-                    mode=self.cfg.alerts.mode,
-                    channel=self.cfg.alerts.target_channel,
-                    channels_config=self.cfg.channels,
-                    min_score=0.0,
-                )
+            await self.handshake_gate.wait()
+            log.info("Sending daily digest...")
+            current_client = self.client_ref()
+            await send_digest(
+                self.engine,
+                current_client,
+                since_hours=24,
+                top_n=self.cfg.alerts.digest.top_n,
+                mode=self.cfg.alerts.mode,
+                channel=self.cfg.alerts.target_channel,
+                channels_config=self.cfg.channels,
+                min_score=0.0,
+            )
             await asyncio.sleep(86400)  # Every 24 hours
 
     async def metrics_logger(self) -> None:

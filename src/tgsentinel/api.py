@@ -23,9 +23,9 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from flask import Flask, jsonify, request, Response
+from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
-from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import text
 
 logger = logging.getLogger("tgsentinel.api")
@@ -1212,8 +1212,9 @@ def create_api_app() -> Flask:
             # Run VACUUM in background thread
             def run_vacuum_background():
                 try:
-                    from .store import vacuum_database
                     from pathlib import Path
+
+                    from .store import vacuum_database
 
                     logger.info(
                         f"[VACUUM-JOB-{job_id}] Starting database VACUUM (maintenance mode)"
@@ -1727,6 +1728,7 @@ def create_api_app() -> Flask:
         """Update configuration on Sentinel (single source of truth)."""
         try:
             import yaml
+
             from tgsentinel.config import load_config
 
             if not request.is_json:

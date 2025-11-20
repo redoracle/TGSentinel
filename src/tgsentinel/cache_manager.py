@@ -12,7 +12,9 @@ from typing import Callable, Optional
 
 from redis import Redis
 from telethon import TelegramClient
-from telethon.tl.types import Channel, Chat as TgChat, User
+from telethon.tl.types import Channel
+from telethon.tl.types import Chat as TgChat
+from telethon.tl.types import User
 
 logger = logging.getLogger(__name__)
 

@@ -5,9 +5,10 @@ in the two-layer architecture.
 """
 
 import json
-import pytest
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
 
 
 @pytest.fixture
@@ -48,7 +49,8 @@ def mock_profile_service():
 def app_with_profiles(mock_profile_service):
     """Flask app with profiles routes initialized."""
     from flask import Flask
-    from ui.routes.profiles import profiles_bp, init_profiles_routes
+
+    from ui.routes.profiles import init_profiles_routes, profiles_bp
 
     app = Flask(__name__)
     app.config["TESTING"] = True
@@ -322,7 +324,8 @@ def test_get_profile_usage(app_with_profiles, mock_profile_service):
 def test_api_requires_json_content_type():
     """Test that API endpoints reject non-JSON requests."""
     from flask import Flask
-    from ui.routes.profiles import profiles_bp, init_profiles_routes
+
+    from ui.routes.profiles import init_profiles_routes, profiles_bp
 
     app = Flask(__name__)
     app.config["TESTING"] = True

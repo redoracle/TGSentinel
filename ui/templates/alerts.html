@@ -132,40 +132,6 @@
     </div>
 </section>
 
-<section class="row g-4">
-    <div class="col-12">
-        <article class="card" aria-labelledby="quick-actions-heading">
-            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
-                <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#quick-actions-body" aria-expanded="true" aria-controls="quick-actions-body" style="text-decoration: none; color: inherit;">
-                    <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
-                    <div>
-                        <h2 class="card-title mb-0" id="quick-actions-heading">Quick Actions</h2>
-                        <small class="text-muted">Bulk operations on alerts and channels</small>
-                    </div>
-                </button>
-                <a href="/docs#quick-actions" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
-                    <i class="bi bi-info-circle"></i>
-                </a>
-            </div>
-            <div class="collapse show card-body" id="quick-actions-body">
-                <div class="d-grid gap-3">
-                    <button class="btn btn-outline-primary btn-action" type="button" data-action="mute">Mute Selected Channel</button>
-                    <button class="btn btn-outline-primary btn-action" type="button" data-action="lower-threshold">Lower Importance Threshold</button>
-                    <button class="btn btn-outline-primary btn-action" type="button" data-action="whitelist">Whitelist Sender</button>
-                </div>
-                <div class="mt-4">
-                    <label class="form-label" for="threshold-slider">Adjust score threshold (0.0 - 10.0)</label>
-                    <input type="range" class="form-range" id="threshold-slider" min="0" max="10" step="0.1" value="5.0">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <p class="text-muted small mb-0">Current: <span id="threshold-value">5.0</span></p>
-                        <button class="btn btn-primary btn-sm" type="button" id="btn-save-threshold">Save</button>
-                    </div>
-                </div>
-            </div>
-        </article>
-    </div>
-</section>
-
 <!-- Channel Quick Actions Modal -->
 <div class="modal fade" id="channelActionsModal" tabindex="-1" aria-labelledby="channelActionsModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">

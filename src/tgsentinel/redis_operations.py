@@ -11,7 +11,6 @@ from typing import Any, Dict, List, Optional
 
 from redis import Redis
 
-
 # Redis key constants
 WORKER_STATUS_KEY = "tgsentinel:worker_status"
 USER_INFO_KEY = "tgsentinel:user_info"

@@ -149,7 +149,9 @@ async def fetch_participant_info(
         # Try to fetch extended chat information (description, permissions, pinned message)
         try:
             if info["chat"]["type"] in {"channel", "supergroup"}:
-                from telethon.tl.functions.channels import GetFullChannelRequest  # type: ignore
+                from telethon.tl.functions.channels import (
+                    GetFullChannelRequest,  # type: ignore
+                )
 
                 full = await client(
                     GetFullChannelRequest(channel=chat)  # type: ignore[arg-type]
@@ -173,7 +175,9 @@ async def fetch_participant_info(
                     if inv is not None:
                         info["chat"]["invite_link"] = getattr(inv, "link", None)
             elif info["chat"]["type"] in {"group", "chat"}:
-                from telethon.tl.functions.messages import GetFullChatRequest  # type: ignore
+                from telethon.tl.functions.messages import (
+                    GetFullChatRequest,  # type: ignore
+                )
 
                 full = await client(GetFullChatRequest(chat_id))
                 if full:
@@ -292,7 +296,9 @@ async def fetch_participant_info(
 
                 # Fetch full user info for additional details (about/bio, common chats, etc.)
                 try:
-                    from telethon.tl.functions.users import GetFullUserRequest  # type: ignore
+                    from telethon.tl.functions.users import (
+                        GetFullUserRequest,  # type: ignore
+                    )
 
                     full_user = await client(GetFullUserRequest(user))  # type: ignore[arg-type]
                     if full_user:
@@ -316,7 +322,9 @@ async def fetch_participant_info(
                 # Try to get participant-specific info (role, join date, etc.)
                 # This only works for groups/supergroups/channels where we have permission
                 try:
-                    from telethon.tl.functions.channels import GetParticipantRequest  # type: ignore
+                    from telethon.tl.functions.channels import (
+                        GetParticipantRequest,  # type: ignore
+                    )
 
                     participant_result = await client(
                         GetParticipantRequest(  # type: ignore[misc,arg-type]

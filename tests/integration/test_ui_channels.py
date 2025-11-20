@@ -12,7 +12,6 @@ import yaml
 
 from tgsentinel.config import AlertsCfg, AppCfg, DigestCfg, RedisCfg, SystemCfg
 
-
 pytestmark = pytest.mark.integration
 
 
@@ -126,6 +125,7 @@ class TestTelegramChatsEndpoint:
         # The route was already initialized with a mock redis client from app_client fixture
         # We need to set up proper cache data
         from unittest.mock import MagicMock
+
         import ui.api.telegram_routes as telegram_routes_module
 
         original_redis = telegram_routes_module.redis_client
@@ -288,40 +288,3 @@ class TestTelegramChatsEndpoint:
             assert len(data["chats"]) >= 1
         finally:
             telegram_routes_module.redis_client = original_redis
-
-
-@pytest.mark.skip(
-    reason="Tests require Sentinel API connection which is not available in test environment"
-)
-class TestAddChannelsEndpoint:
-    """Tests for /api/config/channels/add endpoint."""
-
-    def test_add_channels_success(self, app_client, mock_config, monkeypatch):
-        """Test successfully adding channels to config."""
-        pass
-
-    def test_add_channels_skip_duplicates(self, app_client, mock_config, monkeypatch):
-        """Test that duplicate channels are skipped."""
-        pass
-
-    def test_add_channels_invalid_json(self, app_client, mock_config):
-        """Test error with invalid JSON."""
-        pass
-
-    def test_add_channels_missing_channels_array(self, app_client, mock_config):
-        """Test error when channels array is missing."""
-        pass
-
-    def test_add_channels_empty_array(self, app_client, mock_config):
-        """Test error when channels array is empty."""
-        pass
-
-    def test_add_channels_config_not_found(self, app_client, mock_config, monkeypatch):
-        """Test that config file is created if it doesn't exist."""
-        pass
-
-    def test_add_channels_preserves_existing_config(
-        self, app_client, mock_config, monkeypatch
-    ):
-        """Test that adding channels preserves other config sections."""
-        pass

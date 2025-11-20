@@ -56,12 +56,22 @@ async def process_stream_message(
 ) -> bool:
     rid = _to_int(payload["chat_id"])
     rule = rules.get(rid)
-    vip = set(rule.vip_senders) if rule else set()
+
+    # Early exit: Skip processing for unmonitored channels
+    # Only process messages from channels that have explicit rules configured
+    # Private chats (positive IDs) are already filtered in client.py based on monitored_users
+    if not rule:
+        log.debug(
+            "Skipping message from unmonitored channel %s (no rule configured)", rid
+        )
+        return False
+
+    vip = set(rule.vip_senders)
     msg_id = _to_int(payload["msg_id"])
 
     # Resolve profiles for this channel (if using two-layer architecture)
     resolved_profile = None
-    if rule and profile_resolver:
+    if profile_resolver:
         resolved_profile = profile_resolver.resolve_for_channel(rule)
 
     # Use resolved keywords or fallback to legacy rule keywords
@@ -82,20 +92,21 @@ async def process_stream_message(
         detect_polls = resolved_profile.detect_polls
     else:
         # Fallback to legacy rule keywords (backward compatibility)
-        keywords = rule.keywords if rule else []
-        action_keywords = rule.action_keywords if rule else None
-        decision_keywords = rule.decision_keywords if rule else None
-        urgency_keywords = rule.urgency_keywords if rule else None
-        importance_keywords = rule.importance_keywords if rule else None
-        release_keywords = rule.release_keywords if rule else None
-        security_keywords = rule.security_keywords if rule else None
-        risk_keywords = rule.risk_keywords if rule else None
-        opportunity_keywords = rule.opportunity_keywords if rule else None
-        detect_codes = rule.detect_codes if rule else True
-        detect_documents = rule.detect_documents if rule else True
-        prioritize_pinned = rule.prioritize_pinned if rule else True
-        prioritize_admin = rule.prioritize_admin if rule else True
-        detect_polls = rule.detect_polls if rule else True
+        # Note: rule is guaranteed to exist at this point due to early exit above
+        keywords = rule.keywords
+        action_keywords = rule.action_keywords
+        decision_keywords = rule.decision_keywords
+        urgency_keywords = rule.urgency_keywords
+        importance_keywords = rule.importance_keywords
+        release_keywords = rule.release_keywords
+        security_keywords = rule.security_keywords
+        risk_keywords = rule.risk_keywords
+        opportunity_keywords = rule.opportunity_keywords
+        detect_codes = rule.detect_codes
+        detect_documents = rule.detect_documents
+        prioritize_pinned = rule.prioritize_pinned
+        prioritize_admin = rule.prioritize_admin
+        detect_polls = rule.detect_polls
 
     # Detect if this is a private chat (positive ID) or reply to current user
     is_private = rid > 0
@@ -144,8 +155,8 @@ async def process_stream_message(
         replies=_to_int(payload.get("replies", 0)),
         vip=vip,
         keywords=keywords,
-        react_thr=(rule.reaction_threshold if rule else 0),
-        reply_thr=(rule.reply_threshold if rule else 0),
+        react_thr=rule.reaction_threshold,
+        reply_thr=rule.reply_threshold,
         # Enhanced metadata
         is_private=is_private,
         is_reply_to_user=is_reply_to_user,

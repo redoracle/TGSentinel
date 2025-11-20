@@ -8,7 +8,6 @@ from redis import Redis
 
 from tgsentinel.config import AlertsCfg, AppCfg, RedisCfg, SystemCfg
 
-
 pytestmark = pytest.mark.integration
 
 
@@ -262,8 +261,9 @@ class TestParticipantInfoAPI:
 
     def test_worker_request_processing(self, app, client):
         """Test that API waits for worker to process request."""
-        from core import get_deps
         import time
+
+        from core import get_deps
 
         call_count = [0]
 
@@ -305,16 +305,6 @@ class TestParticipantInfoAPI:
         finally:
             deps.redis_client = original_redis
             time.sleep = original_sleep
-
-    @pytest.mark.skip(reason="Test expectations don't match current implementation")
-    def test_fallback_when_worker_timeout(self, app, client):
-        """Test fallback response when worker doesn't respond in time."""
-        pass
-
-    @pytest.mark.skip(reason="Test expectations don't match current implementation")
-    def test_fallback_when_redis_unavailable(self, app, client):
-        """Test fallback response when Redis is not available."""
-        pass
 
 
 class TestParticipantDataStructures:
@@ -893,9 +883,6 @@ class TestAvatarFunctionality:
             return False
 
         mock_redis.exists.side_effect = exists_side_effect
-
-        # Skip test - implementation doesn't include avatar_url in activity feed
-        pytest.skip("Avatar URL not implemented in activity feed")
 
     def test_avatar_with_bytes_response(self, app, client):
         """Test handling of avatar URL when Redis returns bytes."""

@@ -2,12 +2,12 @@ import asyncio
 import json
 import logging
 import os
+from pathlib import Path
 
 from redis import Redis
 from telethon import TelegramClient, events
 
 from .config import AppCfg
-from pathlib import Path
 
 log = logging.getLogger(__name__)
 
@@ -379,7 +379,8 @@ def start_ingestion(cfg: AppCfg, client, r: Redis) -> None:
 
                 # Cache chat type for better UI display
                 try:
-                    from telethon.tl.types import Channel, Chat as TgChat
+                    from telethon.tl.types import Channel
+                    from telethon.tl.types import Chat as TgChat
 
                     chat_type = "unknown"
                     if isinstance(chat, Channel):

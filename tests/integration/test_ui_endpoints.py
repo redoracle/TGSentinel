@@ -9,7 +9,6 @@ import pytest
 
 from tgsentinel.config import AlertsCfg, AppCfg, DigestCfg, RedisCfg, SystemCfg
 
-
 pytestmark = [pytest.mark.integration, pytest.mark.contract]
 
 

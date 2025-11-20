@@ -9,7 +9,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 pytestmark = pytest.mark.integration
 
 
@@ -54,7 +53,7 @@ def _make_app():
             del sys.modules[mod]
 
     # Mock config to return test values
-    from tgsentinel.config import AppCfg, AlertsCfg, DigestCfg, RedisCfg, SystemCfg
+    from tgsentinel.config import AlertsCfg, AppCfg, DigestCfg, RedisCfg, SystemCfg
 
     cfg = AppCfg(
         telegram_session="/tmp/test.session",

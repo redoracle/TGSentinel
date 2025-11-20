@@ -21,7 +21,6 @@ from tgsentinel.config import (
 )
 from tgsentinel.heuristics import HeuristicResult
 
-
 pytestmark = pytest.mark.integration
 
 

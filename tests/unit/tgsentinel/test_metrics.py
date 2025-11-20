@@ -6,13 +6,13 @@ import pytest
 
 import tgsentinel.metrics as metrics
 from tgsentinel.metrics import (
+    alerts_generated_total,
+    alerts_sent_total,
     dump,
+    feedback_submitted_total,
     inc,
     messages_ingested_total,
     messages_processed_total,
-    alerts_generated_total,
-    alerts_sent_total,
-    feedback_submitted_total,
 )
 
 # Ensure tests can operate even if the metrics implementation doesn't expose

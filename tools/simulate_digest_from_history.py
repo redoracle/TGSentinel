@@ -44,7 +44,6 @@ from tgsentinel.heuristics import run_heuristics
 from tgsentinel.semantic import load_interests, score_text
 from tgsentinel.store import init_db, mark_alerted, upsert_message
 
-
 log = logging.getLogger("simulate_digest")
 
 

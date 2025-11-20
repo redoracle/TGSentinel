@@ -1170,12 +1170,13 @@ def init_app() -> None:
                     )
                 return None
 
-            # HTML page routes - require authentication
-            if is_session_missing or (worker_auth is False):
-                return render_template("locked.html"), 401
-
+            # HTML page routes - check UI lock first, then authentication
+            # This ensures the lockout screen takes precedence over the login screen
             if is_locked:
                 return render_template("locked_ui.html"), 423
+
+            if is_session_missing or (worker_auth is False):
+                return render_template("locked.html"), 401
 
             return None
 
@@ -1263,10 +1264,11 @@ def _ensure_init(func: Callable[..., Any]) -> Callable[..., Any]:
                         or path.startswith("/data/")
                         or path == "/favicon.ico"
                     ):
-                        if is_session_missing or (worker_auth is False):
-                            return _rt("locked.html"), 401
+                        # Check UI lock first, then authentication
                         if is_locked:
                             return _rt("locked_ui.html"), 423
+                        if is_session_missing or (worker_auth is False):
+                            return _rt("locked.html"), 401
         except Exception:
             pass
         return func(*args, **kwargs)
