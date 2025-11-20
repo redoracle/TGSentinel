@@ -5,6 +5,7 @@ Handles interactive console commands for administrative operations.
 """
 
 import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -168,52 +169,58 @@ def api_console_command():
 
     # Command: vacuum
     if command.lower() == "vacuum":
-        # Run VACUUM on UI SQLite database to reclaim space and optimize
+        # Proxy VACUUM request to Sentinel database
         try:
-            from database import get_ui_db
+            import requests
 
-            # Get or initialize UI database
-            ui_db = get_ui_db()
-
-            # Get database size before VACUUM
-            db_path = ui_db.db_path
-            size_before = 0
-            try:
-                size_before = (
-                    Path(db_path).stat().st_size if Path(db_path).exists() else 0
-                )
-            except Exception:
-                pass
-
-            # Execute VACUUM on UI database
-            conn = ui_db.connect()
-            conn.execute("VACUUM")
-            conn.commit()
-
-            # Get database size after VACUUM
-            size_after = 0
-            try:
-                size_after = (
-                    Path(db_path).stat().st_size if Path(db_path).exists() else 0
-                )
-            except Exception:
-                pass
-
-            reclaimed_mb = (size_before - size_after) / (1024 * 1024)
-            logger.info("UI Database VACUUM completed. Reclaimed %.2f MB", reclaimed_mb)
-
-            return jsonify(
-                {
-                    "status": "accepted",
-                    "command": command,
-                    "message": f"Database optimized. Reclaimed {reclaimed_mb:.2f} MB",
-                    "size_before_mb": size_before / (1024 * 1024),
-                    "size_after_mb": size_after / (1024 * 1024),
-                    "reclaimed_mb": reclaimed_mb,
-                }
+            sentinel_api_url = os.getenv(
+                "SENTINEL_API_BASE_URL", "http://sentinel:8080/api"
             )
+
+            # Forward VACUUM request to Sentinel
+            response = requests.post(
+                f"{sentinel_api_url}/database/vacuum",
+                timeout=120,  # VACUUM can take time
+            )
+
+            if response.ok:
+                data = response.json()
+                if data.get("status") == "ok":
+                    result = data.get("data", {})
+                    reclaimed_mb = result.get("reclaimed_mb", 0)
+                    logger.info(
+                        "Sentinel database VACUUM completed via proxy. Reclaimed %.2f MB",
+                        reclaimed_mb,
+                    )
+                    return jsonify(
+                        {
+                            "status": "accepted",
+                            "command": command,
+                            "message": f"Database optimized. Reclaimed {reclaimed_mb:.2f} MB",
+                            "size_before_mb": result.get("size_before_mb", 0),
+                            "size_after_mb": result.get("size_after_mb", 0),
+                        }
+                    )
+                else:
+                    error_msg = data.get("error", "Unknown error from Sentinel")
+                    logger.error(f"Sentinel VACUUM failed: {error_msg}")
+                    return jsonify({"status": "error", "message": error_msg}), 500
+            else:
+                logger.error(
+                    f"Sentinel VACUUM request failed: HTTP {response.status_code}"
+                )
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Sentinel request failed: {response.status_code}",
+                        }
+                    ),
+                    502,
+                )
+
         except Exception as exc:
-            logger.error("VACUUM failed: %s", exc)
+            logger.error("VACUUM proxy failed: %s", exc)
             return jsonify({"status": "error", "message": str(exc)}), 500
 
     # Command: /reload config

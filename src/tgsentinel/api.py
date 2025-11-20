@@ -16,13 +16,16 @@ import os
 import sqlite3
 import tempfile
 import threading
+import time as time_module
 import uuid
 from datetime import datetime, timedelta, timezone
+from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 from sqlalchemy import text
 
 logger = logging.getLogger("tgsentinel.api")
@@ -39,6 +42,56 @@ _sentinel_state: Dict[str, Any] = {
 _redis_client: Any = None
 _config: Any = None
 _engine: Any = None
+
+# Track vacuum jobs (job_id -> status)
+_vacuum_jobs: Dict[str, Dict[str, Any]] = {}
+_vacuum_jobs_lock = threading.Lock()
+
+
+def require_admin_auth(f):
+    """Decorator to require admin/operator authentication for sensitive endpoints.
+
+    Checks for X-Admin-Token header matching ADMIN_TOKEN environment variable.
+    """
+
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        admin_token = os.getenv("ADMIN_TOKEN", "")
+
+        # If no admin token configured, reject all requests
+        if not admin_token:
+            logger.warning("Admin endpoint accessed but ADMIN_TOKEN not configured")
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "data": None,
+                        "error": "Admin authentication not configured. Set ADMIN_TOKEN environment variable.",
+                    }
+                ),
+                503,
+            )
+
+        # Check request header
+        provided_token = request.headers.get("X-Admin-Token", "")
+        if not provided_token or provided_token != admin_token:
+            logger.warning(
+                f"Unauthorized admin endpoint access from {request.remote_addr}"
+            )
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "data": None,
+                        "error": "Unauthorized. Valid X-Admin-Token header required.",
+                    }
+                ),
+                401,
+            )
+
+        return f(*args, **kwargs)
+
+    return decorated_function
 
 
 def set_sentinel_state(key: str, value: Any):
@@ -138,6 +191,43 @@ def create_api_app() -> Flask:
     import logging as flask_logging
 
     flask_logging.getLogger("werkzeug").setLevel(logging.WARNING)
+
+    @app.route("/metrics", methods=["GET"])
+    def metrics():
+        """Prometheus metrics endpoint.
+
+        Returns metrics in Prometheus text format for scraping.
+        """
+        from tgsentinel import metrics as metrics_module
+
+        # Update current state gauges before export
+        metrics_module.worker_authorized.set(
+            1 if _sentinel_state.get("authorized") else 0
+        )
+        metrics_module.worker_connected.set(
+            1 if _sentinel_state.get("connected") else 0
+        )
+
+        # Update database message count if engine available
+        if _engine:
+            try:
+                with _engine.begin() as con:
+                    result = con.execute(text("SELECT COUNT(*) FROM messages"))
+                    count = result.scalar() or 0
+                    metrics_module.db_messages_current.set(count)
+            except Exception as e:
+                logger.debug(f"Could not update db_messages_current metric: {e}")
+
+        # Update Redis stream depth if client available
+        if _redis_client:
+            try:
+                depth = _redis_client.xlen("tgsentinel:messages")
+                metrics_module.redis_stream_depth.set(depth)
+            except Exception as e:
+                logger.debug(f"Could not update redis_stream_depth metric: {e}")
+
+        # Generate Prometheus text format
+        return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
 
     @app.route("/api/health", methods=["GET"])
     def health():
@@ -1002,54 +1092,617 @@ def create_api_app() -> Flask:
                 500,
             )
 
+    @app.route("/api/database/vacuum", methods=["POST"])
+    @require_admin_auth
+    def vacuum_database_endpoint():
+        """Run VACUUM on Sentinel database to reclaim space and optimize.
+
+        **REQUIRES ADMIN AUTHENTICATION** via X-Admin-Token header.
+
+        **WARNING**: This is a maintenance operation that:
+        - Requires exclusive DB access (blocks all writes)
+        - Needs up to 2x database size in temporary disk space
+        - Should only be run during scheduled maintenance windows
+        - Can take several minutes on large databases
+
+        Returns 202 Accepted immediately and runs VACUUM in background.
+        Use GET /api/database/vacuum/status/{job_id} to check progress.
+
+        Query Parameters:
+            maintenance_window: Must be "true" to acknowledge maintenance mode
+
+        Returns:
+            JSON with job_id for tracking vacuum progress
+        """
+        if _engine is None:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "data": None,
+                        "error": "Database not available",
+                    }
+                ),
+                503,
+            )
+
+        # Require explicit maintenance window acknowledgment
+        maintenance_ack = request.args.get("maintenance_window", "").lower()
+        if maintenance_ack != "true":
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "data": None,
+                        "error": "VACUUM requires maintenance_window=true parameter to acknowledge exclusive DB access and potential downtime",
+                    }
+                ),
+                400,
+            )
+
+        # Check Redis availability for distributed locking
+        if not _redis_client:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "data": None,
+                        "error": "Redis not available for distributed locking",
+                    }
+                ),
+                503,
+            )
+
+        # Try to acquire distributed lock (prevent concurrent VACUUMs)
+        lock_key = "tgsentinel:vacuum:lock"
+        lock_acquired = False
+
+        try:
+            # Try to acquire lock with 4-hour timeout (max expected VACUUM duration)
+            lock_acquired = _redis_client.set(
+                lock_key,
+                f"vacuum-{uuid.uuid4()}",
+                nx=True,  # Only set if not exists
+                ex=14400,  # 4 hour timeout
+            )
+
+            if not lock_acquired:
+                # Check if lock is stale
+                ttl = _redis_client.ttl(lock_key)
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "data": None,
+                            "error": f"VACUUM already in progress or lock held. TTL: {ttl}s. Wait or manually clear lock if stale.",
+                        }
+                    ),
+                    409,  # Conflict
+                )
+
+            # Get database path
+            db_url = str(_engine.url)
+            if not db_url.startswith("sqlite:///"):
+                _redis_client.delete(lock_key)  # Release lock
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "data": None,
+                            "error": "VACUUM only supported for SQLite databases",
+                        }
+                    ),
+                    400,
+                )
+
+            db_path = db_url.replace("sqlite:///", "")
+
+            # Create job tracking
+            job_id = str(uuid.uuid4())
+            job_info = {
+                "job_id": job_id,
+                "status": "running",
+                "started_at": datetime.now(timezone.utc).isoformat(),
+                "progress": "Starting VACUUM operation...",
+            }
+
+            with _vacuum_jobs_lock:
+                _vacuum_jobs[job_id] = job_info
+
+            # Run VACUUM in background thread
+            def run_vacuum_background():
+                try:
+                    from .store import vacuum_database
+                    from pathlib import Path
+
+                    logger.info(
+                        f"[VACUUM-JOB-{job_id}] Starting database VACUUM (maintenance mode)"
+                    )
+
+                    # Get size before
+                    size_before = 0
+                    try:
+                        if Path(db_path).exists():
+                            size_before = Path(db_path).stat().st_size
+                            with _vacuum_jobs_lock:
+                                _vacuum_jobs[job_id]["size_before_mb"] = size_before / (
+                                    1024 * 1024
+                                )
+                                _vacuum_jobs[job_id][
+                                    "progress"
+                                ] = f"Database size: {size_before / (1024 * 1024):.2f} MB. Running VACUUM..."
+                    except Exception as e:
+                        logger.warning(
+                            f"[VACUUM-JOB-{job_id}] Could not get size before: {e}"
+                        )
+
+                    # Run VACUUM with timeout monitoring
+                    start_time = time_module.time()
+                    vacuum_stats = vacuum_database(_engine)
+                    duration = time_module.time() - start_time
+
+                    # Get size after
+                    size_after = 0
+                    reclaimed_bytes = 0
+                    try:
+                        if Path(db_path).exists():
+                            size_after = Path(db_path).stat().st_size
+                            reclaimed_bytes = size_before - size_after
+                    except Exception as e:
+                        logger.warning(
+                            f"[VACUUM-JOB-{job_id}] Could not get size after: {e}"
+                        )
+
+                    reclaimed_mb = reclaimed_bytes / (1024 * 1024)
+
+                    if vacuum_stats["success"]:
+                        logger.info(
+                            f"[VACUUM-JOB-{job_id}] VACUUM completed in {duration:.2f}s, reclaimed {reclaimed_mb:.2f} MB"
+                        )
+                        with _vacuum_jobs_lock:
+                            _vacuum_jobs[job_id].update(
+                                {
+                                    "status": "completed",
+                                    "completed_at": datetime.now(
+                                        timezone.utc
+                                    ).isoformat(),
+                                    "duration_seconds": duration,
+                                    "size_before_mb": size_before / (1024 * 1024),
+                                    "size_after_mb": size_after / (1024 * 1024),
+                                    "reclaimed_mb": reclaimed_mb,
+                                    "progress": "VACUUM completed successfully",
+                                }
+                            )
+                    else:
+                        error_msg = vacuum_stats.get("error", "Unknown error")
+                        logger.error(
+                            f"[VACUUM-JOB-{job_id}] VACUUM failed: {error_msg}"
+                        )
+                        with _vacuum_jobs_lock:
+                            _vacuum_jobs[job_id].update(
+                                {
+                                    "status": "failed",
+                                    "completed_at": datetime.now(
+                                        timezone.utc
+                                    ).isoformat(),
+                                    "error": error_msg,
+                                    "progress": f"VACUUM failed: {error_msg}",
+                                }
+                            )
+
+                except Exception as e:
+                    logger.error(
+                        f"[VACUUM-JOB-{job_id}] VACUUM exception: {e}", exc_info=True
+                    )
+                    with _vacuum_jobs_lock:
+                        _vacuum_jobs[job_id].update(
+                            {
+                                "status": "failed",
+                                "completed_at": datetime.now(timezone.utc).isoformat(),
+                                "error": str(e),
+                                "progress": f"VACUUM failed with exception: {str(e)}",
+                            }
+                        )
+                finally:
+                    # Always release lock
+                    try:
+                        _redis_client.delete(lock_key)
+                        logger.info(f"[VACUUM-JOB-{job_id}] Released VACUUM lock")
+                    except Exception as e:
+                        logger.error(
+                            f"[VACUUM-JOB-{job_id}] Failed to release lock: {e}"
+                        )
+
+            # Start background thread
+            vacuum_thread = threading.Thread(
+                target=run_vacuum_background,
+                name=f"VACUUM-{job_id[:8]}",
+                daemon=True,
+            )
+            vacuum_thread.start()
+
+            logger.info(
+                f"[VACUUM-JOB-{job_id}] VACUUM job accepted and started in background"
+            )
+
+            return (
+                jsonify(
+                    {
+                        "status": "accepted",
+                        "data": {
+                            "job_id": job_id,
+                            "message": "VACUUM operation started in background",
+                            "status_url": f"/api/database/vacuum/status/{job_id}",
+                        },
+                        "error": None,
+                    }
+                ),
+                202,  # Accepted
+            )
+
+        except Exception as e:
+            # Release lock on error
+            if lock_acquired:
+                try:
+                    _redis_client.delete(lock_key)
+                except Exception:
+                    pass
+
+            logger.error(f"Failed to initiate VACUUM: {e}", exc_info=True)
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "data": None,
+                        "error": f"Failed to initiate VACUUM: {str(e)}",
+                    }
+                ),
+                500,
+            )
+
+    @app.route("/api/database/vacuum/status/<job_id>", methods=["GET"])
+    @require_admin_auth
+    def vacuum_status_endpoint(job_id):
+        """Get status of a VACUUM job.
+
+        **REQUIRES ADMIN AUTHENTICATION** via X-Admin-Token header.
+
+        Returns:
+            JSON with job status, progress, and results if completed
+        """
+        with _vacuum_jobs_lock:
+            # Cleanup old jobs to prevent unbounded memory growth
+            _cleanup_vacuum_jobs()
+
+            job_info = _vacuum_jobs.get(job_id)
+
+        if not job_info:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "data": None,
+                        "error": "Job not found",
+                    }
+                ),
+                404,
+            )
+
+        return (
+            jsonify(
+                {
+                    "status": "ok",
+                    "data": job_info,
+                    "error": None,
+                }
+            ),
+            200,
+        )
+
+    def _cleanup_vacuum_jobs():
+        """Clean up old vacuum jobs from memory.
+
+        Removes jobs that are:
+        - Finished more than 24 hours ago
+        - Beyond the maximum retention count (keeps 100 most recent)
+
+        **MUST be called while holding _vacuum_jobs_lock**
+        """
+        if not _vacuum_jobs:
+            return
+
+        now = datetime.now(timezone.utc)
+        cutoff_time = now - timedelta(hours=24)
+
+        # Phase 1: Remove jobs older than 24 hours
+        jobs_to_remove = []
+        for job_id, job_info in _vacuum_jobs.items():
+            finished_at = job_info.get("finished_at")
+            if finished_at:
+                try:
+                    finished_dt = datetime.fromisoformat(
+                        finished_at.replace("Z", "+00:00")
+                    )
+                    if finished_dt < cutoff_time:
+                        jobs_to_remove.append(job_id)
+                except (ValueError, AttributeError):
+                    # Invalid timestamp, skip
+                    pass
+
+        for job_id in jobs_to_remove:
+            del _vacuum_jobs[job_id]
+            logger.info(f"[VACUUM-CLEANUP] Removed old job {job_id}")
+
+        # Phase 2: Enforce max size (keep 100 most recent jobs)
+        MAX_JOBS = 100
+        if len(_vacuum_jobs) > MAX_JOBS:
+            # Sort by started_at timestamp (most recent first)
+            sorted_jobs = sorted(
+                _vacuum_jobs.items(),
+                key=lambda item: item[1].get("started_at", ""),
+                reverse=True,
+            )
+
+            # Keep only the most recent MAX_JOBS
+            jobs_to_keep = {job_id: info for job_id, info in sorted_jobs[:MAX_JOBS]}
+            removed_count = len(_vacuum_jobs) - len(jobs_to_keep)
+            _vacuum_jobs.clear()
+            _vacuum_jobs.update(jobs_to_keep)
+
+            if removed_count > 0:
+                logger.info(
+                    f"[VACUUM-CLEANUP] Pruned {removed_count} excess jobs (kept {MAX_JOBS} most recent)"
+                )
+
+    @app.route("/api/database/vacuum/cleanup", methods=["POST"])
+    @require_admin_auth
+    def vacuum_cleanup_endpoint():
+        """Manually trigger cleanup of old VACUUM job records.
+
+        **REQUIRES ADMIN AUTHENTICATION** via X-Admin-Token header.
+
+        Removes jobs older than 24 hours and enforces maximum job count.
+        Useful for explicit memory management.
+
+        Returns:
+            JSON with cleanup statistics
+        """
+        with _vacuum_jobs_lock:
+            initial_count = len(_vacuum_jobs)
+            _cleanup_vacuum_jobs()
+            final_count = len(_vacuum_jobs)
+            removed_count = initial_count - final_count
+
+        logger.info(
+            f"[VACUUM-CLEANUP] Manual cleanup: removed {removed_count} jobs ({initial_count} -> {final_count})"
+        )
+
+        return (
+            jsonify(
+                {
+                    "status": "ok",
+                    "data": {
+                        "initial_count": initial_count,
+                        "final_count": final_count,
+                        "removed_count": removed_count,
+                    },
+                    "error": None,
+                }
+            ),
+            200,
+        )
+
+    @app.route("/api/database/cleanup", methods=["POST"])
+    def cleanup_database_endpoint():
+        """Clean up old messages from Sentinel database.
+
+        Query Parameters:
+            days: Number of days to keep messages (default: 30)
+
+        Returns:
+            JSON with cleanup statistics including deleted count and remaining messages
+        """
+        if _engine is None:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "data": None,
+                        "error": "Database not available",
+                    }
+                ),
+                503,
+            )
+
+        try:
+            from .store import cleanup_old_messages
+
+            # Get retention days from query params or use default
+            days = request.args.get("days", default=30, type=int)
+            if days < 1:
+                days = 30
+            if days > 365:
+                days = 365
+
+            # Get config values if available
+            max_messages = 200
+            preserve_multiplier = 2
+            if _config:
+                try:
+                    max_messages = getattr(_config.system.database, "max_messages", 200)
+                    preserve_multiplier = getattr(
+                        _config.system.database, "preserve_alerted_multiplier", 2
+                    )
+                except (AttributeError, KeyError):
+                    pass
+
+            # Run cleanup
+            cleanup_stats = cleanup_old_messages(
+                _engine,
+                retention_days=days,
+                max_messages=max_messages,
+                preserve_alerted_multiplier=preserve_multiplier,
+            )
+
+            logger.info(
+                f"Database cleanup completed: deleted {cleanup_stats['total_deleted']} messages, "
+                f"{cleanup_stats['remaining_count']} remaining"
+            )
+
+            return (
+                jsonify(
+                    {
+                        "status": "ok",
+                        "data": {
+                            "deleted_by_age": cleanup_stats["deleted_by_age"],
+                            "deleted_by_count": cleanup_stats["deleted_by_count"],
+                            "total_deleted": cleanup_stats["total_deleted"],
+                            "remaining_count": cleanup_stats["remaining_count"],
+                            "retention_days": days,
+                        },
+                        "error": None,
+                    }
+                ),
+                200,
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to clean up database: {e}", exc_info=True)
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "data": None,
+                        "error": f"Failed to clean up database: {str(e)}",
+                    }
+                ),
+                500,
+            )
+
     @app.route("/api/config", methods=["GET"])
     def get_config():
         """Get current configuration from Sentinel (single source of truth)."""
+
+        def safe_getattr(obj, path, default=None):
+            """Safely get nested attribute using dot notation path.
+
+            Args:
+                obj: Object to query
+                path: Dot-separated path (e.g., "system.redis.host")
+                default: Default value if path doesn't exist
+
+            Returns:
+                Attribute value or default
+            """
+            try:
+                parts = path.split(".")
+                result = obj
+                for part in parts:
+                    result = getattr(result, part, None)
+                    if result is None:
+                        return default
+                return result
+            except (AttributeError, TypeError):
+                return default
+
         try:
             from tgsentinel.config import load_config
 
             cfg = load_config()
 
-            # Serialize config to JSON-friendly format
+            # Serialize config to JSON-friendly format with safe attribute access
             config_data = {
                 "telegram": {
-                    "session": cfg.telegram_session,
+                    "session": getattr(cfg, "telegram_session", None),
                 },
                 "alerts": {
-                    "mode": cfg.alerts.mode,
-                    "target_channel": cfg.alerts.target_channel,
+                    "mode": safe_getattr(cfg, "alerts.mode", "dm"),
+                    "target_channel": safe_getattr(cfg, "alerts.target_channel", None),
+                    "min_score": safe_getattr(cfg, "alerts.min_score", 0.5),
                 },
                 "digest": {
-                    "hourly": cfg.alerts.digest.hourly,
-                    "daily": cfg.alerts.digest.daily,
-                    "top_n": cfg.alerts.digest.top_n,
+                    "hourly": safe_getattr(cfg, "alerts.digest.hourly", False),
+                    "daily": safe_getattr(cfg, "alerts.digest.daily", False),
+                    "top_n": safe_getattr(cfg, "alerts.digest.top_n", 10),
                 },
                 "channels": [
                     {
-                        "id": ch.id,
-                        "name": ch.name,
-                        "vip_senders": ch.vip_senders,
-                        "keywords": ch.keywords,
-                        "reaction_threshold": ch.reaction_threshold,
-                        "reply_threshold": ch.reply_threshold,
-                        "rate_limit_per_hour": ch.rate_limit_per_hour,
+                        "id": getattr(ch, "id", None),
+                        "name": getattr(ch, "name", ""),
+                        "vip_senders": getattr(ch, "vip_senders", []),
+                        "keywords": getattr(ch, "keywords", []),
+                        "reaction_threshold": getattr(ch, "reaction_threshold", 5),
+                        "reply_threshold": getattr(ch, "reply_threshold", 3),
+                        "rate_limit_per_hour": getattr(ch, "rate_limit_per_hour", 10),
                     }
-                    for ch in cfg.channels
+                    for ch in getattr(cfg, "channels", [])
                 ],
                 "monitored_users": [
                     {
-                        "id": user.id,
-                        "name": user.name,
-                        "username": user.username,
-                        "enabled": user.enabled,
+                        "id": getattr(user, "id", None),
+                        "name": getattr(user, "name", ""),
+                        "username": getattr(user, "username", None),
+                        "enabled": getattr(user, "enabled", True),
                     }
-                    for user in cfg.monitored_users
+                    for user in getattr(cfg, "monitored_users", [])
                 ],
-                "interests": cfg.interests,
-                "redis": cfg.redis,
-                "database_uri": cfg.db_uri,
-                "embeddings_model": cfg.embeddings_model,
-                "similarity_threshold": cfg.similarity_threshold,
+                "interests": getattr(cfg, "interests", []),
+                "system": {
+                    "redis": {
+                        "host": safe_getattr(cfg, "system.redis.host", "localhost"),
+                        "port": safe_getattr(cfg, "system.redis.port", 6379),
+                        "stream": safe_getattr(
+                            cfg, "system.redis.stream", "tgsentinel:messages"
+                        ),
+                        "group": safe_getattr(
+                            cfg, "system.redis.group", "tgsentinel-workers"
+                        ),
+                        "consumer": safe_getattr(
+                            cfg, "system.redis.consumer", "worker-1"
+                        ),
+                    },
+                    "database_uri": safe_getattr(
+                        cfg, "system.database_uri", "sqlite:////app/data/sentinel.db"
+                    ),
+                    "database": {
+                        "max_messages": safe_getattr(
+                            cfg, "system.database.max_messages", 200
+                        ),
+                        "retention_days": safe_getattr(
+                            cfg, "system.database.retention_days", 30
+                        ),
+                        "cleanup_enabled": safe_getattr(
+                            cfg, "system.database.cleanup_enabled", True
+                        ),
+                        "cleanup_interval_hours": safe_getattr(
+                            cfg, "system.database.cleanup_interval_hours", 24
+                        ),
+                        "vacuum_on_cleanup": safe_getattr(
+                            cfg, "system.database.vacuum_on_cleanup", True
+                        ),
+                        "vacuum_hour": safe_getattr(
+                            cfg, "system.database.vacuum_hour", 3
+                        ),
+                    },
+                    "logging": {
+                        "level": safe_getattr(cfg, "system.logging.level", "info"),
+                        "retention_days": safe_getattr(
+                            cfg, "system.logging.retention_days", 7
+                        ),
+                    },
+                    "metrics_endpoint": safe_getattr(
+                        cfg, "system.metrics_endpoint", ""
+                    ),
+                    "auto_restart": safe_getattr(cfg, "system.auto_restart", False),
+                },
+                "redis": getattr(cfg, "redis", {}),  # Legacy compatibility
+                "database_uri": getattr(
+                    cfg, "db_uri", "sqlite:////app/data/sentinel.db"
+                ),  # Legacy compatibility
+                "embeddings_model": getattr(
+                    cfg, "embeddings_model", "all-MiniLM-L6-v2"
+                ),
+                "similarity_threshold": getattr(cfg, "similarity_threshold", 0.7),
             }
 
             return jsonify({"status": "ok", "data": config_data, "error": None}), 200

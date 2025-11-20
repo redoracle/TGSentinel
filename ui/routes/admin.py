@@ -68,11 +68,31 @@ def test_config_rules():
     This endpoint is designed for quick UI feedback and does not alter state.
     """
     try:
+        import requests
+
         payload = request.get_json(silent=True) or {}
         only_ids = set(map(int, payload.get("channel_ids", []) or []))
         sample_text = str(payload.get("text", "")).strip()
 
-        channels = _serialize_channels_fn() if _serialize_channels_fn else []
+        # Fetch channels from Sentinel API (single source of truth)
+        sentinel_api_url = os.getenv(
+            "SENTINEL_API_BASE_URL", "http://sentinel:8080/api"
+        )
+
+        try:
+            response = requests.get(f"{sentinel_api_url}/config", timeout=10)
+            if response.ok:
+                config_data = response.json().get("data", {})
+                channels = config_data.get("channels", [])
+            else:
+                logger.warning(
+                    f"Failed to fetch config from Sentinel: HTTP {response.status_code}"
+                )
+                channels = []
+        except Exception as e:
+            logger.error(f"Error fetching config from Sentinel: {e}")
+            channels = []
+
         if only_ids:
             channels = [c for c in channels if int(c.get("id", 0)) in only_ids]
 
@@ -101,6 +121,64 @@ def test_config_rules():
         return jsonify({"status": "ok", "tested": len(results), "results": results})
     except Exception as exc:
         logger.error("Rule test failed: %s", exc)
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@admin_bp.post("/api/config/users/test")
+def test_user_rules():
+    """Run a lightweight rule test over configured monitored users.
+
+    Body (optional): {"user_ids": [..]}
+    Returns a summary with user configurations and diagnostics.
+    This endpoint is designed for quick UI feedback and does not alter state.
+    """
+    try:
+        import requests
+
+        payload = request.get_json(silent=True) or {}
+        only_ids = set(map(int, payload.get("user_ids", []) or []))
+
+        # Fetch monitored users from Sentinel API (single source of truth)
+        sentinel_api_url = os.getenv(
+            "SENTINEL_API_BASE_URL", "http://sentinel:8080/api"
+        )
+
+        try:
+            response = requests.get(f"{sentinel_api_url}/config", timeout=10)
+            if response.ok:
+                config_data = response.json().get("data", {})
+                users = config_data.get("monitored_users", [])
+            else:
+                logger.warning(
+                    f"Failed to fetch config from Sentinel: HTTP {response.status_code}"
+                )
+                users = []
+        except Exception as e:
+            logger.error(f"Error fetching config from Sentinel: {e}")
+            users = []
+
+        if only_ids:
+            users = [u for u in users if int(u.get("id", 0)) in only_ids]
+
+        results = []
+        for user in users:
+            results.append(
+                {
+                    "user_id": user.get("id"),
+                    "user_name": user.get("name"),
+                    "username": user.get("username"),
+                    "enabled": user.get("enabled", True),
+                    "diagnostics": {
+                        "monitoring_status": (
+                            "active" if user.get("enabled", True) else "disabled"
+                        ),
+                    },
+                }
+            )
+
+        return jsonify({"status": "ok", "tested": len(results), "results": results})
+    except Exception as exc:
+        logger.error("User rule test failed: %s", exc)
         return jsonify({"status": "error", "message": str(exc)}), 500
 
 
@@ -200,56 +278,11 @@ def clean_database():
     Returns the count of deleted records.
     """
     try:
-        from ui.database import _ui_db
-
-        # Check if UI database was successfully initialized
-        if _ui_db is None:
-            logger.warning(
-                "Clean DB: UI database not initialized, skipping database clean"
-            )
-            return (
-                jsonify({"status": "error", "message": "UI database not available"}),
-                503,
-            )
-
-        conn = _ui_db.connect()
-        cursor = conn.cursor()
-
         deleted_count = 0
         redis_deleted = 0
 
-        # Count and delete UI database records
-        cursor.execute("SELECT COUNT(*) FROM alerts")
-        alerts_count = cursor.fetchone()[0] or 0
-
-        cursor.execute("SELECT COUNT(*) FROM digest_runs")
-        digest_count = cursor.fetchone()[0] or 0
-
-        cursor.execute("SELECT COUNT(*) FROM audit_log")
-        audit_count = cursor.fetchone()[0] or 0
-
-        deleted_count = alerts_count + digest_count + audit_count
-
-        # Delete all data from UI tables
-        cursor.execute("DELETE FROM alerts")
-        logger.info("Deleted %d records from alerts table", alerts_count)
-
-        cursor.execute("DELETE FROM digest_runs")
-        logger.info("Deleted %d records from digest_runs table", digest_count)
-
-        cursor.execute("DELETE FROM audit_log")
-        logger.info("Deleted %d records from audit_log table", audit_count)
-
-        # Reset auto-increment counters for SQLite
-        try:
-            cursor.execute("DELETE FROM sqlite_sequence WHERE name='alerts'")
-            cursor.execute("DELETE FROM sqlite_sequence WHERE name='digest_runs'")
-            cursor.execute("DELETE FROM sqlite_sequence WHERE name='audit_log'")
-        except Exception:
-            # No sequence table, that's okay
-            pass
-
-        conn.commit()
+        # Note: UI database operations removed - ui.db tables were never populated
+        # All data is in Sentinel database, accessed via HTTP API
 
         # Clear Redis stream and caches
         if _redis_client:
@@ -350,8 +383,7 @@ def clean_database():
                 logger.warning("Redis cleanup failed: %s", redis_exc)
 
         logger.info(
-            "Database cleanup completed: %d DB records, %d Redis items",
-            deleted_count,
+            "Cleanup completed: %d Redis items deleted",
             redis_deleted,
         )
 
@@ -359,20 +391,19 @@ def clean_database():
             {
                 "status": "ok",
                 "deleted": {
-                    "database": deleted_count,
+                    "database": 0,  # ui.db tables removed - no longer used
                     "redis": redis_deleted,
-                    "total": deleted_count + redis_deleted,
+                    "total": redis_deleted,
                 },
                 "details": {
-                    "alerts": alerts_count,
-                    "digest_runs": digest_count,
-                    "audit_log": audit_count,
+                    "redis_stream": redis_deleted,
+                    "note": "UI database removed - all data in Sentinel DB",
                 },
             }
         )
 
     except Exception as exc:
-        logger.error("Database cleanup failed: %s", exc, exc_info=True)
+        logger.error("Cleanup failed: %s", exc, exc_info=True)
         return jsonify({"status": "error", "message": str(exc)}), 500
 
 

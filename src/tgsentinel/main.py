@@ -23,7 +23,7 @@ from .client import make_client, start_ingestion
 from .config import load_config
 from .digest import send_digest
 from .logging_setup import setup_logging
-from .metrics import dump
+from .metrics import dump, initialize_build_info
 from .store import init_db
 from .worker import process_loop
 from .api import (
@@ -53,6 +53,9 @@ from .worker_orchestrator import WorkerOrchestrator
 async def _run():
     setup_logging()
     log = logging.getLogger("tgsentinel")
+
+    # Initialize build info metric at startup
+    initialize_build_info()
 
     cfg = load_config()
     engine = init_db(cfg.db_uri)

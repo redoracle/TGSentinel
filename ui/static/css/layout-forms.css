@@ -314,4 +314,21 @@ button[aria-expanded="false"] .collapse-icon {
   transform: rotate(0deg);
 }
 
+/* Collapse button styling for card headers */
+.collapse-button {
+  text-decoration: none;
+  color: inherit;
+}
+
+.collapse-button:hover,
+.collapse-button:focus {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* Small size variant for collapse icon */
+.collapse-icon-sm {
+  font-size: 0.875rem;
+}
+
 /* ============================================================================

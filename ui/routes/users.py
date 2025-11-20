@@ -185,6 +185,204 @@ def add_users():
         return jsonify({"status": "error", "message": str(exc)}), 500
 
 
+@users_bp.route("/<int:user_id>", methods=["GET"])
+def get_user(user_id):
+    """Get a single user's configuration."""
+    import requests
+
+    try:
+        sentinel_api_url = os.getenv(
+            "SENTINEL_API_BASE_URL", "http://sentinel:8080/api"
+        )
+
+        response = requests.get(f"{sentinel_api_url}/config", timeout=5)
+        if not response.ok:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Could not fetch config from Sentinel",
+                    }
+                ),
+                503,
+            )
+
+        config_data = response.json().get("data", {})
+        users = config_data.get("monitored_users", [])
+
+        # Find the user
+        for user in users:
+            if user.get("id") == user_id:
+                return jsonify({"status": "ok", "user": user})
+
+        return jsonify({"status": "error", "message": "User not found"}), 404
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Could not connect to Sentinel API: {e}")
+        return (
+            jsonify({"status": "error", "message": "Could not reach Sentinel service"}),
+            503,
+        )
+    except Exception as exc:
+        logger.error(f"Failed to get user: {exc}", exc_info=True)
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@users_bp.route("/<int:user_id>", methods=["PUT"])
+def update_user(user_id):
+    """Update a user's configuration via Sentinel API.
+
+    Request body should contain fields to update:
+    - name: User name
+    - username: User username
+    - enabled: Boolean
+    - profiles: List of profile IDs to bind
+    - overrides: Dict with keywords_extra, scoring_weights, etc.
+    """
+    import requests
+
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"status": "error", "message": "No data provided"}), 400
+
+        sentinel_api_url = os.getenv(
+            "SENTINEL_API_BASE_URL", "http://sentinel:8080/api"
+        )
+
+        # Get current config from Sentinel
+        response = requests.get(f"{sentinel_api_url}/config", timeout=5)
+        if not response.ok:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Could not fetch current config from Sentinel",
+                    }
+                ),
+                503,
+            )
+
+        config = response.json().get("data", {})
+        users = config.get("monitored_users", [])
+
+        # Find the user to update
+        user_index = None
+        for i, u in enumerate(users):
+            if u.get("id") == user_id:
+                user_index = i
+                break
+
+        if user_index is None:
+            return jsonify({"status": "error", "message": "User not found"}), 404
+
+        # Update user fields from payload
+        user = users[user_index]
+
+        if "name" in data:
+            user["name"] = data["name"]
+        if "username" in data:
+            user["username"] = data["username"]
+        if "enabled" in data:
+            user["enabled"] = data["enabled"]
+
+        # Validate profile IDs if present
+        if "profiles" in data:
+            from ui.services.profiles_service import get_profile_service
+
+            requested = data.get("profiles") or []
+            if not isinstance(requested, list):
+                return (
+                    jsonify(
+                        {"status": "error", "message": "'profiles' must be a list"}
+                    ),
+                    400,
+                )
+            svc = get_profile_service()
+            available = {p["id"] for p in svc.list_global_profiles()}
+            invalid = [p for p in requested if p not in available]
+            if invalid:
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "Invalid profile ids: %s"
+                            % ",".join(map(str, invalid)),
+                        }
+                    ),
+                    400,
+                )
+
+        # Update profile bindings (two-layer architecture)
+        if "profiles" in data:
+            user["profiles"] = data["profiles"]
+        if "overrides" in data:
+            # Basic validation for overrides
+            overrides = data["overrides"]
+            if not isinstance(overrides, dict):
+                return (
+                    jsonify(
+                        {"status": "error", "message": "'overrides' must be an object"}
+                    ),
+                    400,
+                )
+            # Validate min_score if provided
+            min_score = overrides.get("min_score")
+            if min_score is not None:
+                try:
+                    ms = float(min_score)
+                    if not (0.0 <= ms <= 1.0):
+                        raise ValueError("min_score must be between 0 and 1")
+                except Exception as e:
+                    return (
+                        jsonify(
+                            {"status": "error", "message": f"Invalid min_score: {e}"}
+                        ),
+                        400,
+                    )
+            user["overrides"] = overrides
+
+        # Update config via Sentinel API
+        update_response = requests.post(
+            f"{sentinel_api_url}/config",
+            json={"monitored_users": users},
+            headers={"Content-Type": "application/json"},
+            timeout=10,
+        )
+
+        if not update_response.ok:
+            logger.error(
+                f"Sentinel rejected user update: {update_response.status_code}"
+            )
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Failed to update config via Sentinel",
+                    }
+                ),
+                502,
+            )
+
+        logger.info(f"Updated user {user_id} via Sentinel API")
+
+        # Reload config in UI
+        if _reload_config_fn:
+            _reload_config_fn()
+
+        return jsonify({"status": "ok", "message": "User updated", "user": user})
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Could not connect to Sentinel API: {e}")
+        return (
+            jsonify({"status": "error", "message": "Could not reach Sentinel service"}),
+            503,
+        )
+    except Exception as exc:
+        logger.error(f"User update operation failed: {exc}", exc_info=True)
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
 @users_bp.route("/<int:user_id>", methods=["DELETE"])
 def delete_user(user_id):
     """Remove a user from monitoring configuration via Sentinel API."""

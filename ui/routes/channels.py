@@ -10,6 +10,8 @@ import logging
 import os
 import shutil
 import tempfile
+import threading
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from pathlib import Path
 from typing import Any, Callable, Dict, List
 
@@ -17,6 +19,68 @@ import yaml
 from flask import Blueprint, current_app, jsonify, request
 
 logger = logging.getLogger(__name__)
+
+# Lua script for atomic lock release (check and delete in one operation)
+# Returns 1 if lock was released, 0 if lock didn't exist or belongs to another owner
+RELEASE_LOCK_SCRIPT = """
+if redis.call("get", KEYS[1]) == ARGV[1] then
+    return redis.call("del", KEYS[1])
+else
+    return 0
+end
+"""
+
+# Module-level cached Redis client (lazy initialization with thread safety)
+_redis_client = None
+_redis_client_lock = threading.Lock()
+
+
+def _get_redis_client():
+    """Get or create a Redis client with connection pooling and timeouts.
+
+    Uses double-checked locking pattern for thread-safe lazy initialization.
+
+    Returns:
+        redis.Redis: Configured Redis client with connection pooling
+
+    Raises:
+        redis.ConnectionError: If Redis is unavailable
+        redis.TimeoutError: If connection times out
+    """
+    global _redis_client
+
+    # First check without lock (fast path)
+    if _redis_client is None:
+        # Acquire lock for initialization
+        with _redis_client_lock:
+            # Double-check inside lock to prevent race condition
+            if _redis_client is None:
+                import redis
+
+                redis_host = os.getenv("REDIS_HOST", "redis")
+                redis_port = int(os.getenv("REDIS_PORT", "6379"))
+
+                # Create client with connection pooling and timeouts
+                _redis_client = redis.Redis(
+                    host=redis_host,
+                    port=redis_port,
+                    decode_responses=True,
+                    socket_connect_timeout=2,  # 2s timeout for initial connection
+                    socket_timeout=5,  # 5s timeout for read/write operations
+                    socket_keepalive=True,
+                    health_check_interval=30,  # Check connection health every 30s
+                )
+                logger.info(f"Initialized Redis client: {redis_host}:{redis_port}")
+
+    # Health check: verify Redis is responsive
+    try:
+        _redis_client.ping()
+    except (redis.ConnectionError, redis.TimeoutError) as e:
+        logger.error(f"Redis health check failed: {e}")
+        raise
+
+    return _redis_client
+
 
 # Blueprint setup
 channels_bp = Blueprint("channels", __name__, url_prefix="/api/config/channels")
@@ -59,6 +123,95 @@ def _current_config():
         return current_app.extensions.get("channels", {}).get("config")
     except RuntimeError:  # pragma: no cover - outside app context
         return None
+
+
+def _get_sentinel_api_url() -> str:
+    """Get the Sentinel API base URL."""
+    return os.getenv("SENTINEL_API_BASE_URL", "http://sentinel:8080/api")
+
+
+def _fetch_sentinel_config() -> tuple[dict[str, Any] | None, tuple[Any, int] | None]:
+    """Fetch current config from Sentinel API.
+
+    Returns:
+        (config_dict, error_response_tuple) where error_response_tuple is None on success
+    """
+    import requests
+
+    sentinel_api_url = _get_sentinel_api_url()
+    try:
+        response = requests.get(f"{sentinel_api_url}/config", timeout=5)
+        if not response.ok:
+            logger.error(f"Sentinel GET /config failed: {response.status_code}")
+            return None, (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Could not fetch current config from Sentinel",
+                    }
+                ),
+                503,
+            )
+
+        config = response.json().get("data", {})
+        return config, None
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Could not connect to Sentinel API: {e}")
+        return None, (
+            jsonify({"status": "error", "message": "Could not reach Sentinel service"}),
+            503,
+        )
+
+
+def _update_sentinel_config(channels: list[dict[str, Any]]) -> tuple[Any, int] | None:
+    """Update channels config via Sentinel API.
+
+    Args:
+        channels: List of channel dictionaries to save
+
+    Returns:
+        error_response_tuple or None on success
+    """
+    import requests
+
+    sentinel_api_url = _get_sentinel_api_url()
+    try:
+        update_response = requests.post(
+            f"{sentinel_api_url}/config",
+            json={"channels": channels},
+            headers={"Content-Type": "application/json"},
+            timeout=10,
+        )
+
+        if not update_response.ok:
+            logger.error(f"Sentinel POST /config failed: {update_response.status_code}")
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Failed to update config via Sentinel",
+                    }
+                ),
+                502,
+            )
+
+        return None
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Could not connect to Sentinel API: {e}")
+        return (
+            jsonify({"status": "error", "message": "Could not reach Sentinel service"}),
+            503,
+        )
+
+
+def _reload_ui_config() -> None:
+    """Reload UI config if reload function is available."""
+    reload_fn = current_app.extensions.get("channels", {}).get("reload_config_fn")
+    if reload_fn:
+        reload_fn()
+        logger.debug("UI config reloaded")
 
 
 def _fetch_channels_from_sentinel() -> List[Dict[str, Any]] | None:
@@ -169,24 +322,17 @@ def add_channels():
         )
 
     try:
-        sentinel_api_url = os.getenv(
-            "SENTINEL_API_BASE_URL", "http://sentinel:8080/api"
-        )
-
         # Get current config from Sentinel
-        response = requests.get(f"{sentinel_api_url}/config", timeout=5)
-        if not response.ok:
+        current_config, error = _fetch_sentinel_config()
+        if error:
+            return error
+
+        if current_config is None:
             return (
-                jsonify(
-                    {
-                        "status": "error",
-                        "message": "Could not fetch current config from Sentinel",
-                    }
-                ),
+                jsonify({"status": "error", "message": "Failed to fetch config"}),
                 503,
             )
 
-        current_config = response.json().get("data", {})
         existing_channels = current_config.get("channels", [])
         existing_ids = {ch.get("id") for ch in existing_channels}
 
@@ -210,44 +356,322 @@ def add_channels():
                 added_count += 1
 
         # Update config via Sentinel API
-        update_response = requests.post(
-            f"{sentinel_api_url}/config",
-            json={"channels": existing_channels},
-            headers={"Content-Type": "application/json"},
-            timeout=10,
-        )
-
-        if not update_response.ok:
-            logger.error(
-                f"Sentinel rejected channel update: {update_response.status_code}"
-            )
-            return (
-                jsonify(
-                    {
-                        "status": "error",
-                        "message": "Failed to update config via Sentinel",
-                    }
-                ),
-                502,
-            )
+        error = _update_sentinel_config(existing_channels)
+        if error:
+            return error
 
         logger.info(f"Added {added_count} new channels via Sentinel API")
 
         # Reload config in UI to reflect changes immediately
-        reload_fn = current_app.extensions.get("channels", {}).get("reload_config_fn")
-        if reload_fn:
-            reload_fn()
+        _reload_ui_config()
 
         return jsonify({"status": "ok", "added": added_count})
 
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Could not connect to Sentinel API: {e}")
-        return (
-            jsonify({"status": "error", "message": "Could not reach Sentinel service"}),
-            503,
-        )
     except Exception as exc:
         logger.error(f"Channel add operation failed: {exc}")
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@channels_bp.put("/<int:chat_id>")
+def update_channel(chat_id):
+    """Update a channel's configuration via Sentinel API.
+
+    This is the unified channel update endpoint that supports:
+    - Basic channel settings (name, VIP senders, keywords, thresholds)
+    - Profile bindings (two-layer architecture)
+    - Per-channel overrides (keywords_extra, min_score, scoring_weights)
+
+    Uses distributed locking via Redis to prevent concurrent update conflicts.
+
+    Request body should contain fields to update:
+    - name: Channel name
+    - vip_senders: List of VIP sender IDs or usernames
+    - keywords: Legacy keyword list (deprecated, use profiles instead)
+    - profiles: List of profile IDs to bind
+    - overrides: Dict with keywords_extra, scoring_weights, min_score, etc.
+    - reaction_threshold: int
+    - reply_threshold: int
+    - rate_limit_per_hour: int
+    """
+    import requests
+    import time
+    import redis
+
+    if not request.is_json:
+        return (
+            jsonify(
+                {"status": "error", "message": "Content-Type must be application/json"}
+            ),
+            400,
+        )
+
+    payload = request.get_json(silent=True)
+    if payload is None:
+        return jsonify({"status": "error", "message": "Invalid JSON payload"}), 400
+
+    try:
+        # Validate profile IDs if present (before acquiring lock)
+        if "profiles" in payload:
+            from ui.services.profiles_service import get_profile_service
+
+            requested = payload.get("profiles") or []
+            if not isinstance(requested, list):
+                return (
+                    jsonify(
+                        {"status": "error", "message": "'profiles' must be a list"}
+                    ),
+                    400,
+                )
+
+            svc = get_profile_service()
+
+            # Fetch available profiles with timeout to prevent blocking
+            try:
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(svc.list_global_profiles)
+                    available_profiles = future.result(timeout=5)  # 5s timeout
+                    available = {p["id"] for p in available_profiles}
+            except FuturesTimeoutError:
+                logger.error("Profile service timed out during validation")
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "Profile service timed out",
+                        }
+                    ),
+                    504,
+                )
+            except Exception as e:
+                logger.error(f"Profile service error during validation: {e}")
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "Profile service unavailable",
+                        }
+                    ),
+                    502,
+                )
+
+            invalid = [p for p in requested if p not in available]
+            if invalid:
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "Invalid profile ids: %s" % ",".join(invalid),
+                        }
+                    ),
+                    400,
+                )
+
+        # Get Redis client for distributed locking (with health check)
+        import redis
+
+        try:
+            redis_client = _get_redis_client()
+        except (redis.ConnectionError, redis.TimeoutError) as e:
+            logger.error(f"Redis unavailable for channel update: {e}")
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Distributed locking service unavailable",
+                    }
+                ),
+                503,
+            )
+
+        # Configuration for optimistic retry
+        MAX_RETRIES = 3
+        LOCK_TIMEOUT = 25  # seconds - safe for ~15s operation with buffer
+        BASE_RETRY_DELAY = 0.5  # seconds - base for exponential backoff
+        lock_key = f"tgsentinel:config_lock:channel:{chat_id}"
+
+        last_error = None
+
+        # Retry loop with distributed lock
+        for attempt in range(MAX_RETRIES):
+            lock_acquired = False
+            lock_identifier = None
+
+            try:
+                # Acquire distributed lock with timeout
+                lock_identifier = f"ui-{os.getpid()}-{time.time()}"
+                lock_acquired = redis_client.set(
+                    lock_key,
+                    lock_identifier,
+                    nx=True,  # Only set if not exists
+                    ex=LOCK_TIMEOUT,  # Expire after timeout to prevent deadlocks
+                )
+
+                if not lock_acquired:
+                    logger.warning(
+                        f"Failed to acquire lock for channel {chat_id} on attempt {attempt + 1}/{MAX_RETRIES}"
+                    )
+                    last_error = "Another update is in progress"
+                    time.sleep(BASE_RETRY_DELAY * (2**attempt))
+                    continue
+
+                logger.debug(
+                    f"Acquired lock for channel {chat_id} (attempt {attempt + 1})"
+                )
+
+                # Get current config from Sentinel
+                current_config, error = _fetch_sentinel_config()
+                if error:
+                    last_error = "Could not fetch current config from Sentinel"
+                    continue
+
+                if current_config is None:
+                    last_error = "Config fetch returned None"
+                    continue
+
+                channels = current_config.get("channels", [])
+
+                # Find the channel to update
+                channel_index = None
+                for i, ch in enumerate(channels):
+                    if ch.get("id") == chat_id:
+                        channel_index = i
+                        break
+
+                if channel_index is None:
+                    return (
+                        jsonify({"status": "error", "message": "Channel not found"}),
+                        404,
+                    )
+
+                # Update channel fields from payload
+                channel = channels[channel_index]
+
+                # Update basic fields
+                if "name" in payload:
+                    channel["name"] = payload["name"]
+                if "vip_senders" in payload:
+                    channel["vip_senders"] = payload["vip_senders"]
+                if "keywords" in payload:
+                    channel["keywords"] = payload["keywords"]
+                if "reaction_threshold" in payload:
+                    channel["reaction_threshold"] = int(payload["reaction_threshold"])
+                if "reply_threshold" in payload:
+                    channel["reply_threshold"] = int(payload["reply_threshold"])
+                if "rate_limit_per_hour" in payload:
+                    channel["rate_limit_per_hour"] = int(payload["rate_limit_per_hour"])
+
+                # Update profile bindings (two-layer architecture)
+                if "profiles" in payload:
+                    channel["profiles"] = payload["profiles"]
+                if "overrides" in payload:
+                    channel["overrides"] = payload["overrides"]
+
+                # Update config via Sentinel API
+                error = _update_sentinel_config(channels)
+                if error:
+                    last_error = "Sentinel rejected update"
+                    logger.error(f"Sentinel POST failed on attempt {attempt + 1}")
+                    time.sleep(BASE_RETRY_DELAY * (2**attempt))
+                    continue
+
+                logger.info(
+                    f"Updated channel {chat_id} via Sentinel API (attempt {attempt + 1})"
+                )
+
+                # Reload config in UI
+                _reload_ui_config()
+
+                return (
+                    jsonify(
+                        {
+                            "status": "ok",
+                            "message": "Channel updated",
+                            "channel": channel,
+                        }
+                    ),
+                    200,
+                )
+
+            except requests.exceptions.Timeout:
+                last_error = "Request timeout"
+                logger.warning(f"Timeout on attempt {attempt + 1}/{MAX_RETRIES}")
+                time.sleep(BASE_RETRY_DELAY * (2**attempt))
+                continue
+
+            except requests.exceptions.RequestException as e:
+                last_error = f"Connection error: {str(e)}"
+                logger.error(f"Connection error on attempt {attempt + 1}: {e}")
+                time.sleep(BASE_RETRY_DELAY * (2**attempt))
+                continue
+
+            finally:
+                # Always release lock if we acquired it
+                if lock_acquired and lock_identifier:
+                    try:
+                        # Atomically release lock only if we still own it
+                        # Uses Lua script to prevent race condition between check and delete
+                        result = redis_client.eval(
+                            RELEASE_LOCK_SCRIPT,
+                            1,  # number of keys
+                            lock_key,  # KEYS[1]
+                            lock_identifier,  # ARGV[1]
+                        )
+                        if result == 1:
+                            logger.debug(f"Released lock for channel {chat_id}")
+                        else:
+                            logger.warning(
+                                f"Lock for channel {chat_id} was already released or taken by another process"
+                            )
+                    except Exception as lock_err:
+                        logger.error(f"Failed to release lock: {lock_err}")
+
+        # All retries exhausted
+        logger.error(
+            f"Failed to update channel {chat_id} after {MAX_RETRIES} attempts: {last_error}"
+        )
+        return (
+            jsonify(
+                {
+                    "status": "error",
+                    "message": f"Update failed after {MAX_RETRIES} retries: {last_error}",
+                }
+            ),
+            503,
+        )
+
+    except ValueError as e:
+        return jsonify({"status": "error", "message": f"Invalid value: {e}"}), 400
+    except Exception as exc:
+        logger.error(f"Channel update operation failed: {exc}", exc_info=True)
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@channels_bp.get("/<int:chat_id>")
+def get_channel(chat_id):
+    """Get a single channel's configuration."""
+    try:
+        # Get current config from Sentinel
+        current_config, error = _fetch_sentinel_config()
+        if error:
+            return error
+
+        if current_config is None:
+            return (
+                jsonify({"status": "error", "message": "Failed to fetch config"}),
+                503,
+            )
+
+        channels = current_config.get("channels", [])
+
+        # Find the channel
+        for ch in channels:
+            if ch.get("id") == chat_id:
+                return jsonify({"status": "ok", "channel": ch})
+
+        return jsonify({"status": "error", "message": "Channel not found"}), 404
+
+    except Exception as exc:
+        logger.error(f"Failed to get channel: {exc}", exc_info=True)
         return jsonify({"status": "error", "message": str(exc)}), 500
 
 
@@ -257,24 +681,17 @@ def delete_channel(chat_id):
     import requests
 
     try:
-        sentinel_api_url = os.getenv(
-            "SENTINEL_API_BASE_URL", "http://sentinel:8080/api"
-        )
-
         # Get current config from Sentinel
-        response = requests.get(f"{sentinel_api_url}/config", timeout=5)
-        if not response.ok:
+        config, error = _fetch_sentinel_config()
+        if error:
+            return error
+
+        if config is None:
             return (
-                jsonify(
-                    {
-                        "status": "error",
-                        "message": "Could not fetch current config from Sentinel",
-                    }
-                ),
+                jsonify({"status": "error", "message": "Failed to fetch config"}),
                 503,
             )
 
-        config = response.json().get("data", {})
         channels = config.get("channels", [])
         original_count = len(channels)
 
@@ -285,42 +702,17 @@ def delete_channel(chat_id):
             return jsonify({"status": "error", "message": "Channel not found"}), 404
 
         # Update config via Sentinel API
-        update_response = requests.post(
-            f"{sentinel_api_url}/config",
-            json={"channels": channels},
-            headers={"Content-Type": "application/json"},
-            timeout=10,
-        )
-
-        if not update_response.ok:
-            logger.error(
-                f"Sentinel rejected channel deletion: {update_response.status_code}"
-            )
-            return (
-                jsonify(
-                    {
-                        "status": "error",
-                        "message": "Failed to update config via Sentinel",
-                    }
-                ),
-                502,
-            )
+        error = _update_sentinel_config(channels)
+        if error:
+            return error
 
         logger.info(f"Removed channel {chat_id} via Sentinel API")
 
         # Reload config in UI
-        reload_fn = current_app.extensions.get("channels", {}).get("reload_config_fn")
-        if reload_fn:
-            reload_fn()
+        _reload_ui_config()
 
         return jsonify({"status": "ok", "message": "Channel removed"}), 200
 
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Could not connect to Sentinel API: {e}")
-        return (
-            jsonify({"status": "error", "message": "Could not reach Sentinel service"}),
-            503,
-        )
     except Exception as e:
         logger.error(f"Failed to delete channel: {e}", exc_info=True)
         return jsonify({"status": "error", "message": str(e)}), 500

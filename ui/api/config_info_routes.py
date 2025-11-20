@@ -12,12 +12,14 @@ try:
     from pydantic import BaseModel as PydanticBaseModel  # type: ignore[assignment]
     from pydantic import Field as PydanticField  # type: ignore[assignment]
     from pydantic import field_validator as pydantic_field_validator  # type: ignore[assignment]
+    from pydantic import model_validator as pydantic_model_validator  # type: ignore[assignment]
     from pydantic import ConfigDict as PydanticConfigDict  # type: ignore[assignment]
 
     PYDANTIC_AVAILABLE = True
     BaseModel = PydanticBaseModel  # type: ignore[misc,assignment]
     Field = PydanticField  # type: ignore[misc,assignment]
     field_validator = pydantic_field_validator  # type: ignore[misc,assignment]
+    model_validator = pydantic_model_validator  # type: ignore[misc,assignment]
     ConfigDict = PydanticConfigDict  # type: ignore[misc,assignment]
 except ImportError:
     PYDANTIC_AVAILABLE = False
@@ -25,6 +27,14 @@ except ImportError:
     BaseModel = object  # type: ignore[misc,assignment]
 
     _F = TypeVar("_F", bound=Callable[..., Any])
+
+    def model_validator(*args: Any, **kwargs: Any) -> Callable[[_F], _F]:  # type: ignore[misc]
+        """Fallback model_validator when Pydantic unavailable."""
+
+        def decorator(func: _F) -> _F:
+            return func
+
+        return decorator
 
     def ConfigDict(**kwargs: Any) -> Any:  # type: ignore[misc]
         """Fallback ConfigDict when Pydantic unavailable."""
@@ -104,6 +114,10 @@ if PYDANTIC_AVAILABLE:
         redis_port: Optional[int] = Field(None, ge=1, le=65535)
         database_uri: Optional[str] = None
         retention_days: Optional[int] = Field(None, ge=1, le=365)
+        max_messages: Optional[int] = Field(None, ge=1, le=10000)
+        cleanup_enabled: Optional[bool] = None
+        cleanup_interval_hours: Optional[int] = Field(None, ge=1, le=168)
+        vacuum_on_cleanup: Optional[bool] = None
         metrics_endpoint: Optional[str] = None
         logging_level: Optional[str] = Field(None, pattern=r"^(debug|info|warn|error)$")
         auto_restart: Optional[bool] = None
@@ -134,6 +148,26 @@ if PYDANTIC_AVAILABLE:
                     "target_channel must start with @ or be a numeric chat_id"
                 )
             return v
+
+        @field_validator("cleanup_interval_hours")
+        @classmethod
+        def validate_cleanup_interval(cls, v: Optional[int], info) -> Optional[int]:
+            """Ensure cleanup_interval_hours is set when cleanup_enabled is True."""
+            cleanup_enabled = info.data.get("cleanup_enabled")
+            if cleanup_enabled is True and v is None:
+                raise ValueError(
+                    "cleanup_interval_hours must be set when cleanup_enabled is True"
+                )
+            return v
+
+        @model_validator(mode="after")
+        def validate_vacuum_requires_cleanup(self) -> "ConfigPayload":
+            """Ensure vacuum_on_cleanup requires cleanup_enabled to be True."""
+            if self.vacuum_on_cleanup is True and self.cleanup_enabled is not True:
+                raise ValueError(
+                    "vacuum_on_cleanup requires cleanup_enabled to be True"
+                )
+            return self
 
 
 def _format_display_phone(phone: str) -> str:
@@ -296,7 +330,7 @@ def api_config_current():
             f"Fetched config from Sentinel: channels={len(config_data.get('channels', []))}, users={len(config_data.get('monitored_users', []))}"
         )
 
-        # Return enhanced config
+        # Return enhanced config (including system settings)
         return jsonify(
             {
                 "telegram": telegram_cfg,
@@ -312,6 +346,7 @@ def api_config_current():
                 "database_uri": config_data.get("database_uri", ""),
                 "channels": config_data.get("channels", []),
                 "monitored_users": config_data.get("monitored_users", []),
+                "system": config_data.get("system", {}),
             }
         )
 

@@ -203,31 +203,6 @@
 		</div>
 	</div>
 
-	<!-- Unlock Modal -->
-	<div class="modal fade" id="unlockModal" tabindex="-1" aria-labelledby="unlockModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
-		<div class="modal-dialog">
-			<div class="modal-content">
-				<div class="modal-header">
-					<h5 class="modal-title" id="unlockModalLabel">Unlock UI</h5>
-					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-				</div>
-				<div class="modal-body">
-					<form id="unlockForm" onsubmit="return false;">
-						<div id="unlockAlert" class="alert d-none" role="alert"></div>
-						<div class="mb-3">
-							<label for="unlockPassword" class="form-label">Password</label>
-							<input type="password" class="form-control" id="unlockPassword" placeholder="••••••••" autocomplete="current-password" required>
-							<div class="form-text">Enter the UI lock password to continue.</div>
-						</div>
-					</form>
-				</div>
-				<div class="modal-footer">
-					<button type="button" id="btnUnlockNow" class="btn btn-primary">Unlock</button>
-				</div>
-			</div>
-		</div>
-	</div>
-
 	<!-- Logout Confirmation Modal -->
 	<div class="modal fade" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true">
 		<div class="modal-dialog modal-dialog-centered">
@@ -289,7 +264,7 @@
 	<script>
 		const toastContainer = document.getElementById("toast-container");
 
-		function showToast(message, variant = "info") {
+		function showToast(message, variant = "info", options = {}) {
 			if (!toastContainer) {
 				return;
 			}
@@ -301,13 +276,14 @@
 				info: "bg-info",
 			};
 			const cls = classes[variant] || classes.info;
+			const spinnerHtml = options.spinner ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>' : '';
 			const template = `
 				<div id="${id}" class="toast ${cls} text-white" role="alert" aria-live="assertive" aria-atomic="true">
 					<div class="toast-header ${cls} text-white">
 						<strong class="me-auto">TG Sentinel</strong>
 						<button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
 					</div>
-					<div class="toast-body"></div>
+					<div class="toast-body">${spinnerHtml}</div>
 				</div>`;
 			toastContainer.insertAdjacentHTML("beforeend", template);
 			const toastEl = document.getElementById(id);
@@ -316,11 +292,19 @@
 			}
 			const body = toastEl.querySelector(".toast-body");
 			if (body) {
-				body.textContent = String(message ?? "");
+				// Append message after spinner if spinner exists
+				const messageSpan = document.createElement('span');
+				messageSpan.textContent = String(message ?? "");
+				body.appendChild(messageSpan);
 			}
-			const toast = new bootstrap.Toast(toastEl, { delay: 4500 });
+			const toastOptions = { autohide: !options.persistent };
+			if (!options.persistent) {
+				toastOptions.delay = 4500;
+			}
+			const toast = new bootstrap.Toast(toastEl, toastOptions);
 			toast.show();
 			toastEl.addEventListener("hidden.bs.toast", () => toastEl.remove());
+			return id;
 		}
 
 		window.showToast = showToast;
@@ -1555,6 +1539,125 @@
         } catch (e) {}
         // Ensure session info still populates header for visual context
         try { if (window.refreshSessionInfo) window.refreshSessionInfo(); } catch (e) {}
+      });
+    </script>
+    {% else %}
+    <script>
+      // Show loading toast when app opens with existing authentication (only on first load)
+      document.addEventListener('DOMContentLoaded', async () => {
+        // Check if dialogs have already been fetched (use sessionStorage to track)
+        const dialogsFetchedKey = 'tgsentinel_dialogs_fetched';
+        const alreadyFetched = sessionStorage.getItem(dialogsFetchedKey) === 'true';
+        
+        if (alreadyFetched) {
+          console.log('Dialogs already fetched this session, skipping loading toast');
+          return;
+        }
+        
+        let loadingToastId = null;
+        let appFullyLoaded = false;
+        
+        try {
+          // Check if user is authenticated by checking worker status
+          const statusResponse = await fetch('/api/worker/status');
+          if (statusResponse.ok) {
+            const statusData = await statusResponse.json();
+            
+            if (statusData.authorized) {
+              // Always show loading toast first, even if already ready
+              loadingToastId = showToast('Loading TG Sentinel...', 'info', { persistent: true, spinner: true });
+              
+              // Check if already ready (caches warmed, dialogs fetched)
+              if (statusData.status === 'ready') {
+                console.log('Worker already ready, marking dialogs as fetched');
+                sessionStorage.setItem(dialogsFetchedKey, 'true');
+                
+                // Give user visual feedback (minimum 1 second)
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // Hide loading toast
+                if (loadingToastId) {
+                  const toastEl = document.getElementById(loadingToastId);
+                  if (toastEl) {
+                    const toastInstance = bootstrap.Toast.getInstance(toastEl);
+                    if (toastInstance) toastInstance.hide();
+                  }
+                }
+                
+                showToast('TG Sentinel ready', 'success');
+                return;
+              }
+              
+              // Worker is not ready yet - poll until it becomes ready
+              const pollWorkerStatus = async () => {
+                const maxAttempts = 60; // 60 * 500ms = 30 seconds max
+                let attempts = 0;
+                
+                return new Promise((resolve) => {
+                  const pollInterval = setInterval(async () => {
+                    attempts++;
+                    
+                    try {
+                      const statusResp = await fetch('/api/worker/status');
+                      if (statusResp.ok) {
+                        const data = await statusResp.json();
+                        
+                        // Check if worker status is "ready" (dialogs fetched, caches warmed)
+                        if (data.status === 'ready') {
+                          console.log('Worker status is ready - dialogs fetched and caches warmed');
+                          clearInterval(pollInterval);
+                          sessionStorage.setItem(dialogsFetchedKey, 'true');
+                          resolve(true);
+                          return;
+                        }
+                      }
+                      
+                      // Timeout check
+                      if (attempts >= maxAttempts) {
+                        console.log('Polling timeout - assuming ready');
+                        clearInterval(pollInterval);
+                        resolve(false);
+                      }
+                    } catch (err) {
+                      console.error('Worker status poll error:', err);
+                      // Continue polling on error
+                    }
+                  }, 500);
+                });
+              };
+              
+              // Wait for worker to be ready
+              const workerReady = await pollWorkerStatus();
+              
+              appFullyLoaded = true;
+              
+              // Remove loading toast
+              if (loadingToastId) {
+                const toastEl = document.getElementById(loadingToastId);
+                if (toastEl) {
+                  const toastInstance = bootstrap.Toast.getInstance(toastEl);
+                  if (toastInstance) toastInstance.hide();
+                }
+              }
+              
+              // Show ready message
+              if (workerReady) {
+                showToast('TG Sentinel ready', 'success');
+              } else {
+                showToast('TG Sentinel loaded (may still be initializing)', 'warning');
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Loading check failed:', error);
+          if (loadingToastId && !appFullyLoaded) {
+            const toastEl = document.getElementById(loadingToastId);
+            if (toastEl) {
+              const toastInstance = bootstrap.Toast.getInstance(toastEl);
+              if (toastInstance) toastInstance.hide();
+            }
+          }
+        }
       });
     </script>
     {% endif %}

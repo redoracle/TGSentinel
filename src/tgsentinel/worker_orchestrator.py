@@ -7,6 +7,7 @@ Coordinates digest generation, metrics logging, and status updates.
 
 import asyncio
 import logging
+from datetime import datetime
 from typing import Any, Callable
 
 from sqlalchemy.engine import Engine
@@ -16,6 +17,7 @@ from .config import AppCfg
 from .digest import send_digest
 from .metrics import dump
 from .redis_operations import RedisManager
+from .store import cleanup_old_messages, vacuum_database
 from .telegram_request_handlers import (
     ParticipantInfoHandler,
     TelegramChatsHandler,
@@ -130,6 +132,87 @@ class WorkerOrchestrator:
                 )
                 log.debug("[HEARTBEAT] Worker status refreshed in Redis")
 
+    async def database_cleanup_worker(self) -> None:
+        """Periodic database cleanup to enforce retention policy."""
+        # Wait for initial authorization before starting cleanup cycle
+        await self.handshake_gate.wait()
+
+        while True:
+            if not self.cfg.system.database.cleanup_enabled:
+                # If cleanup disabled, just sleep and check again
+                await asyncio.sleep(3600)  # Check every hour
+                continue
+
+            try:
+                log.info(
+                    "[DATABASE-CLEANUP] Starting cleanup: retention_days=%d, max_messages=%d",
+                    self.cfg.system.database.retention_days,
+                    self.cfg.system.database.max_messages,
+                )
+
+                # Run cleanup
+                stats = await asyncio.to_thread(
+                    cleanup_old_messages,
+                    self.engine,
+                    retention_days=self.cfg.system.database.retention_days,
+                    max_messages=self.cfg.system.database.max_messages,
+                )
+
+                log.info(
+                    "[DATABASE-CLEANUP] Deleted %d messages (age-based: %d, count-based: %d), remaining: %d",
+                    stats["total_deleted"],
+                    stats["deleted_by_age"],
+                    stats["deleted_by_count"],
+                    stats["remaining_count"],
+                )
+
+                # Run VACUUM if enabled and it's the right hour
+                if self.cfg.system.database.vacuum_on_cleanup:
+                    current_hour = datetime.now().hour
+                    preferred_hour = self.cfg.system.database.vacuum_hour
+
+                    # Run VACUUM if within 1 hour of preferred time or if significant cleanup happened
+                    # Use wraparound-aware comparison for midnight boundary (e.g. 23→0)
+                    hour_delta = (current_hour - preferred_hour) % 24
+                    within_hour_window = min(hour_delta, 24 - hour_delta) <= 1
+
+                    should_vacuum = (
+                        within_hour_window
+                        or stats["total_deleted"]
+                        > 100  # Force VACUUM after large cleanup
+                    )
+
+                    if should_vacuum:
+                        log.info("[DATABASE-CLEANUP] Running VACUUM...")
+                        vacuum_stats = await asyncio.to_thread(
+                            vacuum_database, self.engine
+                        )
+
+                        if vacuum_stats["success"]:
+                            log.info(
+                                "[DATABASE-CLEANUP] VACUUM completed in %.2fs",
+                                vacuum_stats["duration_seconds"],
+                            )
+                        else:
+                            log.warning(
+                                "[DATABASE-CLEANUP] VACUUM failed: %s",
+                                vacuum_stats.get("error"),
+                            )
+                    else:
+                        log.debug(
+                            "[DATABASE-CLEANUP] Skipping VACUUM (current hour: %d, preferred: %d)",
+                            current_hour,
+                            preferred_hour,
+                        )
+
+                log.info("[DATABASE-CLEANUP] Cleanup complete")
+
+            except Exception as e:
+                log.error("[DATABASE-CLEANUP] Cleanup failed: %s", e, exc_info=True)
+
+            # Sleep until next cleanup cycle
+            await asyncio.sleep(self.cfg.system.database.cleanup_interval_hours * 3600)
+
     async def run_all_workers(
         self,
         session_persistence_handler_func: Callable[..., Any],
@@ -148,6 +231,7 @@ class WorkerOrchestrator:
             "daily_digest",
             "metrics_logger",
             "worker_status_refresher",
+            "database_cleanup_worker",
             "participant_info_handler",
             "telegram_chats_handler",
             "telegram_dialogs_handler",
@@ -162,6 +246,7 @@ class WorkerOrchestrator:
             self.daily_digest(),
             self.metrics_logger(),
             self.worker_status_refresher(),
+            self.database_cleanup_worker(),
             self.participant_handler.run(),
             self.chats_handler.run(),
             self.dialogs_handler.run(),

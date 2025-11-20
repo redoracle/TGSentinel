@@ -13,6 +13,7 @@ from .config import AppCfg, ChannelRule, load_config
 from .heuristics import run_heuristics
 from .metrics import inc
 from .notifier import notify_channel, notify_dm
+from .profile_resolver import ProfileResolver
 from .semantic import load_interests, score_text
 from .store import mark_alerted, upsert_message
 
@@ -51,12 +52,50 @@ async def process_stream_message(
     rules: Dict[int, ChannelRule],
     payload: Dict[str, Any],
     our_user_id: int | None = None,
+    profile_resolver: Optional[ProfileResolver] = None,
 ) -> bool:
     rid = _to_int(payload["chat_id"])
     rule = rules.get(rid)
     vip = set(rule.vip_senders) if rule else set()
-    keywords = rule.keywords if rule else []
     msg_id = _to_int(payload["msg_id"])
+
+    # Resolve profiles for this channel (if using two-layer architecture)
+    resolved_profile = None
+    if rule and profile_resolver:
+        resolved_profile = profile_resolver.resolve_for_channel(rule)
+
+    # Use resolved keywords or fallback to legacy rule keywords
+    if resolved_profile:
+        keywords = resolved_profile.keywords
+        action_keywords = resolved_profile.action_keywords
+        decision_keywords = resolved_profile.decision_keywords
+        urgency_keywords = resolved_profile.urgency_keywords
+        importance_keywords = resolved_profile.importance_keywords
+        release_keywords = resolved_profile.release_keywords
+        security_keywords = resolved_profile.security_keywords
+        risk_keywords = resolved_profile.risk_keywords
+        opportunity_keywords = resolved_profile.opportunity_keywords
+        detect_codes = resolved_profile.detect_codes
+        detect_documents = resolved_profile.detect_documents
+        prioritize_pinned = resolved_profile.prioritize_pinned
+        prioritize_admin = resolved_profile.prioritize_admin
+        detect_polls = resolved_profile.detect_polls
+    else:
+        # Fallback to legacy rule keywords (backward compatibility)
+        keywords = rule.keywords if rule else []
+        action_keywords = rule.action_keywords if rule else None
+        decision_keywords = rule.decision_keywords if rule else None
+        urgency_keywords = rule.urgency_keywords if rule else None
+        importance_keywords = rule.importance_keywords if rule else None
+        release_keywords = rule.release_keywords if rule else None
+        security_keywords = rule.security_keywords if rule else None
+        risk_keywords = rule.risk_keywords if rule else None
+        opportunity_keywords = rule.opportunity_keywords if rule else None
+        detect_codes = rule.detect_codes if rule else True
+        detect_documents = rule.detect_documents if rule else True
+        prioritize_pinned = rule.prioritize_pinned if rule else True
+        prioritize_admin = rule.prioritize_admin if rule else True
+        detect_polls = rule.detect_polls if rule else True
 
     # Detect if this is a private chat (positive ID) or reply to current user
     is_private = rid > 0
@@ -116,21 +155,21 @@ async def process_stream_message(
         is_poll=payload.get("media_type") == "MessageMediaPoll",
         sender_is_admin=sender_is_admin,
         has_forward=bool(payload.get("has_forward", False)),
-        # Category-specific keywords from rule
-        action_keywords=rule.action_keywords if rule else None,
-        decision_keywords=rule.decision_keywords if rule else None,
-        urgency_keywords=rule.urgency_keywords if rule else None,
-        importance_keywords=rule.importance_keywords if rule else None,
-        release_keywords=rule.release_keywords if rule else None,
-        security_keywords=rule.security_keywords if rule else None,
-        risk_keywords=rule.risk_keywords if rule else None,
-        opportunity_keywords=rule.opportunity_keywords if rule else None,
-        # Detection flags
-        detect_codes=rule.detect_codes if rule else True,
-        detect_documents=rule.detect_documents if rule else True,
-        prioritize_pinned=rule.prioritize_pinned if rule else True,
-        prioritize_admin=rule.prioritize_admin if rule else True,
-        detect_polls=rule.detect_polls if rule else True,
+        # Category-specific keywords (from resolved profile or legacy rule)
+        action_keywords=action_keywords,
+        decision_keywords=decision_keywords,
+        urgency_keywords=urgency_keywords,
+        importance_keywords=importance_keywords,
+        release_keywords=release_keywords,
+        security_keywords=security_keywords,
+        risk_keywords=risk_keywords,
+        opportunity_keywords=opportunity_keywords,
+        # Detection flags (from resolved profile or legacy rule)
+        detect_codes=detect_codes,
+        detect_documents=detect_documents,
+        prioritize_pinned=prioritize_pinned,
+        prioritize_admin=prioritize_admin,
+        detect_polls=detect_polls,
     )
 
     score = hr.pre_score
@@ -144,6 +183,11 @@ async def process_stream_message(
     triggers = ", ".join(hr.reasons) if hr.reasons else ""
     sender_id = _to_int(payload.get("sender_id"), 0)
 
+    # Serialize trigger_annotations to JSON for storage
+    trigger_annotations_json = (
+        json.dumps(hr.trigger_annotations) if hr.trigger_annotations else ""
+    )
+
     upsert_message(
         engine,
         rid,
@@ -155,6 +199,7 @@ async def process_stream_message(
         message_text,
         triggers,
         sender_id,
+        trigger_annotations_json,
     )
 
     important = hr.important or (sem is not None and sem >= cfg.similarity_threshold)
@@ -206,6 +251,19 @@ async def process_loop(
     rules = load_rules(cfg)
     load_interests(cfg.interests)
 
+    # Initialize ProfileResolver with global profiles (two-layer architecture)
+    profile_resolver = (
+        ProfileResolver(cfg.global_profiles) if cfg.global_profiles else None
+    )
+    if profile_resolver:
+        log.info(
+            f"ProfileResolver initialized with {len(cfg.global_profiles)} global profiles"
+        )
+    else:
+        log.info(
+            "ProfileResolver not initialized (no global profiles found, using legacy keywords)"
+        )
+
     # Cache our user ID once at startup to avoid calling get_me() per message
     our_user_id: int | None = None
     try:
@@ -236,6 +294,16 @@ async def process_loop(
                     cfg = new_cfg
                     rules = load_rules(cfg)
                     load_interests(cfg.interests)
+                    # Reinitialize ProfileResolver with new global profiles
+                    profile_resolver = (
+                        ProfileResolver(cfg.global_profiles)
+                        if cfg.global_profiles
+                        else None
+                    )
+                    if profile_resolver:
+                        log.info(
+                            f"ProfileResolver reinitialized with {len(cfg.global_profiles)} global profiles"
+                        )
                     # Reconnect Telegram client to pick up a newly authenticated session
                     try:
                         client.disconnect()
@@ -356,7 +424,13 @@ async def process_loop(
                 try:
                     payload = json.loads(fields["json"])
                     important = await process_stream_message(
-                        cfg, client, engine, rules, payload, our_user_id
+                        cfg,
+                        client,
+                        engine,
+                        rules,
+                        payload,
+                        our_user_id,
+                        profile_resolver,
                     )
                     r.xack(stream, group, msg_id)
                     inc("processed_total", important=important)

@@ -46,7 +46,6 @@ services:
     env_file: [.env]
     environment:
       - UI_PORT=5000
-      - UI_DB_URI=sqlite:////app/data/ui.db
       - SENTINEL_API_BASE_URL=http://sentinel:8080/api
     volumes:
       - tgsentinel_ui_data:/app/data

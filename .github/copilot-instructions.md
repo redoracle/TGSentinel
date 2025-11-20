@@ -1,209 +1,190 @@
-# TG Sentinel — AI Agent Instructions
+# TG Sentinel – AI Coding Agent Instructions
 
-## Architecture Overview
+## Project Overview
 
-TG Sentinel is a Dockerized Telegram monitoring service with strict **dual-database architecture** and **single-owner session pattern**. Two main containers communicate via HTTP/Redis:
+**TG Sentinel** is a privacy-preserving Telegram monitoring system that intelligently filters messages from channels, groups, and chats using heuristics + semantic scoring, alerting users only when important content appears.
 
-- **Sentinel container** (`src/tgsentinel/`): Owns Telegram session, runs Telethon client, exposes HTTP API on port 8080
-- **UI container** (`ui/`): Flask web interface, owns `ui.db`, delegates all Telegram operations to Sentinel
+**Key Architecture**: Dual-service Docker setup (Sentinel worker + UI) with strict separation of concerns enforced via HTTP/JSON APIs and Redis pub/sub. Never mix UI and Sentinel imports or database access.
 
-**Critical Rule**: UI NEVER directly accesses `tgsentinel.session` or imports Telethon. All communication goes through:
-- HTTP API: `http://sentinel:8080/api/*`
-- Redis IPC: `tgsentinel:auth_queue`, `tgsentinel:request:*`, `tgsentinel:response:*`
+## Critical Architecture Constraints
 
-## Database Ownership (Non-Negotiable)
+### Dual-Database Separation (see `.github/instructions/DB_Architecture.instructions.md`)
 
-```
-sentinel container:
-  - tgsentinel.session (Telethon SQLite, Sentinel-only)
-  - sentinel.db (app data, owned by Sentinel)
-  Volume: tgsentinel_sentinel_data
+- **Sentinel service** (`sentinel` container):
 
-ui container:
-  - ui.db (UI state, settings, cached alerts)
-  Volume: tgsentinel_ui_data
-```
+  - Owns `tgsentinel.session` (Telethon SQLite session) and `sentinel.db`
+  - Only service that creates/uses `TelegramClient` or touches MTProto
+  - Code: `src/tgsentinel/`
+  - Volumes: `tgsentinel_sentinel_data:/app/data`
 
-**Violations to avoid**: UI code importing `from tgsentinel.store`, opening session files directly, mounting sentinel volumes.
+- **UI service** (`ui` container):
+  - Owns `ui.db` (previously removed, but may be added back for UI-specific state)
+  - Never imports Telethon or Sentinel modules
+  - Code: `ui/`
+  - Volumes: `tgsentinel_ui_data:/app/data`
 
-## Key Workflows
+**Never** let UI directly access `tgsentinel.session` or Sentinel modules. All interaction goes through HTTP endpoints at `http://sentinel:8080/api/*`.
 
-### Running Tests
+### Redis Key Schema (Authoritative State)
+
+All Redis keys follow the pattern `tgsentinel:*`:
+
+- **Auth/Session**: `tgsentinel:worker_status`, `tgsentinel:user_info`, `tgsentinel:credentials:{ui|sentinel}`
+- **Relogin/Handshake**: `tgsentinel:relogin:handshake` (canonical), `tgsentinel:relogin` (legacy, being migrated)
+- **Request/Response delegation**: `tgsentinel:request:get_{dialogs|users|chats}:{request_id}`, `tgsentinel:response:get_{dialogs|users|chats}:{request_id}`
+- **Jobs/Progress**: `tgsentinel:jobs:{job_id}:progress`, `tgsentinel:jobs:{job_id}:logs`
+- **Pub/Sub channels**: `tgsentinel:session_updated`
+
+TTLs must be set appropriately (e.g., 3600s for auth keys, bounded TTL for job logs).
+
+### Concurrency Model (see `.github/instructions/Concurrency.instructions.md`)
+
+- **Asyncio end-to-end** in Sentinel service. No threads except via `run_in_executor` for blocking I/O.
+- **Long-running handlers** are async tasks tracked in a central registry:
+  - `[CHATS-HANDLER]`, `[DIALOGS-HANDLER]`, `[USERS-HANDLER]`, `[CACHE-REFRESHER]`, `[JOBS-HANDLER]`
+  - Handler modules: `src/tgsentinel/telegram_request_handlers.py`, `cache_manager.py`, `session_manager.py`
+- **Startup orchestration**: All handlers launched via `asyncio.gather()` in `main.py`
+- **Graceful shutdown**: Cancel tasks in controlled order, await completion, close connections cleanly
+- **Use asyncio.Queue** for in-process pipelines; **Redis Streams/pub-sub** for cross-container communication
+
+## Developer Workflows
+
+### Local Development
+
 ```bash
-make test              # All tests via tools/run_tests.py
-pytest tests/          # Direct pytest
-pytest -k test_auth    # Specific pattern
-make test-cov          # With coverage report
+# Format code (required before commits)
+make format          # black + isort
+
+# Run tests
+make test            # all tests via tools/run_tests.py
+pytest -m unit       # unit tests only
+pytest -m integration # integration tests only
+
+# Lint (optional)
+make lint            # mypy + ruff
 ```
 
-### Code Formatting
+### Docker Workflows
+
 ```bash
-make format            # Black + isort
-make format-check      # CI validation (don't modify)
+# Clean rebuild (REQUIRED after auth/session changes)
+docker compose down -v && docker compose build && docker compose up -d
+
+# Follow logs
+docker compose logs -f sentinel
+docker compose logs -f ui
+
+# Inspect Redis state
+docker exec -it tgsentinel-redis-1 redis-cli
+> KEYS tgsentinel:*
+> GET tgsentinel:worker_status
+> TTL tgsentinel:user_info
 ```
 
-### Docker Development
-```bash
-make docker-build      # Build images
-make docker-up         # Start services
-make docker-logs       # Follow sentinel logs
-docker compose logs ui # UI logs
-docker compose down -v # Clean restart (removes volumes)
-```
+**After ANY auth/session change**, follow the full validation workflow in `.github/instructions/AUTH.instructions.md`:
 
-### Session Management
-Session upload flow (see `DB_Architecture.instructions.md` §6):
-1. Browser → UI: `POST /api/session/upload` (file upload)
-2. UI → Sentinel: `POST /api/session/import` (forwards file via HTTP)
-3. Sentinel writes to `/app/data/tgsentinel.session` and reinitializes Telethon
+1. Clean rebuild + remove volumes
+2. Verify session upload via `/api/session/upload` (UI) → `/api/session/import` (Sentinel)
+3. Check Redis keys and TTLs
+4. Validate UI behavior (login, avatar, status, logout cleanup)
+5. Review logs for errors/sensitive data leaks
 
-**Never** copy session files between volumes or use temp directories.
+### Test Categories (see `.github/instructions/TESTS.instructions.md`)
 
-## Concurrency Model
+Use pytest markers to organize tests:
 
-All Sentinel handlers run in asyncio event loop (see `Concurrency.instructions.md`):
+- `@pytest.mark.unit` (80-90% of tests): Pure Python logic, no network/Redis/filesystem, < 10ms
+- `@pytest.mark.integration`: Real Redis + HTTP endpoints, service boundary validation
+- `@pytest.mark.contract`: API contract validation (JSON schema, status codes, no data leaks)
+- `@pytest.mark.e2e`: Full stack via docker-compose (minimal, smoke tests only)
+
+Structure: `tests/unit/{tgsentinel,ui}/`, `tests/integration/`, `tests/contracts/`
+
+## Project-Specific Patterns
+
+### Structured Logging
+
+Always use JSON logging with mandatory fields:
 
 ```python
-# Handler registry pattern
-self.tasks: dict[str, asyncio.Task] = {
-    "CHATS-HANDLER": asyncio.create_task(run_chats_handler()),
-    "USERS-HANDLER": asyncio.create_task(run_users_handler()),
-    "CACHE-REFRESHER": asyncio.create_task(run_cache_refresher()),
-}
+log.info(
+    "[HANDLER-TAG] Message",
+    extra={
+        "request_id": request_id,
+        "correlation_id": correlation_id,
+        "job_id": job_id,
+        "step": "fetch_dialogs"
+    }
+)
 ```
 
-- **I/O-bound**: Redis, Telethon, HTTP → stay in event loop
-- **CPU-bound**: Embeddings, semantic scoring → use `ProcessPoolExecutor`
-- Communication: `asyncio.Queue` (in-process), Redis Streams (cross-container)
+**Never log sensitive data**: session paths, `API_ID`, `API_HASH`, tokens, raw credentials, handshake keys.
 
-Handler tags in logs: `[CHATS-HANDLER]`, `[USERS-HANDLER]`, `[DIALOGS-HANDLER]`, `[CACHE-REFRESHER]`, `[JOBS-HANDLER]`
+### Progress Tracking (see `.github/instructions/Progressbar.instructions.md`)
 
-## Configuration System
+- Progress is a **state machine** (`PENDING → RUNNING → SUCCESS|FAILED|CANCELLED`), not logs
+- Store in Redis hash: `tgsentinel:jobs:{job_id}:progress` with fields: `status`, `percent`, `step`, `message`, `started_at`, `updated_at`, `error_code`
+- Logs are supplementary diagnostics in `tgsentinel:jobs:{job_id}:logs` (Redis Stream with TTL)
+- UI fetches via HTTP: `GET /api/jobs/{job_id}/status` and `GET /api/jobs/{job_id}/logs`
 
-YAML-based config in `config/tgsentinel.yml`:
+### Modular Refactoring (see `.github/instructions/Split_in_modules.instructions.md`)
 
-```python
-from tgsentinel.config import load_config
+When splitting large files (> 800 lines):
 
-cfg = load_config()  # Returns AppCfg dataclass
-cfg.telegram_session  # Path to session file
-cfg.api_id, cfg.api_hash  # Telegram credentials
-cfg.alerts.mode  # "dm" | "channel" | "both"
-cfg.channel_rules  # List[ChannelRule]
-```
+- Respect handler boundaries: `tgsentinel.handlers.{chats,dialogs,users,jobs}`
+- Preserve handler tags (`[CHATS-HANDLER]`) and centralized startup/shutdown
+- Keep Redis key patterns and TTL semantics intact
+- Never break UI ↔ Sentinel service boundaries
 
-Per-channel rules (`ChannelRule` dataclass):
-- `vip_senders`, `keywords`, `action_keywords`, `decision_keywords`
-- `reaction_threshold`, `reply_threshold`, `rate_limit_per_hour`
-- `detect_codes`, `detect_documents`, `prioritize_pinned`
+### UI/UX Patterns (see `.github/instructions/UI_UX.instructions.md`)
 
-## Redis Key Schema
+- UI routes in `ui/routes/`, business logic in `ui/services/`, avoid deep imports
+- One main intention per screen, predictable navigation, clear feedback for every action
+- Long operations via jobs: request `job_id` → poll/WS for progress → never subscribe to Redis directly
+- Consistent layout, typography hierarchy, reusable components
 
-All keys prefixed `tgsentinel:`:
+## Common Gotchas
 
-```
-tgsentinel:worker_status         # Sentinel auth state (TTL: 3600s)
-tgsentinel:user_info             # Cached user identity
-tgsentinel:auth_queue            # UI → Sentinel auth requests
-tgsentinel:request:get_dialogs:{id}   # Dialog fetch requests
-tgsentinel:response:get_dialogs:{id}  # Dialog responses
-tgsentinel:jobs:{job_id}:progress     # Job state machine
-tgsentinel:relogin:handshake     # Temp handshake during upload
-```
+1. **SQLite locking**: Use `client_lock` (asyncio.Lock) when accessing `tgsentinel.session` to prevent concurrent Telethon operations
+2. **Handler lifecycle**: Always register handlers in central task registry and ensure graceful cancellation on shutdown
+3. **Redis TTLs**: Auth/session keys must have reasonable TTLs (not `-1`), cleanup on logout must remove all related keys
+4. **Service boundaries**: UI must NEVER import `from src.tgsentinel import ...` or open `tgsentinel.session` directly
+5. **Async hygiene**: CPU-bound work (embeddings) must run in ProcessPoolExecutor, I/O-bound work stays in asyncio
+6. **Request IDs**: Always propagate `request_id` / `correlation_id` through logs, Redis keys, and API responses for tracing
 
-**Security**: Never log raw keys, session paths, or credentials (see `AUTH.instructions.md` §4).
+## Key Files Reference
 
-## Testing Guidelines
+- **Entry points**: `src/tgsentinel/main.py` (Sentinel), `ui/app.py` (UI)
+- **Config**: `config/tgsentinel.yml`, `config/profiles.yml`
+- **Docker**: `docker-compose.yml`, `docker/app.Dockerfile`
+- **Handlers**: `src/tgsentinel/{telegram_request_handlers,cache_manager,session_manager}.py`
+- **Core architecture docs**:
+  - `docs/ENGINEERING_GUIDELINES.md` — Full component specs and architecture
+  - `docs/ARCHITECTURE_COMPLIANCE.md` — Validation checklist for changes
+- **Instruction files** (authoritative):
+  - `.github/instructions/DB_Architecture.instructions.md` — Database ownership rules
+  - `.github/instructions/AUTH.instructions.md` — Session validation workflow
+  - `.github/instructions/Concurrency.instructions.md` — Handler lifecycle patterns
+  - `.github/instructions/TESTS.instructions.md` — Test taxonomy and structure
+  - `.github/instructions/UI_UX.instructions.md` — UI layer conventions
+  - `.github/instructions/Progressbar.instructions.md` — Progress tracking patterns
+  - `.github/instructions/Split_in_modules.instructions.md` — Refactoring guidelines
+  - `.github/instructions/Coding.instructions.md` — Performance optimization rules
+- **Tests**: `tests/README.md` for taxonomy and organization
+- **User documentation**:
+  - `docs/USER_GUIDE.md` — End-user features and workflows
+  - `docs/USAGE.md` — Deployment and operation guide
+  - `docs/CONFIGURATION.md` — Configuration reference
 
-From `TESTS.instructions.md`:
+## When Making Changes
 
-- **Unit tests** (80-90%): Pure logic, no Redis/network. Files in `tests/unit/tgsentinel/` or `tests/unit/ui/`
-- **Integration tests**: Real Redis, test HTTP API boundaries. Files in `tests/integration/`
-- **Contract tests**: API response schemas, error formats. Files in `tests/contracts/`
+1. **Read relevant `.github/instructions/*.instructions.md` files first** (they define architecture contracts)
+2. Follow the validation workflows after auth/session/concurrency changes
+3. Add tests for new behaviors (prefer unit > integration > e2e)
+4. Check that handler tags, Redis keys, and logging follow project conventions
+5. Verify service boundaries remain strict (no cross-imports)
+6. Run `make format` before committing
 
-**Naming**: `test_<behavior>__<condition>__<expected>()`
+---
 
-**Fixtures**: Centralized in `tests/conftest.py`. Use `@pytest.fixture` for shared test state.
-
-## Logging Standards
-
-Structured JSON logs with required fields (see `Progressbar.instructions.md`):
-
-```python
-log.info("Processing message", extra={
-    "handler": "CHATS-HANDLER",
-    "job_id": job_id,
-    "request_id": request_id,
-    "chat_id": chat_id,
-    "step": "heuristic_filter"
-})
-```
-
-**Never log**:
-- Session file paths (`/app/data/tgsentinel.session`)
-- Credentials (`API_ID`, `API_HASH`, tokens)
-- Raw handshake keys or phone numbers
-
-## Module Organization
-
-When refactoring large files (see `Split_in_modules.instructions.md`):
-
-1. Handlers → `tgsentinel.handlers.*` (e.g., `tgsentinel.handlers.chats`)
-2. Service boundaries: UI modules in `ui/`, Sentinel in `src/tgsentinel/`
-3. Preserve handler tags: `[CHATS-HANDLER]` etc.
-4. Maintain asyncio entry points: `async def run_*_handler()`
-
-## UI Development
-
-From `UI_UX.instructions.md`:
-
-- Structure: `ui/routes/`, `ui/services/`, `ui/api/`
-- **Never** import Sentinel modules or Telethon in UI code
-- All Telegram data via HTTP API to sentinel:8080
-- UI DB access: `from ui.database import get_ui_db`
-- Auth flow: UI submits to Redis → Sentinel processes → UI polls status
-
-## Performance Patterns
-
-From `Coding.instructions.md`:
-
-1. Profile before optimizing (`cProfile`, `line_profiler`)
-2. Cache expensive ops: `functools.lru_cache`
-3. Use built-ins: `sum`, `min`, `any`, `itertools` (C implementations)
-4. Lazy evaluation: generators over lists for large datasets
-5. Batch I/O: Redis pipelining, bulk DB inserts
-
-## Common Pitfalls
-
-1. **Session conflicts**: Always verify UI doesn't mount `/app/data` from sentinel volume
-2. **Import violations**: `grep -r "from tgsentinel" ui/` should return nothing
-3. **Handler crashes**: All handlers need graceful shutdown via `asyncio.Event`
-4. **Redis key leaks**: Always set TTLs on temporary keys
-5. **Test isolation**: Use dedicated Redis DB or mock for unit tests
-
-## Quick Reference
-
-| Task | Command/Path |
-|------|-------------|
-| Run sentinel locally | `docker compose up sentinel` |
-| Check Redis state | `docker exec -it tgsentinel-redis-1 redis-cli` |
-| View handler status | `curl http://localhost:8080/api/status` |
-| UI database schema | `ui/database.py` (migration logic) |
-| Config validation | `tools/verify_config_ui.py` |
-| Generate test session | `tools/generate_session.py` |
-
-## Documentation Index
-
-Core architecture docs in `docs/`:
-- `DUAL_DB_ARCHITECTURE.md` — Volume/DB separation details
-- `ENGINEERING_GUIDELINES.md` — Full component specs
-- `ARCHITECTURE_COMPLIANCE.md` — Validation checklist
-
-Instruction files in `.github/instructions/`:
-- `DB_Architecture.instructions.md` — Database ownership rules
-- `AUTH.instructions.md` — Session validation workflow
-- `Concurrency.instructions.md` — Handler lifecycle patterns
-- `TESTS.instructions.md` — Test taxonomy and structure
-- `UI_UX.instructions.md` — UI layer conventions
-
-When in doubt, these documents are the authoritative source. Always validate changes against `AUTH.instructions.md` after modifying session/auth code.
+_These instructions encode the "why" behind TG Sentinel's architecture. When in doubt, consult the `.github/instructions/_.instructions.md` files—they are the source of truth.\*

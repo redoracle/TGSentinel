@@ -15,6 +15,7 @@ import csv
 import io
 import logging
 import os
+import requests
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -138,6 +139,116 @@ def alert_digests():
     )
 
 
+@dashboard_bp.route("/config/threshold", methods=["GET", "POST"])
+def config_threshold():
+    """Proxy for alert threshold (min_score) to/from Sentinel API."""
+    sentinel_api_url = os.getenv("SENTINEL_API_BASE_URL", "http://sentinel:8080/api")
+
+    if request.method == "POST":
+        # Forward POST request to Sentinel
+        data = request.get_json() or {}
+        threshold = data.get("threshold")
+
+        if threshold is None:
+            return jsonify({"status": "error", "message": "threshold is required"}), 400
+
+        try:
+            threshold_value = float(threshold)
+            if not (0.0 <= threshold_value <= 10.0):
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "threshold must be between 0.0 and 10.0",
+                        }
+                    ),
+                    400,
+                )
+
+            # Update config on Sentinel (single source of truth)
+            response = requests.post(
+                f"{sentinel_api_url}/config",
+                json={"alerts": {"min_score": threshold_value}},
+                headers={"Content-Type": "application/json"},
+                timeout=10,
+            )
+
+            if not response.ok:
+                # Normalize Content-Type by extracting media type (ignore charset and other parameters)
+                content_type = response.headers.get("content-type", "")
+                media_type = content_type.split(";")[0].strip().lower()
+                error_data = response.json() if media_type == "application/json" else {}
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": error_data.get(
+                                "message", f"Sentinel API error: {response.status_code}"
+                            ),
+                        }
+                    ),
+                    response.status_code,
+                )
+
+            return jsonify(
+                {
+                    "status": "ok",
+                    "threshold": threshold_value,
+                    "message": "Threshold saved successfully",
+                }
+            )
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to update threshold on Sentinel: {e}")
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": f"Failed to communicate with Sentinel: {str(e)}",
+                    }
+                ),
+                503,
+            )
+        except (ValueError, TypeError) as e:
+            return (
+                jsonify(
+                    {"status": "error", "message": f"Invalid threshold value: {e}"}
+                ),
+                400,
+            )
+    else:
+        # GET: Fetch current threshold from Sentinel
+        try:
+            response = requests.get(f"{sentinel_api_url}/config", timeout=5)
+            if not response.ok:
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Failed to fetch config from Sentinel: {response.status_code}",
+                        }
+                    ),
+                    response.status_code,
+                )
+
+            config_data = response.json().get("data", {})
+            min_score = config_data.get("alerts", {}).get("min_score", 5.0)
+
+            return jsonify({"status": "ok", "threshold": float(min_score)})
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to fetch config from Sentinel: {e}")
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": f"Failed to communicate with Sentinel: {str(e)}",
+                    }
+                ),
+                503,
+            )
+
+
 @dashboard_bp.route("/analytics/metrics", methods=["GET"])
 def analytics_metrics():
     """Get real-time analytics metrics."""
@@ -189,9 +300,6 @@ def analytics_keywords():
     Uses the union of configured channel keywords and counts case-insensitive
     occurrences in the `messages.message_text` field within the last 24 hours.
     """
-    import requests
-    import os
-
     deps = get_deps()
     from ui.core import query_one
 

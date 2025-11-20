@@ -414,7 +414,7 @@ async def channels_users_cache_refresher(
                             await asyncio.to_thread(
                                 redis_client.setex,
                                 "tgsentinel:login_progress",
-                                300,  # 5 minute TTL
+                                3600,  # 1 hour TTL
                                 json.dumps(
                                     {
                                         "stage": "cache_ready",
@@ -523,6 +523,30 @@ async def channels_users_cache_refresher(
             logger.info(
                 "[CACHE-REFRESHER] ✓ All initialization complete, entering periodic refresh loop"
             )
+
+            # Publish 100% completion to login progress (closes progress modal)
+            try:
+                await asyncio.to_thread(
+                    redis_client.setex,
+                    "tgsentinel:login_progress",
+                    60,
+                    json.dumps(
+                        {
+                            "stage": "completed",
+                            "percent": 100,
+                            "message": "✓ Ready! All caches loaded.",
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        }
+                    ),
+                )
+                logger.info(
+                    "[CACHE-REFRESHER] Published login completion (100%) - progress modal should close"
+                )
+            except Exception as completion_exc:
+                logger.warning(
+                    "[CACHE-REFRESHER] Failed to publish login completion: %s",
+                    completion_exc,
+                )
 
             # Phase 2: Event-driven refresh loop for this generation
             # Uses asyncio tasks to immediately detect generation changes via pubsub

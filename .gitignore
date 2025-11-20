@@ -1,7 +1,7 @@
 # Environment and secrets
 .env
 *.env*
-
+!.env.sample
 # Python build artifacts
 __pycache__/
 *.py[cod]

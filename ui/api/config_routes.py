@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import requests
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,11 @@ def init_blueprint(redis_obj: Any, config_instance: Any) -> None:
 def get_config_path() -> Path:
     """Get the configuration file path."""
     return Path(os.getenv("TG_SENTINEL_CONFIG", "config/tgsentinel.yml"))
+
+
+def get_sentinel_api_url() -> str:
+    """Get the Sentinel API base URL."""
+    return os.getenv("SENTINEL_API_BASE_URL", "http://sentinel:8080/api")
 
 
 def _validate_config_data(config_data: dict) -> tuple[bool, str]:
@@ -216,7 +222,7 @@ def _validate_config_data(config_data: dict) -> tuple[bool, str]:
 
 @config_bp.post("/save")
 def api_config_save():
-    """Save configuration to YAML file with validation."""
+    """Save configuration via Sentinel API (single source of truth)."""
     try:
         config_data = request.get_json()
         if not config_data:
@@ -236,15 +242,50 @@ def api_config_save():
                 400,
             )
 
-        # Save to YAML file
-        import yaml
+        # Forward to Sentinel API (single source of truth)
 
-        config_file = get_config_path()
-        with open(config_file, "w") as f:
-            yaml.safe_dump(config_data, f, default_flow_style=False, sort_keys=False)
+        sentinel_api_url = get_sentinel_api_url()
 
-        logger.info(f"Configuration saved successfully to {config_file}")
-        return jsonify({"status": "ok", "message": "Configuration saved"}), 200
+        try:
+            response = requests.post(
+                f"{sentinel_api_url}/config",
+                json=config_data,
+                headers={"Content-Type": "application/json"},
+                timeout=10,
+            )
+
+            if not response.ok:
+                error_data = (
+                    response.json()
+                    if response.headers.get("content-type", "").startswith(
+                        "application/json"
+                    )
+                    else {}
+                )
+                error_msg = error_data.get(
+                    "message", f"Sentinel returned {response.status_code}"
+                )
+                logger.error(f"Sentinel API rejected config: {error_msg}")
+                return (
+                    jsonify({"status": "error", "message": error_msg}),
+                    response.status_code,
+                )
+
+            logger.info("Configuration saved successfully via Sentinel API")
+            return jsonify({"status": "ok", "message": "Configuration saved"}), 200
+
+        except requests.exceptions.RequestException as req_err:
+            logger.error(f"Failed to connect to Sentinel API: {req_err}", exc_info=True)
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": f"Could not connect to Sentinel: {str(req_err)}",
+                    }
+                ),
+                503,
+            )
+
     except Exception as e:
         logger.error(f"Failed to save configuration: {e}", exc_info=True)
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -252,33 +293,52 @@ def api_config_save():
 
 @config_bp.post("/clean-db")
 def api_config_clean_db():
-    """Clean up database by removing old entries."""
+    """Clean up database by removing old entries - proxies to Sentinel."""
     try:
-        from database import get_ui_db
+        import requests
 
         days = int(request.args.get("days", 30))
-        ui_db = get_ui_db()
 
-        # Clean up old alerts from UI database
-        conn = ui_db.connect()
-        cursor = conn.cursor()
-        # Build interval string for SQLite datetime function
-        interval = f"-{days} days"
-        cursor.execute(
-            "DELETE FROM alerts WHERE created_at < datetime('now', ?)", (interval,)
-        )
-        deleted_count = cursor.rowcount
-        conn.commit()
+        sentinel_api_url = get_sentinel_api_url()
 
-        return (
-            jsonify(
-                {
-                    "status": "ok",
-                    "message": f"Deleted {deleted_count} alerts older than {days} days",
-                }
-            ),
-            200,
+        # Forward cleanup request to Sentinel
+        response = requests.post(
+            f"{sentinel_api_url}/database/cleanup", params={"days": days}, timeout=60
         )
+
+        if response.ok:
+            data = response.json()
+            if data.get("status") == "ok":
+                result = data.get("data", {})
+                deleted_count = result.get("total_deleted", 0)
+                return (
+                    jsonify(
+                        {
+                            "status": "ok",
+                            "message": f"Deleted {deleted_count} messages older than {days} days",
+                            "data": result,
+                        }
+                    ),
+                    200,
+                )
+            else:
+                error_msg = data.get("error", "Unknown error from Sentinel")
+                logger.error(f"Sentinel cleanup failed: {error_msg}")
+                return jsonify({"status": "error", "message": error_msg}), 500
+        else:
+            logger.error(
+                f"Sentinel cleanup request failed: HTTP {response.status_code}"
+            )
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": f"Sentinel request failed: {response.status_code}",
+                    }
+                ),
+                502,
+            )
+
     except Exception as e:
         logger.error(f"Failed to clean database: {e}", exc_info=True)
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -306,18 +366,49 @@ def api_config_channels():
 
 @config_bp.route("/current", methods=["GET"])
 def api_config_current():
-    """Get current configuration."""
+    """Get current configuration from Sentinel (single source of truth)."""
     try:
-        import yaml
+        # Proxy to Sentinel API to get complete config including env vars
+        sentinel_api_url = get_sentinel_api_url()
+        response = requests.get(f"{sentinel_api_url}/config", timeout=5)
 
-        config_file = get_config_path()
-        if not os.path.exists(config_file):
-            return jsonify({}), 200
+        if response.status_code == 200:
+            sentinel_data = response.json()
+            if sentinel_data.get("status") == "ok":
+                return jsonify(sentinel_data.get("data", {})), 200
+            else:
+                logger.warning(f"Sentinel API returned error: {sentinel_data}")
+                return (
+                    jsonify({"status": "error", "message": "Sentinel API error"}),
+                    500,
+                )
+        else:
+            logger.error(f"Sentinel API returned status {response.status_code}")
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Failed to fetch config from Sentinel",
+                    }
+                ),
+                503,
+            )
 
-        with open(config_file, "r") as f:
-            config = yaml.safe_load(f) or {}
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Failed to connect to Sentinel API: {e}", exc_info=True)
+        # Fallback to local YAML file if Sentinel is not available
+        try:
+            import yaml
 
-        return jsonify(config), 200
+            config_file = get_config_path()
+            if not os.path.exists(config_file):
+                return jsonify({}), 200
+            with open(config_file, "r") as f:
+                config = yaml.safe_load(f) or {}
+            return jsonify(config), 200
+        except Exception as fallback_e:
+            logger.error(f"Failed to load fallback config: {fallback_e}", exc_info=True)
+            return jsonify({"status": "error", "message": str(fallback_e)}), 500
     except Exception as e:
         logger.error(f"Failed to get configuration: {e}", exc_info=True)
         return jsonify({"status": "error", "message": str(e)}), 500

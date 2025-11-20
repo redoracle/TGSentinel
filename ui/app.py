@@ -307,6 +307,8 @@ if not SECRET_KEY:
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 app.config["SECRET_KEY"] = SECRET_KEY
+# Make sessions permanent (survive browser restart) with 30-day lifetime
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
 # Relaxed CORS for private app use
 CORS(app, resources={r"/*": {"origins": "*", "supports_credentials": True}})
 
@@ -507,13 +509,11 @@ def init_app() -> None:
                 spec.loader.exec_module(db_module)
                 init_ui_db = db_module.init_ui_db
 
-            ui_db_uri = os.getenv("UI_DB_URI", "sqlite:////app/data/ui.db")
-            init_ui_db(ui_db_uri)
-            logger.info("UI Database initialized: %s", ui_db_uri)
+            # NOTE: UI database (ui.db) removed - it was never used
+            # All data is stored in Sentinel's database and accessed via HTTP API
+            logger.info("UI database infrastructure removed - using Sentinel API only")
         except Exception as ui_db_exc:
-            logger.error(
-                "Failed to initialize UI database: %s", ui_db_exc, exc_info=True
-            )
+            logger.debug("UI database module not available (expected): %s", ui_db_exc)
 
         # NOTE: UI no longer opens sentinel DB - violates dual-DB architecture
         # All data access from sentinel happens via HTTP API or Redis
@@ -1016,6 +1016,47 @@ def init_app() -> None:
         deps._login_ctx = _login_ctx
         deps.mark_initialized()
 
+        # Register Sentinel restart endpoint
+        @app.route("/api/sentinel/restart", methods=["POST"])
+        def restart_sentinel():
+            """Restart Sentinel container when system settings change."""
+            try:
+                import subprocess
+
+                # Execute docker compose restart sentinel
+                result = subprocess.run(
+                    ["docker", "compose", "restart", "sentinel"],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    check=False,
+                )
+
+                if result.returncode == 0:
+                    logger.info("Sentinel container restart initiated successfully")
+                    return (
+                        jsonify({"status": "ok", "message": "Sentinel is restarting"}),
+                        200,
+                    )
+                else:
+                    logger.error(f"Sentinel restart failed: {result.stderr}")
+                    return (
+                        jsonify(
+                            {
+                                "status": "error",
+                                "message": f"Restart failed: {result.stderr}",
+                            }
+                        ),
+                        500,
+                    )
+
+            except subprocess.TimeoutExpired:
+                logger.error("Sentinel restart timed out")
+                return jsonify({"status": "error", "message": "Restart timed out"}), 500
+            except Exception as e:
+                logger.error(f"Sentinel restart failed: {e}", exc_info=True)
+                return jsonify({"status": "error", "message": str(e)}), 500
+
         # Debug: Log config state
         if config:
             logger.info(
@@ -1093,7 +1134,12 @@ def init_app() -> None:
 
             is_session_missing = _session_missing()
             worker_auth = _check_worker_auth()
-            is_locked = bool(session.get("ui_locked"))
+
+            # Default-locked logic: explicitly locked OR (UI_LOCK enabled AND NOT has_been_unlocked)
+            explicitly_locked = bool(session.get("ui_locked"))
+            ui_lock_enabled = bool(UI_LOCK_PASSWORD or os.getenv("UI_LOCK_TIMEOUT"))
+            has_been_unlocked = bool(session.get("ui_has_been_unlocked"))
+            is_locked = explicitly_locked or (ui_lock_enabled and not has_been_unlocked)
 
             # API routes
             if path.startswith("/api/"):
@@ -1180,7 +1226,14 @@ def _ensure_init(func: Callable[..., Any]) -> Callable[..., Any]:
 
                 is_session_missing = _session_missing()
                 worker_auth = _worker_authorized_flag()
-                is_locked = bool(session.get("ui_locked"))
+
+                # Default-locked logic: explicitly locked OR (UI_LOCK enabled AND NOT has_been_unlocked)
+                explicitly_locked = bool(session.get("ui_locked"))
+                ui_lock_enabled = bool(UI_LOCK_PASSWORD or os.getenv("UI_LOCK_TIMEOUT"))
+                has_been_unlocked = bool(session.get("ui_has_been_unlocked"))
+                is_locked = explicitly_locked or (
+                    ui_lock_enabled and not has_been_unlocked
+                )
 
                 if path.startswith("/api/"):
                     allowed = (
@@ -1224,92 +1277,35 @@ def _ensure_init(func: Callable[..., Any]) -> Callable[..., Any]:
 def _query_one(sql: str, **params: Any) -> Any:
     """Query UI database for a single value.
 
-    ARCHITECTURAL NOTE: This function accesses UI DB only.
-    For sentinel data, use HTTP API endpoints.
+    DEPRECATED: UI database (ui.db) has been removed.
+    Returns None. All data should be fetched from Sentinel API.
     """
-    try:
-        from ui.database import get_ui_db
-    except ImportError:
-        # Fallback for when running as script (not as module)
-        import importlib.util
-
-        db_module_path = Path(__file__).parent / "database.py"
-        spec = importlib.util.spec_from_file_location("ui.database", db_module_path)
-        if spec is None or spec.loader is None:
-            raise ImportError(f"Cannot load ui.database from {db_module_path}")
-        db_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(db_module)
-        get_ui_db = db_module.get_ui_db
-
-    try:
-        ui_db = get_ui_db()
-        result = ui_db.query_one(sql, params)
-        return result
-    except Exception as exc:
-        logger.debug(f"Query failed: {exc}")
-        return None
+    logger.warning(
+        "DEPRECATED: _query_one() called but ui.db removed. Use Sentinel API."
+    )
+    return None
 
 
 def _query_all(sql: str, **params: Any) -> List[Dict[str, Any]]:
     """Query UI database for multiple rows.
 
-    ARCHITECTURAL NOTE: This function accesses UI DB only.
-    For sentinel data, use HTTP API endpoints.
+    DEPRECATED: UI database (ui.db) has been removed.
+    Returns empty list. All data should be fetched from Sentinel API.
     """
-    try:
-        from ui.database import get_ui_db
-    except ImportError:
-        # Fallback for when running as script (not as module)
-        import importlib.util
-
-        db_module_path = Path(__file__).parent / "database.py"
-        spec = importlib.util.spec_from_file_location("ui.database", db_module_path)
-        if spec is None or spec.loader is None:
-            raise ImportError(f"Cannot load ui.database from {db_module_path}")
-        db_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(db_module)
-        get_ui_db = db_module.get_ui_db
-
-    try:
-        ui_db = get_ui_db()
-        return ui_db.query_all(sql, params)
-    except Exception as exc:
-        logger.debug(f"Query failed: {exc}")
-        return []
+    logger.warning(
+        "DEPRECATED: _query_all() called but ui.db removed. Use Sentinel API."
+    )
+    return []
 
 
 def _execute(sql: str, **params: Any) -> None:
     """Execute a write operation (INSERT, UPDATE, DELETE) on UI database.
 
-    ARCHITECTURAL NOTE: This function is deprecated and should not be used.
-    UI should use the UIDatabase class from ui.database module instead.
-    Sentinel data access should go through HTTP API.
+    DEPRECATED: UI database (ui.db) has been removed.
+    Does nothing. All data operations should go through Sentinel API.
     """
-    try:
-        from ui.database import get_ui_db
-    except ImportError:
-        # Fallback for when running as script (not as module)
-        import importlib.util
-
-        db_module_path = Path(__file__).parent / "database.py"
-        spec = importlib.util.spec_from_file_location("ui.database", db_module_path)
-        if spec is None or spec.loader is None:
-            raise ImportError(f"Cannot load ui.database from {db_module_path}")
-        db_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(db_module)
-        get_ui_db = db_module.get_ui_db
-
-    try:
-        ui_db = get_ui_db()
-        ui_db.execute_write(sql, params)
-    except Exception as exc:
-        param_keys = list(params.keys()) if params else []
-        logger.warning(
-            "Cannot execute SQL statement: database error. "
-            f"Statement: {sql[:200]}{'...' if len(sql) > 200 else ''} | "
-            f"Parameters: {len(param_keys)} param(s) {param_keys if param_keys else '(none)'} | "
-            f"Error: {exc}"
-        )
+    logger.warning("DEPRECATED: _execute() called but ui.db removed. Use Sentinel API.")
+    return
 
 
 # ============================================================================

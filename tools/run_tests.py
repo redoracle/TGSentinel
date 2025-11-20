@@ -23,7 +23,7 @@ warnings.filterwarnings(
 
 
 def main() -> int:
-    return pytest.main()
+    return pytest.main(["tests"])
 
 
 if __name__ == "__main__":

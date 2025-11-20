@@ -9,6 +9,10 @@ This document describes the architecture, runtime components, configuration mode
 ## Table of Contents
 
 - [System Overview](#system-overview)
+- [Critical Architecture Constraints](#critical-architecture-constraints)
+  - [Dual-Database Separation](#dual-database-separation)
+  - [Redis Key Schema](#redis-key-schema)
+  - [Concurrency Model](#concurrency-model)
 - [Data Flow](#data-flow)
 - [Configuration Model](#configuration-model)
 - [Persistence](#persistence)
@@ -17,6 +21,9 @@ This document describes the architecture, runtime components, configuration mode
 - [UI Architecture and API Surface](#ui-architecture-and-api-surface)
 - [Redis and Caching](#redis-and-caching)
 - [Running and Developing](#running-and-developing)
+- [Testing Strategy](#testing-strategy)
+- [Structured Logging](#structured-logging)
+- [Progress Tracking](#progress-tracking)
 - [Performance and Tuning](#performance-and-tuning)
 - [Extension Points](#extension-points)
 - [Unified Profiles System Architecture](#unified-profiles-system-architecture)
@@ -197,9 +204,127 @@ Repository layout:
   - `config.py`: typed config loading with env‑var overrides.
   - `metrics.py`: log‑based counters.
   - `logging_setup.py`: consistent logging format/levels.
+  - `telegram_request_handlers.py`: handler classes for Telegram API delegation
+  - `cache_manager.py`: cache refresh handler
+  - `session_manager.py`: relogin coordinator and session persistence
+  - `redis_operations.py`: Redis key patterns and operations
 - `ui/`: Flask + Socket.IO app, templates, static assets.
+  - `routes/`: API route handlers organized by feature
+  - `services/`: Business logic layer (DataService, ProfileService)
+  - `utils/`: Shared utilities and helpers
 - `config/`: YAML config, webhooks, developer settings.
-- `data/`: session/db/avatars/profiles and runtime artifacts (shared by services).
+- `data/`: session/db/avatars/profiles and runtime artifacts (separate volumes per service).
+
+---
+
+## Critical Architecture Constraints
+
+### Dual-Database Separation
+
+TG Sentinel uses strict service boundaries enforced via separate databases and volumes:
+
+**Sentinel service** (`sentinel` container):
+
+- **Owns**: `tgsentinel.session` (Telethon SQLite session) and `sentinel.db`
+- **Only service** that creates/uses `TelegramClient` or touches MTProto
+- **Code location**: `src/tgsentinel/`
+- **Volume**: `tgsentinel_sentinel_data:/app/data`
+- **Never** mixes imports or database access with UI code
+
+**UI service** (`ui` container):
+
+- **Owns**: `ui.db` (previously removed, may be added back for UI-specific state)
+- **Never** imports Telethon or Sentinel modules
+- **Code location**: `ui/`
+- **Volume**: `tgsentinel_ui_data:/app/data`
+- **All** Telegram/Sentinel operations go through HTTP endpoints at `http://sentinel:8080/api/*`
+
+**Critical Rule**: UI must NEVER import `from src.tgsentinel import ...` or open `tgsentinel.session` directly.
+
+### Redis Key Schema
+
+All Redis keys follow the pattern `tgsentinel:*` for authoritative state:
+
+**Auth/Session State**:
+
+- `tgsentinel:worker_status` — Worker authorization status (TTL: 3600s)
+- `tgsentinel:user_info` — Cached user profile data (TTL: 3600s)
+- `tgsentinel:credentials:{ui|sentinel}` — Credential fingerprints (TTL: 3600s)
+
+**Relogin/Handshake**:
+
+- `tgsentinel:relogin:handshake` — Canonical handshake state (variable TTL)
+- `tgsentinel:relogin` — Legacy key being migrated
+
+**Request/Response Delegation**:
+
+- `tgsentinel:request:get_dialogs:{request_id}` — UI→Sentinel dialog requests
+- `tgsentinel:response:get_dialogs:{request_id}` — Sentinel→UI responses
+- `tgsentinel:request:get_users:{request_id}` — User list requests
+- `tgsentinel:response:get_users:{request_id}` — User list responses
+- `tgsentinel:request:get_chats:{request_id}` — Chat list requests
+- `tgsentinel:response:get_chats:{request_id}` — Chat list responses
+
+**Jobs/Progress Tracking**:
+
+- `tgsentinel:jobs:{job_id}:progress` — Job state machine data (hash)
+- `tgsentinel:jobs:{job_id}:logs` — Job diagnostic logs (stream with TTL)
+
+**Pub/Sub Channels**:
+
+- `tgsentinel:session_updated` — Session import/change events
+
+**TTL Requirements**: Auth/session keys must have reasonable TTLs (not `-1`). Cleanup on logout must remove all related keys.
+
+### Concurrency Model
+
+**Asyncio End-to-End**: Sentinel service uses asyncio exclusively. No threads except via `run_in_executor` for blocking I/O.
+
+**Long-Running Handlers** — Async tasks tracked in central registry:
+
+- `[CHATS-HANDLER]` — Chat list delegation handler
+- `[DIALOGS-HANDLER]` — Dialog fetch handler
+- `[USERS-HANDLER]` — User list handler
+- `[CACHE-REFRESHER]` — Periodic cache warmup
+- `[JOBS-HANDLER]` — Long-running job orchestration
+
+**Handler Modules**:
+
+- `src/tgsentinel/telegram_request_handlers.py` — Request delegation handlers
+- `src/tgsentinel/cache_manager.py` — Cache refresh logic
+- `src/tgsentinel/session_manager.py` — Session lifecycle management
+
+**Startup Orchestration**: All handlers launched via `asyncio.gather()` in `main.py`:
+
+```python
+await asyncio.gather(
+    start_chats_handler(),
+    start_dialogs_handler(),
+    start_users_handler(),
+    start_cache_refresher(),
+    start_jobs_handler(),
+)
+```
+
+**Graceful Shutdown**:
+
+1. Cancel tasks in controlled order
+2. Await completion with timeout
+3. Close Telethon/Redis connections cleanly
+4. Never leave zombie handlers running
+
+**Communication Patterns**:
+
+- **In-process**: Use `asyncio.Queue` for pipelines
+- **Cross-container**: Use Redis Streams/pub-sub for events
+- **CPU-bound work**: Use `ProcessPoolExecutor` (e.g., embeddings via `SentenceTransformer`)
+- **I/O-bound work**: Stay in asyncio loop
+
+**Common Gotchas**:
+
+1. **SQLite locking**: Use `client_lock` (asyncio.Lock) when accessing `tgsentinel.session`
+2. **Handler lifecycle**: Always register in central task registry, ensure graceful cancellation
+3. **Request IDs**: Always propagate `request_id`/`correlation_id` through logs, Redis keys, API responses
 
 ---
 
@@ -402,6 +527,191 @@ Pytest suite under `tests/` covers config precedence, client ingestion, worker l
 ```bash
 python -m pytest -q
 ```
+
+---
+
+## Testing Strategy
+
+TG Sentinel uses a four-tier test taxonomy organized by scope and execution speed:
+
+### Test Categories
+
+**Unit Tests** (80-90% of total) — `@pytest.mark.unit`:
+
+- Pure Python logic, no network/Redis/filesystem
+- Fast execution (< 10ms per test ideal)
+- Focus on domain logic, helpers, and small services
+- Examples: `test_heuristics.py`, `test_config.py`, `test_store.py`
+
+**Integration Tests** — `@pytest.mark.integration`:
+
+- Test Sentinel and UI services with real boundaries
+- Use real Redis (dedicated test DB or ephemeral container)
+- Exercise realistic flows: Redis keys, handler loops, API endpoints
+- Examples: `test_client.py`, `test_worker.py`, `test_ui_channels.py`
+
+**Contract/API Tests** — `@pytest.mark.contract`:
+
+- Test API contracts consumed by UI and external clients
+- Assert HTTP status codes, JSON schema, error formats
+- Ensure no sensitive data leaks (session paths, tokens, credentials)
+- Examples: `test_ui_endpoints.py`, `test_ui_analytics_layout.py`
+
+**End-to-End Tests** — `@pytest.mark.e2e`:
+
+- Small, curated set for full stack validation
+- Bring up UI + Sentinel + Redis via docker-compose
+- Smoke tests only (minimal, high-value scenarios)
+- Example: `test_console_e2e.py`
+
+### Test Structure
+
+```
+tests/
+├── unit/
+│   ├── tgsentinel/      # Sentinel service unit tests
+│   └── ui/              # UI service unit tests
+├── integration/         # Cross-service integration tests
+├── contracts/           # API contract validation tests
+└── conftest.py          # Shared fixtures
+```
+
+### Design for Testability
+
+**Dependency Injection**:
+
+- Inject Redis, logger, config, Telethon client via function parameters or constructors
+- Never create global clients inside business logic
+
+**Thin I/O, Thick Core**:
+
+- API/route handlers: Parse input → call domain service → format output
+- Business rules live in plain Python services/helpers (pure functions where possible)
+
+**Avoid Service Boundary Violations**:
+
+- UI tests must not import Sentinel modules (Telethon, `session_manager`, etc.)
+- Sentinel tests must not import UI modules
+- Interaction goes strictly via HTTP and Redis
+
+---
+
+## Structured Logging
+
+All logging must follow JSON structure with mandatory fields:
+
+```python
+log.info(
+    "[HANDLER-TAG] Message",
+    extra={
+        "request_id": request_id,
+        "correlation_id": correlation_id,
+        "job_id": job_id,
+        "step": "fetch_dialogs"
+    }
+)
+```
+
+### Handler Tags
+
+Use consistent tags in log messages for traceability:
+
+- `[AUTH-HANDLER]` — Authentication operations
+- `[SESSION-HANDLER]` — Session lifecycle management
+- `[CHATS-HANDLER]` — Chat list operations
+- `[DIALOGS-HANDLER]` — Dialog fetching
+- `[USERS-HANDLER]` — User list operations
+- `[CACHE-REFRESHER]` — Cache warming operations
+- `[JOBS-HANDLER]` — Job orchestration
+- `[STARTUP]` — Initialization sequence
+- `[SHUTDOWN]` — Graceful shutdown
+
+### Security Rules
+
+**Never log sensitive data**:
+
+- Session paths (e.g., `/app/data/tgsentinel.session`)
+- `API_ID`, `API_HASH`, tokens, or raw secrets
+- Raw contents of handshake keys (`tgsentinel:relogin`, `tgsentinel:relogin:handshake`)
+- Raw credentials or rate-limit identifiers
+- User phone numbers or full names (use masked versions)
+
+### Log Levels
+
+- `DEBUG`: Detailed flow information, internal state
+- `INFO`: Normal operations, handler lifecycle, user actions
+- `WARNING`: Recoverable issues, degraded mode, retries
+- `ERROR`: Failures requiring attention, unhandled exceptions
+- `CRITICAL`: System-wide failures, data corruption
+
+---
+
+## Progress Tracking
+
+Progress is a **state machine**, not derived from logs. Logs are supplementary diagnostics.
+
+### Progress State Machine
+
+```
+PENDING → RUNNING → SUCCESS | FAILED | CANCELLED
+```
+
+### Redis Storage
+
+**Progress State** (Hash):
+
+```
+tgsentinel:jobs:{job_id}:progress
+```
+
+Fields:
+
+- `job_type` — Type of operation
+- `request_id` — Correlation ID
+- `status` — Current state (PENDING/RUNNING/SUCCESS/FAILED/CANCELLED)
+- `percent` — Completion percentage (0-100)
+- `step` — Current step description
+- `message` — User-facing status message
+- `started_at` — ISO 8601 timestamp
+- `updated_at` — ISO 8601 timestamp
+- `error_code` — Error identifier (if failed)
+
+**Logs Stream** (Supplementary):
+
+```
+tgsentinel:jobs:{job_id}:logs
+```
+
+- Redis Stream with bounded size or TTL
+- Used for detailed diagnostics, not progress calculation
+- UI fetches via HTTP: `GET /api/jobs/{job_id}/logs`
+
+### API Contracts
+
+**Start Job**:
+
+```
+POST /api/jobs → {"job_id": "uuid"}
+```
+
+**Get Status** (Polling fallback):
+
+```
+GET /api/jobs/{job_id}/status → progress hash
+```
+
+**Get Logs**:
+
+```
+GET /api/jobs/{job_id}/logs?offset=N
+```
+
+### UI Integration
+
+- UI requests `job_id` from Sentinel
+- Polls or subscribes via WebSocket for progress updates
+- **Never** subscribes to Redis directly
+- Distinguishes between "cache ready" (95%) and "login complete" (100%)
 
 ---
 

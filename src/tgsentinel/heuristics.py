@@ -11,6 +11,7 @@ class HeuristicResult:
     reasons: list[str]
     content_hash: str
     pre_score: float
+    trigger_annotations: dict[str, list[str]]  # New: category -> matched keywords
 
 
 def content_hash(text: str) -> str:
@@ -189,6 +190,23 @@ def _check_keywords(text: str, keywords: list[str]) -> bool:
     return bool(pattern.search(text))
 
 
+def _find_matched_keywords(text: str, keywords: list[str]) -> list[str]:
+    """Find which keywords matched in text (for trigger annotations).
+
+    Args:
+        text: Text to search in
+        keywords: List of keywords to search for
+
+    Returns:
+        List of matched keywords (original case from keyword list)
+    """
+    if not keywords or not text:
+        return []
+
+    text_lower = text.lower()
+    return [kw for kw in keywords if kw.lower() in text_lower]
+
+
 def _detect_code_patterns(text: str) -> bool:
     """Detect OTP codes, passwords, tokens in message."""
     if not text:
@@ -267,6 +285,7 @@ def run_heuristics(
     10. Meta-Important Messages (Based on MTProto Metadata)
     """
     reasons, score = [], 0.0
+    trigger_annotations: dict[str, list[str]] = {}  # Track which keywords triggered
 
     # === CATEGORY 3: Direct Mentions and Replies (HIGHEST PRIORITY) ===
     if mentioned:
@@ -303,39 +322,51 @@ def run_heuristics(
 
     # Action keywords detection
     action_kw = action_keywords if action_keywords else DEFAULT_ACTION_KEYWORDS
-    if _check_keywords(text, action_kw):
+    matched = _find_matched_keywords(text, action_kw)
+    if matched:
         reasons.append("action-required")
         score += 1.0 if is_private else 0.8
+        trigger_annotations["action"] = matched
 
     # === CATEGORY 2: Decisions, Voting, and Direction Changes ===
     decision_kw = decision_keywords if decision_keywords else DEFAULT_DECISION_KEYWORDS
-    if _check_keywords(text, decision_kw):
+    matched = _find_matched_keywords(text, decision_kw)
+    if matched:
         reasons.append("decision")
         score += 1.1
+        trigger_annotations["decision"] = matched
 
     # === CATEGORY 4: Urgency & Importance Indicators ===
     urgency_kw = urgency_keywords if urgency_keywords else DEFAULT_URGENCY_KEYWORDS
-    if _check_keywords(text, urgency_kw):
+    matched = _find_matched_keywords(text, urgency_kw)
+    if matched:
         reasons.append("urgent")
         score += 1.5  # High priority
+        trigger_annotations["urgency"] = matched
 
     importance_kw = (
         importance_keywords if importance_keywords else DEFAULT_IMPORTANCE_KEYWORDS
     )
-    if _check_keywords(text, importance_kw):
+    matched = _find_matched_keywords(text, importance_kw)
+    if matched:
         reasons.append("important")
         score += 0.9
+        trigger_annotations["importance"] = matched
 
     # === CATEGORY 5: Project & Interest Updates ===
     release_kw = release_keywords if release_keywords else DEFAULT_RELEASE_KEYWORDS
-    if _check_keywords(text, release_kw):
+    matched = _find_matched_keywords(text, release_kw)
+    if matched:
         reasons.append("release")
         score += 0.8
+        trigger_annotations["release"] = matched
 
     security_kw = security_keywords if security_keywords else DEFAULT_SECURITY_KEYWORDS
-    if _check_keywords(text, security_kw):
+    matched = _find_matched_keywords(text, security_kw)
+    if matched:
         reasons.append("security")
         score += 1.2  # Security is high priority
+        trigger_annotations["security"] = matched
 
     # === CATEGORY 6: Structured or Sensitive Data ===
     if detect_codes and _detect_code_patterns(text):
@@ -350,17 +381,21 @@ def run_heuristics(
 
     # === CATEGORY 8: Risk or Incident Messages ===
     risk_kw = risk_keywords if risk_keywords else DEFAULT_RISK_KEYWORDS
-    if _check_keywords(text, risk_kw):
+    matched = _find_matched_keywords(text, risk_kw)
+    if matched:
         reasons.append("risk")
         score += 1.0
+        trigger_annotations["risk"] = matched
 
     # === CATEGORY 9: Opportunity Messages ===
     opportunity_kw = (
         opportunity_keywords if opportunity_keywords else DEFAULT_OPPORTUNITY_KEYWORDS
     )
-    if _check_keywords(text, opportunity_kw):
+    matched = _find_matched_keywords(text, opportunity_kw)
+    if matched:
         reasons.append("opportunity")
         score += 0.6
+        trigger_annotations["opportunity"] = matched
 
     # === LEGACY: VIP Senders ===
     if sender_id in vip:
@@ -377,9 +412,11 @@ def run_heuristics(
         score += 0.5  # Increased from 0.4
 
     # === LEGACY: Custom Keywords ===
-    if keywords and _check_keywords(text, keywords):
+    matched = _find_matched_keywords(text, keywords) if keywords else []
+    if matched:
         reasons.append("keywords")
         score += 0.8  # Increased from 0.6
+        trigger_annotations["keywords"] = matched
 
     # === CATEGORY 7: Personal Context (Rare Senders) ===
     # This would require tracking message frequency per sender
@@ -390,4 +427,5 @@ def run_heuristics(
         reasons=reasons,
         content_hash=content_hash(text or ""),
         pre_score=score,
+        trigger_annotations=trigger_annotations,
     )

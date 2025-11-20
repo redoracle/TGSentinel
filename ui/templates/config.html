@@ -5,8 +5,8 @@
 <form id="config-form" class="d-grid gap-4" novalidate>
     <section class="card" aria-labelledby="telegram-config-heading">
         <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
-            <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#telegram-config-body" aria-expanded="false" aria-controls="telegram-config-body" style="text-decoration: none; color: inherit;">
-                <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+            <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#telegram-config-body" aria-expanded="false" aria-controls="telegram-config-body">
+                <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
                 <div>
                     <h1 class="card-title mb-0" id="telegram-config-heading">Telegram Account</h1>
                     <small class="text-muted">Manage MTProto authentication</small>
@@ -50,8 +50,8 @@
 
     <section class="card" aria-labelledby="alerts-settings-heading">
         <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
-            <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#alerts-settings-body" aria-expanded="false" aria-controls="alerts-settings-body" style="text-decoration: none; color: inherit;">
-                <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+            <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#alerts-settings-body" aria-expanded="false" aria-controls="alerts-settings-body">
+                <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
                 <div>
                     <h2 class="card-title mb-0" id="alerts-settings-heading">Alerts & Notifications</h2>
                     <small class="text-muted">Configure alert destinations and delivery</small>
@@ -112,8 +112,8 @@
 
     <section class="card" aria-labelledby="scoring-settings-heading">
         <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
-            <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#scoring-settings-body" aria-expanded="false" aria-controls="scoring-settings-body" style="text-decoration: none; color: inherit;">
-                <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+            <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#scoring-settings-body" aria-expanded="false" aria-controls="scoring-settings-body">
+                <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
                 <div>
                     <h2 class="card-title mb-0" id="scoring-settings-heading">Importance & Scoring</h2>
                     <small class="text-muted">Tune relevance thresholds and heuristics</small>
@@ -199,8 +199,8 @@
 
     <section class="card" aria-labelledby="channel-management-heading">
         <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
-            <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#channel-management-body" aria-expanded="false" aria-controls="channel-management-body" style="text-decoration: none; color: inherit;">
-                <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+            <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#channel-management-body" aria-expanded="false" aria-controls="channel-management-body">
+                <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
                 <div>
                     <h2 class="card-title mb-0" id="channel-management-heading">Monitored Channels</h2>
                     <small class="text-muted">Manage monitored Telegram channels and groups</small>
@@ -264,6 +264,13 @@
                             </div>
                         </td>
                         <td>
+                            <button type="button" class="btn btn-sm btn-outline-primary edit-channel me-1" 
+                                    data-chat-id="{{ channel.chat_id }}"
+                                    title="Edit Channel">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-pencil" viewBox="0 0 16 16">
+                                    <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325"/>
+                                </svg>
+                            </button>
                             <button type="button" class="btn btn-sm btn-outline-danger delete-channel" 
                                     data-chat-id="{{ channel.chat_id }}" 
                                     data-chat-name="{{ channel.name }}"
@@ -287,8 +294,8 @@
 
     <section class="card" aria-labelledby="users-management-heading">
         <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
-            <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#users-management-body" aria-expanded="false" aria-controls="users-management-body" style="text-decoration: none; color: inherit;">
-                <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+            <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#users-management-body" aria-expanded="false" aria-controls="users-management-body">
+                <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
                 <div>
                     <h2 class="card-title mb-0" id="users-management-heading">Monitored Users</h2>
                     <small class="text-muted">Manage monitored individual Telegram users</small>
@@ -345,6 +352,13 @@
                                 </div>
                             </td>
                             <td>
+                                <button type="button" class="btn btn-sm btn-outline-primary edit-user me-1" 
+                                        data-user-id="{{ user.id }}"
+                                        title="Edit User">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-pencil" viewBox="0 0 16 16">
+                                        <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325"/>
+                                    </svg>
+                                </button>
                                 <button type="button" class="btn btn-sm btn-outline-danger delete-user" 
                                         data-user-id="{{ user.id }}" 
                                         data-user-name="{{ user.name }}"
@@ -369,8 +383,8 @@
 
     <section class="card" aria-labelledby="system-settings-heading">
         <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
-            <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#system-settings-body" aria-expanded="false" aria-controls="system-settings-body" style="text-decoration: none; color: inherit;">
-                <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+            <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#system-settings-body" aria-expanded="false" aria-controls="system-settings-body">
+                <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
                 <div>
                     <h2 class="card-title mb-0" id="system-settings-heading">System Settings</h2>
                     <small class="text-muted">Infrastructure and runtime options</small>
@@ -395,8 +409,33 @@
                     <input class="form-control" id="database-uri" name="database_uri" type="text" placeholder="sqlite:///data/sentinel.db">
                 </div>
                 <div class="col-12 col-md-4">
-                    <label class="form-label" for="retention-days">Retention (days)</label>
-                    <input class="form-control" id="retention-days" name="retention_days" type="number" min="1" value="30">
+                    <label class="form-label" for="retention-days">Log Retention (days)</label>
+                    <input class="form-control" id="retention-days" name="retention_days" type="number" min="1" max="365" value="30">
+                    <small class="text-muted">For log files only</small>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label" for="max-messages">Max Messages</label>
+                    <input class="form-control" id="max-messages" name="max_messages" type="number" min="1" max="10000" value="200">
+                    <small class="text-muted">Keep only last N messages</small>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label" for="db-retention-days">Message Retention (days)</label>
+                    <input class="form-control" id="db-retention-days" name="db_retention_days" type="number" min="1" max="365" value="30">
+                    <small class="text-muted">Delete messages older than N days</small>
+                </div>
+                <div class="col-12 col-md-4">
+                    <div class="form-check form-switch mt-4">
+                        <input class="form-check-input" id="cleanup-enabled" name="cleanup_enabled" type="checkbox" checked>
+                        <label class="form-check-label" for="cleanup-enabled">Auto-cleanup enabled</label>
+                    </div>
+                    <small class="text-muted d-block mt-1">Automatic message retention enforcement</small>
+                </div>
+                <div class="col-12 col-md-4">
+                    <div class="form-check form-switch mt-4">
+                        <input class="form-check-input" id="vacuum-on-cleanup" name="vacuum_on_cleanup" type="checkbox" checked>
+                        <label class="form-check-label" for="vacuum-on-cleanup">VACUUM on cleanup</label>
+                    </div>
+                    <small class="text-muted d-block mt-1">Optimize database after cleanup</small>
                 </div>
                 <div class="col-12 col-md-4">
                     <label class="form-label" for="metrics-endpoint">Metrics endpoint</label>
@@ -418,16 +457,17 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- Action Buttons -->
+            <div class="d-flex justify-content-end gap-3 mt-4 pt-3 border-top">
+                <button class="btn btn-outline-secondary" type="reset">Reset changes</button>
+                <button class="btn btn-danger" type="button" id="btn-clean-db">
+                    <i class="bi bi-trash3"></i> Clean DB
+                </button>
+                <button class="btn btn-primary" type="submit" id="btn-save-config">Save configuration</button>
+            </div>
         </div>
     </section>
-
-    <div class="d-flex justify-content-end gap-3">
-        <button class="btn btn-reset" type="reset">Reset changes</button>
-        <button class="btn btn-danger" type="button" id="btn-clean-db">
-            <i class="bi bi-trash3"></i> Clean DB
-        </button>
-        <button class="btn btn-primary" type="submit" id="btn-save-config">Save configuration</button>
-    </div>
 </form>
 
 <!-- Add Channels & Users Modal with Tabs -->
@@ -519,20 +559,186 @@
     </div>
 </div>
 
-{% endblock %}
+<!-- Edit Channel Modal -->
+<div class="modal fade" id="editChannelModal" tabindex="-1" aria-labelledby="editChannelModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editChannelModalLabel">Edit Channel Configuration</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-channel-form">
+                    <input type="hidden" id="edit-channel-id" name="chat_id">
+                    
+                    <div class="mb-3">
+                        <label for="edit-channel-name" class="form-label">Channel Name</label>
+                        <input type="text" class="form-control" id="edit-channel-name" name="name" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="edit-channel-vip-senders" class="form-label">VIP Senders</label>
+                        <textarea class="form-control" id="edit-channel-vip-senders" name="vip_senders" rows="2" 
+                                  placeholder="Enter usernames separated by commas"></textarea>
+                        <small class="form-text text-muted">Telegram usernames of priority senders (comma-separated)</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="edit-channel-keywords" class="form-label">Keywords (Legacy)</label>
+                        <textarea class="form-control" id="edit-channel-keywords" name="keywords" rows="2" 
+                                  placeholder="Enter keywords separated by commas"></textarea>
+                        <small class="form-text text-muted">Direct keywords (deprecated - use profiles instead)</small>
+                    </div>
+                    
+                    <hr class="my-4">
+                    <h6 class="mb-3">Profile Bindings</h6>
+                    
+                    <div class="mb-3">
+                        <label for="edit-channel-profiles" class="form-label">Bound Profiles</label>
+                        <select multiple class="form-select" id="edit-channel-profiles" name="profiles" size="5">
+                            <!-- Populated dynamically -->
+                        </select>
+                        <small class="form-text text-muted">Select one or more global profiles to apply to this channel</small>
+                    </div>
+                    
+                    <div class="accordion mb-3" id="channelOverridesAccordion">
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                                        data-bs-target="#channelOverridesCollapse" aria-expanded="false">
+                                    Override Settings (Optional)
+                                </button>
+                            </h2>
+                            <div id="channelOverridesCollapse" class="accordion-collapse collapse">
+                                <div class="accordion-body">
+                                    <div class="mb-3">
+                                        <label for="edit-channel-keywords-extra" class="form-label">Additional Keywords</label>
+                                        <textarea class="form-control" id="edit-channel-keywords-extra" rows="3" 
+                                                  placeholder="Extra keywords specific to this channel (comma-separated)"></textarea>
+                                        <small class="form-text text-muted">These will be merged with profile keywords</small>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="edit-channel-min-score" class="form-label">Minimum Score Override</label>
+                                        <input type="number" class="form-control" id="edit-channel-min-score" step="0.1" min="0" max="1">
+                                        <small class="form-text text-muted">Override the minimum relevance score (0.0 - 1.0)</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Resolved Keywords Preview</label>
+                        <div id="edit-channel-preview" class="alert alert-info">
+                            <small class="text-muted">Select profiles to see merged keywords</small>
+                        </div>
+                    </div>
+                    
+                    <hr class="my-4">
+                    <h6 class="mb-3">Thresholds</h6>
+                    
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="edit-channel-reaction-threshold" class="form-label">Reaction Threshold</label>
+                            <input type="number" class="form-control" id="edit-channel-reaction-threshold" min="0" value="10">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="edit-channel-reply-threshold" class="form-label">Reply Threshold</label>
+                            <input type="number" class="form-control" id="edit-channel-reply-threshold" min="0" value="50">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="edit-channel-rate-limit" class="form-label">Rate Limit (per hour)</label>
+                            <input type="number" class="form-control" id="edit-channel-rate-limit" min="0" value="10">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="btn-save-channel">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
 
-{% block extra_styles %}
-<style>
-    /* Collapse icon animation */
-    .collapse-icon {
-        transition: transform 0.2s ease-in-out;
-        display: inline-block;
-    }
-    
-    [aria-expanded="true"] .collapse-icon {
-        transform: rotate(90deg);
-    }
-</style>
+<!-- Edit User Modal -->
+<div class="modal fade" id="editUserModal" tabindex="-1" aria-labelledby="editUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editUserModalLabel">Edit User Configuration</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-user-form">
+                    <input type="hidden" id="edit-user-id" name="user_id">
+                    
+                    <div class="mb-3">
+                        <label for="edit-user-name" class="form-label">User Name</label>
+                        <input type="text" class="form-control" id="edit-user-name" name="name" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="edit-user-username" class="form-label">Username</label>
+                        <input type="text" class="form-control" id="edit-user-username" name="username">
+                        <small class="form-text text-muted">Telegram @username (without @)</small>
+                    </div>
+                    
+                    <hr class="my-4">
+                    <h6 class="mb-3">Profile Bindings</h6>
+                    
+                    <div class="mb-3">
+                        <label for="edit-user-profiles" class="form-label">Bound Profiles</label>
+                        <select multiple class="form-select" id="edit-user-profiles" name="profiles" size="5">
+                            <!-- Populated dynamically -->
+                        </select>
+                        <small class="form-text text-muted">Select one or more global profiles to apply to this user</small>
+                    </div>
+                    
+                    <div class="accordion mb-3" id="userOverridesAccordion">
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                                        data-bs-target="#userOverridesCollapse" aria-expanded="false">
+                                    Override Settings (Optional)
+                                </button>
+                            </h2>
+                            <div id="userOverridesCollapse" class="accordion-collapse collapse">
+                                <div class="accordion-body">
+                                    <div class="mb-3">
+                                        <label for="edit-user-keywords-extra" class="form-label">Additional Keywords</label>
+                                        <textarea class="form-control" id="edit-user-keywords-extra" rows="3" 
+                                                  placeholder="Extra keywords specific to this user (comma-separated)"></textarea>
+                                        <small class="form-text text-muted">These will be merged with profile keywords</small>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="edit-user-min-score" class="form-label">Minimum Score Override</label>
+                                        <input type="number" class="form-control" id="edit-user-min-score" step="0.1" min="0" max="1">
+                                        <small class="form-text text-muted">Override the minimum relevance score (0.0 - 1.0)</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Resolved Keywords Preview</label>
+                        <div id="edit-user-preview" class="alert alert-info">
+                            <small class="text-muted">Select profiles to see merged keywords</small>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="btn-save-user">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_scripts %}
@@ -732,46 +938,110 @@
     function collectPayload() {
         const payload = {};
         
-        // Collect all text/number inputs from FormData as baseline
+        // Collect all form inputs
         const formData = new FormData(form);
+        const flatData = {};
         formData.forEach((value, key) => {
-            payload[key] = value;
+            flatData[key] = value;
         });
-        
-        // Explicitly read and convert heuristic weight sliders to Numbers
-        for (let i = 0; i < 5; i++) {
-            const weightInput = document.getElementById(`weight-${i}`);
-            if (weightInput) {
-                payload[`weight_${i}`] = Number(weightInput.value);
-            }
-        }
         
         // Explicitly read all checkboxes and convert to Boolean
         form.querySelectorAll("input[type='checkbox'][name]").forEach((checkbox) => {
             if (checkbox instanceof HTMLInputElement) {
-                payload[checkbox.name] = checkbox.checked;
+                flatData[checkbox.name] = checkbox.checked;
             }
         });
         
-        // Parse interests as array
-        payload.interests = (document.getElementById("interest-profiles").value || "")
-            .split(",")
-            .map((item) => item.trim())
-            .filter(Boolean);
+        // Build nested structure matching YAML config format
         
-        // Ensure similarity_threshold is Number
+        // Alerts section
+        payload.alerts = {};
+        if (flatData.mode) {
+            payload.alerts.mode = flatData.mode;
+        }
+        if (flatData.target_channel) {
+            payload.alerts.target_channel = flatData.target_channel;
+        }
+        
+        // Digest subsection
+        payload.alerts.digest = {};
+        if (flatData.digest) {
+            // Parse digest frequency select
+            const digestValue = flatData.digest;
+            payload.alerts.digest.hourly = digestValue === 'hourly' || digestValue === 'both';
+            payload.alerts.digest.daily = digestValue === 'daily' || digestValue === 'both';
+        }
+        if (flatData.digest_top) {
+            payload.alerts.digest.top_n = Number(flatData.digest_top);
+        }
+        
+        // Parse interests as array
+        const interestsInput = document.getElementById("interest-profiles");
+        if (interestsInput) {
+            payload.interests = (interestsInput.value || "")
+                .split(",")
+                .map((item) => item.trim())
+                .filter(Boolean);
+        }
+        
+        // Similarity threshold
         const similarityInput = document.getElementById("similarity-threshold");
         if (similarityInput) {
             payload.similarity_threshold = Number(similarityInput.value || 0.42);
         }
         
-        // Convert numeric fields to Number
-        const numericFields = ['decay_window', 'redis_port', 'log_retention_days'];
-        numericFields.forEach((field) => {
-            if (payload[field] !== undefined) {
-                payload[field] = Number(payload[field]);
+        // System Settings - NOW SAVEABLE TO YAML
+        payload.system = {};
+        
+        // Redis settings
+        if (flatData.redis_host || flatData.redis_port) {
+            payload.system.redis = {};
+            if (flatData.redis_host) {
+                payload.system.redis.host = flatData.redis_host;
             }
-        });
+            if (flatData.redis_port) {
+                payload.system.redis.port = Number(flatData.redis_port);
+            }
+        }
+        
+        // Database settings
+        if (flatData.database_uri) {
+            payload.system.database_uri = flatData.database_uri;
+        }
+        
+        // Metrics endpoint
+        if (flatData.metrics_endpoint) {
+            payload.system.metrics_endpoint = flatData.metrics_endpoint;
+        }
+        
+        // Database retention settings
+        payload.system.database = {};
+        if (flatData.max_messages !== undefined) {
+            payload.system.database.max_messages = Number(flatData.max_messages);
+        }
+        if (flatData.db_retention_days !== undefined) {
+            payload.system.database.retention_days = Number(flatData.db_retention_days);
+        }
+        if (flatData.cleanup_enabled !== undefined) {
+            payload.system.database.cleanup_enabled = flatData.cleanup_enabled;
+        }
+        if (flatData.vacuum_on_cleanup !== undefined) {
+            payload.system.database.vacuum_on_cleanup = flatData.vacuum_on_cleanup;
+        }
+        
+        // Logging settings
+        payload.system.logging = {};
+        if (flatData.logging_level) {
+            payload.system.logging.level = flatData.logging_level;
+        }
+        if (flatData.retention_days) {
+            payload.system.logging.retention_days = Number(flatData.retention_days);
+        }
+        
+        // Auto-restart
+        if (flatData.auto_restart !== undefined) {
+            payload.system.auto_restart = flatData.auto_restart;
+        }
         
         return payload;
     }
@@ -803,6 +1073,10 @@
             }
             
             const payload = collectPayload();
+            
+            // Check if system settings have changed (requires restart)
+            const systemSettingsChanged = payload.system && Object.keys(payload.system).length > 0;
+            
             const response = await fetch(saveEndpoint, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -813,23 +1087,31 @@
                 throw new Error("Persist failed");
             }
             
-            showToast("Configuration saved", "success");
+            // Config is automatically reloaded by Sentinel via Redis pub/sub
+            showToast("Configuration saved and reloaded successfully", "success");
             
-            // Restart sentinel container to apply changes
-            try {
-                const restartResponse = await fetch("{{ url_for('admin.restart_sentinel') }}", {
-                    method: "POST",
-                });
+            // If system settings changed, restart Sentinel container
+            if (systemSettingsChanged) {
+                showToast("System settings changed - restarting Sentinel...", "info");
                 
-                if (restartResponse.ok) {
-                    showToast("Sentinel container is restarting to apply changes...", "info");
-                } else {
-                    showToast("Configuration saved but sentinel restart failed. Manual restart recommended.", "warning");
+                try {
+                    const restartResponse = await fetch("/api/sentinel/restart", {
+                        method: "POST",
+                    });
+                    
+                    if (restartResponse.ok) {
+                        showToast("Sentinel is restarting to apply system settings", "success");
+                    } else {
+                        showToast("Configuration saved but restart failed. Please restart manually via Docker.", "warning");
+                    }
+                } catch (restartError) {
+                    console.error("Restart error:", restartError);
+                    showToast("Configuration saved but restart failed. Please restart manually via Docker.", "warning");
                 }
-            } catch (restartError) {
-                console.error("Restart error:", restartError);
-                showToast("Configuration saved but sentinel restart failed. Manual restart recommended.", "warning");
             }
+            
+            // Reload config from server to update UI display
+            await loadCurrentConfig();
         } catch (error) {
             console.error(error);
             showToast("Could not save configuration", "error");
@@ -969,6 +1251,79 @@
                 showToast("Failed to test rules: " + e.message, "error");
             }
         });
+
+        // Test user rules button
+        document.getElementById("btn-test-user-rules")?.addEventListener("click", async () => {
+            try {
+                const resp = await fetch("/api/config/users/test", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({})
+                });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+                
+                let modalContent = `<div class="test-rules-results">`;
+                modalContent += `<p class="lead">Tested <strong>${data.tested}</strong> monitored user(s)</p>`;
+                
+                if (data.results && data.results.length > 0) {
+                    data.results.forEach(r => {
+                        const statusBadge = r.enabled 
+                            ? '<span class="badge bg-success">Active</span>' 
+                            : '<span class="badge bg-secondary">Disabled</span>';
+                        modalContent += `
+                            <div class="card mb-2">
+                                <div class="card-body">
+                                    <h6 class="card-title">
+                                        ${r.user_name || "Unknown"} 
+                                        ${statusBadge}
+                                    </h6>
+                                    <p class="card-text text-muted mb-2">
+                                        <small>User ID: ${r.user_id} | Username: @${r.username || "N/A"}</small>
+                                    </p>
+                                    <div class="mt-2">
+                                        <small class="text-muted">
+                                            Monitoring: ${r.diagnostics.monitoring_status}
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                } else {
+                    modalContent += `<p class="text-muted">No monitored users configured</p>`;
+                }
+                modalContent += `</div>`;
+                
+                // Create or update modal
+                const existingModal = document.getElementById("testUserRulesModal");
+                if (existingModal) existingModal.remove();
+                
+                const modalHtml = `
+                    <div class="modal fade" id="testUserRulesModal" tabindex="-1" aria-labelledby="testUserRulesModalLabel">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" id="testUserRulesModalLabel">User Test Results</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">${modalContent}</div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.insertAdjacentHTML("beforeend", modalHtml);
+                const modal = new bootstrap.Modal(document.getElementById("testUserRulesModal"));
+                modal.show();
+            } catch (e) {
+                console.error("User rules test error", e);
+                showToast("Failed to test user rules: " + e.message, "error");
+            }
+        });
+
         // RESET STATS: best-effort clear of transient counters
         document.getElementById("btn-reset-stats")?.addEventListener("click", async () => {
             try {
@@ -980,6 +1335,31 @@
                 showToast("Failed to reset stats", "error");
             }
         });
+
+        // Reset user stats button
+        document.getElementById("btn-reset-user-stats")?.addEventListener("click", async () => {
+            try {
+                const resp = await fetch("/api/config/stats/reset", { method: "POST" });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                showToast("User statistics reset", "warning");
+            } catch (e) {
+                console.error("Reset user stats error", e);
+                showToast("Failed to reset user stats", "error");
+            }
+        });
+
+        // Export user YAML button
+        document.getElementById("btn-export-user-yaml")?.addEventListener("click", async () => {
+            try {
+                const url = "/api/config/export";
+                window.open(url, "_blank");
+                showToast("Exporting user configuration", "info");
+            } catch (e) {
+                console.error("Export user YAML error", e);
+                showToast("Failed to export user YAML", "error");
+            }
+        });
+
         // EXPORT YAML: trigger file download
         document.getElementById("btn-export-yaml")?.addEventListener("click", async () => {
             try {
@@ -1018,23 +1398,11 @@
                     throw new Error("Save failed");
                 }
                 
-                showToast("Settings saved successfully", "success");
+                // Config is automatically reloaded by Sentinel via Redis pub/sub
+                showToast("Settings saved and reloaded successfully", "success");
                 
-                // Restart sentinel container
-                try {
-                    const restartResponse = await fetch("{{ url_for('admin.restart_sentinel') }}", {
-                        method: "POST",
-                    });
-                    
-                    if (restartResponse.ok) {
-                        showToast("Sentinel container is restarting...", "info");
-                    } else {
-                        showToast("Settings saved but sentinel restart failed. Restart manually.", "warning");
-                    }
-                } catch (restartError) {
-                    console.error("Restart error:", restartError);
-                    showToast("Settings saved but sentinel restart failed. Restart manually.", "warning");
-                }
+                // Reload config from server to update UI display
+                await loadCurrentConfig();
                 
             } catch (error) {
                 console.error(error);
@@ -1065,23 +1433,11 @@
                     throw new Error("Save failed");
                 }
                 
-                showToast("Settings saved successfully", "success");
+                // Config is automatically reloaded by Sentinel via Redis pub/sub
+                showToast("Settings saved and reloaded successfully", "success");
                 
-                // Restart sentinel container
-                try {
-                    const restartResponse = await fetch("{{ url_for('admin.restart_sentinel') }}", {
-                        method: "POST",
-                    });
-                    
-                    if (restartResponse.ok) {
-                        showToast("Sentinel container is restarting...", "info");
-                    } else {
-                        showToast("Settings saved but sentinel restart failed. Restart manually.", "warning");
-                    }
-                } catch (restartError) {
-                    console.error("Restart error:", restartError);
-                    showToast("Settings saved but sentinel restart failed. Restart manually.", "warning");
-                }
+                // Reload config from server to update UI display
+                await loadCurrentConfig();
                 
             } catch (error) {
                 console.error(error);
@@ -1159,8 +1515,82 @@
                 }
             }
             
-            // Populate Redis fields
-            if (config.redis) {
+            // Populate System Settings fields from new system config structure
+            if (config.system) {
+                // Redis settings
+                if (config.system.redis) {
+                    const redisHostInput = document.getElementById("redis-host");
+                    const redisPortInput = document.getElementById("redis-port");
+                    
+                    if (redisHostInput && config.system.redis.host) {
+                        redisHostInput.value = config.system.redis.host;
+                    }
+                    if (redisPortInput && config.system.redis.port) {
+                        redisPortInput.value = config.system.redis.port;
+                    }
+                }
+                
+                // Database URI
+                if (config.system.database_uri) {
+                    const databaseUriInput = document.getElementById("database-uri");
+                    if (databaseUriInput) {
+                        databaseUriInput.value = config.system.database_uri;
+                    }
+                }
+                
+                // Metrics endpoint
+                if (config.system.metrics_endpoint) {
+                    const metricsEndpointInput = document.getElementById("metrics-endpoint");
+                    if (metricsEndpointInput) {
+                        metricsEndpointInput.value = config.system.metrics_endpoint;
+                    }
+                }
+                
+                // Database retention settings
+                if (config.system.database) {
+                    const maxMessagesInput = document.getElementById("max-messages");
+                    const dbRetentionDaysInput = document.getElementById("db-retention-days");
+                    const cleanupEnabledCheckbox = document.getElementById("cleanup-enabled");
+                    const vacuumOnCleanupCheckbox = document.getElementById("vacuum-on-cleanup");
+                    
+                    if (maxMessagesInput && config.system.database.max_messages !== undefined) {
+                        maxMessagesInput.value = config.system.database.max_messages;
+                    }
+                    if (dbRetentionDaysInput && config.system.database.retention_days !== undefined) {
+                        dbRetentionDaysInput.value = config.system.database.retention_days;
+                    }
+                    if (cleanupEnabledCheckbox && config.system.database.cleanup_enabled !== undefined) {
+                        cleanupEnabledCheckbox.checked = Boolean(config.system.database.cleanup_enabled);
+                    }
+                    if (vacuumOnCleanupCheckbox && config.system.database.vacuum_on_cleanup !== undefined) {
+                        vacuumOnCleanupCheckbox.checked = Boolean(config.system.database.vacuum_on_cleanup);
+                    }
+                }
+                
+                // Logging settings
+                if (config.system.logging) {
+                    const loggingLevelSelect = document.getElementById("logging-level");
+                    const retentionDaysInput = document.getElementById("retention-days");
+                    
+                    if (loggingLevelSelect && config.system.logging.level) {
+                        loggingLevelSelect.value = config.system.logging.level;
+                    }
+                    if (retentionDaysInput && config.system.logging.retention_days !== undefined) {
+                        retentionDaysInput.value = config.system.logging.retention_days;
+                    }
+                }
+                
+                // Auto-restart checkbox
+                if (config.system.auto_restart !== undefined) {
+                    const autoRestartCheckbox = document.getElementById("auto-restart");
+                    if (autoRestartCheckbox) {
+                        autoRestartCheckbox.checked = Boolean(config.system.auto_restart);
+                    }
+                }
+            }
+            
+            // Legacy compatibility: also check top-level redis/database_uri/metrics_endpoint if system not present
+            if (!config.system && config.redis) {
                 const redisHostInput = document.getElementById("redis-host");
                 const redisPortInput = document.getElementById("redis-port");
                 
@@ -1172,28 +1602,18 @@
                 }
             }
             
-            // Populate Semantic fields
-            if (config.semantic) {
-                const embeddingsModelInput = document.getElementById("embeddings-model");
-                const similarityThresholdInput = document.getElementById("similarity-threshold");
-                const similarityValueSpan = document.getElementById("similarity-value");
-                
-                if (embeddingsModelInput && config.semantic.embeddings_model) {
-                    embeddingsModelInput.value = config.semantic.embeddings_model;
-                }
-                if (similarityThresholdInput && config.semantic.similarity_threshold !== undefined) {
-                    similarityThresholdInput.value = config.semantic.similarity_threshold;
-                    if (similarityValueSpan) {
-                        similarityValueSpan.textContent = config.semantic.similarity_threshold.toFixed(2);
-                    }
-                }
-            }
-            
-            // Populate Database URI
-            if (config.database_uri) {
+            if (!config.system && config.database_uri) {
                 const databaseUriInput = document.getElementById("database-uri");
                 if (databaseUriInput) {
                     databaseUriInput.value = config.database_uri;
+                }
+            }
+            
+            // Legacy fallback for metrics_endpoint
+            if (!config.system && config.metrics_endpoint) {
+                const metricsEndpointInput = document.getElementById("metrics-endpoint");
+                if (metricsEndpointInput) {
+                    metricsEndpointInput.value = config.metrics_endpoint;
                 }
             }
             
@@ -1211,6 +1631,25 @@
     let availableUsers = [];
     let existingUserIds = new Set();
     let usersDataLoaded = false; // Track if users have been loaded
+    
+    // Module-scoped preview update handlers (attached once to prevent memory leaks)
+    function handleEditChannelPreviewUpdate() {
+        const profileSelect = document.getElementById("edit-channel-profiles");
+        const extraKeywordsEl = document.getElementById("edit-channel-keywords-extra");
+        const previewEl = document.getElementById("edit-channel-preview");
+        if (profileSelect && extraKeywordsEl && previewEl) {
+            updateKeywordsPreview(profileSelect, extraKeywordsEl, previewEl);
+        }
+    }
+    
+    function handleEditUserPreviewUpdate() {
+        const profileSelect = document.getElementById("edit-user-profiles");
+        const extraKeywordsEl = document.getElementById("edit-user-keywords-extra");
+        const previewEl = document.getElementById("edit-user-preview");
+        if (profileSelect && extraKeywordsEl && previewEl) {
+            updateKeywordsPreview(profileSelect, extraKeywordsEl, previewEl);
+        }
+    }
     
     function initializeModalHandlers() {
         const addChannelsModal = document.getElementById("addChannelsModal");
@@ -1476,6 +1915,35 @@
                 showToast(error.message || "Could not update channels", "error");
             }
         });
+        
+        // Setup one-time event listeners for edit modal preview updates
+        const editChannelProfileSelect = document.getElementById("edit-channel-profiles");
+        const editChannelKeywordsExtra = document.getElementById("edit-channel-keywords-extra");
+        if (editChannelProfileSelect && editChannelKeywordsExtra) {
+            // Guard against duplicate listener registration
+            if (!editChannelProfileSelect.__previewListenerAttached) {
+                editChannelProfileSelect.addEventListener("change", handleEditChannelPreviewUpdate);
+                editChannelProfileSelect.__previewListenerAttached = true;
+            }
+            if (!editChannelKeywordsExtra.__previewListenerAttached) {
+                editChannelKeywordsExtra.addEventListener("input", handleEditChannelPreviewUpdate);
+                editChannelKeywordsExtra.__previewListenerAttached = true;
+            }
+        }
+        
+        const editUserProfileSelect = document.getElementById("edit-user-profiles");
+        const editUserKeywordsExtra = document.getElementById("edit-user-keywords-extra");
+        if (editUserProfileSelect && editUserKeywordsExtra) {
+            // Guard against duplicate listener registration
+            if (!editUserProfileSelect.__previewListenerAttached) {
+                editUserProfileSelect.addEventListener("change", handleEditUserPreviewUpdate);
+                editUserProfileSelect.__previewListenerAttached = true;
+            }
+            if (!editUserKeywordsExtra.__previewListenerAttached) {
+                editUserKeywordsExtra.addEventListener("input", handleEditUserPreviewUpdate);
+                editUserKeywordsExtra.__previewListenerAttached = true;
+            }
+        }
     }
     
     function renderChannelCheckboxes(chats, existingIds) {
@@ -1881,7 +2349,8 @@
                         document.getElementById("redis-port").value = config.redis.port || 6379;
                     }
                     
-                    // Additional fields can be added as needed
+                    // Re-populate all fields by calling loadCurrentConfig with the fetched config
+                    loadCurrentConfig();
                     
                     showToast("Configuration reset to server state", "info");
                 } catch (error) {
@@ -2420,9 +2889,448 @@
     }
     
     // ============================================================================
+    // PROFILE BINDING HANDLERS
+    // ============================================================================
+    
+    let globalProfiles = [];
+    
+    /**
+     * Load global profiles from API
+     */
+    async function loadGlobalProfiles() {
+        try {
+            const response = await fetch("/api/profiles/global/list");
+            if (!response.ok) throw new Error("Failed to load profiles");
+            const data = await response.json();
+            globalProfiles = data.profiles || [];
+            return globalProfiles;
+        } catch (error) {
+            console.error("Failed to load global profiles:", error);
+            showToast("Failed to load global profiles", "error");
+            return [];
+        }
+    }
+    
+    /**
+     * Populate profile selector dropdown
+     */
+    function populateProfileSelector(selectElement, selectedProfiles = []) {
+        // Defensive checks: return early if selectElement is falsy or not an Element
+        if (!selectElement || !(selectElement instanceof Element) || typeof selectElement.innerHTML !== 'string') {
+            console.warn("populateProfileSelector: invalid selectElement", selectElement);
+            return;
+        }
+        
+        // Ensure globalProfiles is an array, fallback to empty array
+        const profiles = Array.isArray(globalProfiles) ? globalProfiles : [];
+        
+        // Ensure selectedProfiles is an array
+        const selected = Array.isArray(selectedProfiles) ? selectedProfiles : [];
+        
+        selectElement.innerHTML = "";
+        
+        profiles.forEach(profile => {
+            // Guard against null/undefined profile
+            if (!profile) return;
+            
+            // Skip profiles with genuinely missing/invalid IDs (null, undefined, empty string)
+            // but allow falsy values like 0 which are valid IDs
+            if (profile.id === null || profile.id === undefined || profile.id === "") {
+                console.warn("populateProfileSelector: skipping profile with invalid ID", profile);
+                return;
+            }
+            
+            const option = document.createElement("option");
+            
+            // Normalize profile ID to string for consistent comparison
+            const profileId = String(profile.id);
+            const profileName = profile.name || "Unnamed Profile";
+            const totalKeywords = profile.total_keywords || 0;
+            
+            option.value = profileId;
+            option.textContent = `${profileName} (${totalKeywords} keywords)`;
+            
+            // Normalize selected IDs to strings for comparison
+            const selectedIds = selected.map(id => String(id));
+            if (selectedIds.includes(profileId)) {
+                option.selected = true;
+            }
+            
+            selectElement.appendChild(option);
+        });
+    }
+    
+    /**
+     * Get resolved keywords from selected profiles and overrides
+     */
+    function getResolvedKeywords(selectedProfileIds, extraKeywords = "") {
+        const keywords = new Set();
+        
+        // Add keywords from selected profiles
+        selectedProfileIds.forEach(profileId => {
+            const profile = globalProfiles.find(p => p.id === profileId);
+            if (profile && profile.keywords) {
+                Object.values(profile.keywords).forEach(categoryKeywords => {
+                    if (Array.isArray(categoryKeywords)) {
+                        categoryKeywords.forEach(kw => keywords.add(kw));
+                    }
+                });
+            }
+        });
+        
+        // Add extra keywords
+        if (extraKeywords) {
+            extraKeywords.split(',').forEach(kw => {
+                const trimmed = kw.trim();
+                if (trimmed) keywords.add(trimmed);
+            });
+        }
+        
+        return Array.from(keywords).sort();
+    }
+    
+    /**
+     * Update preview of resolved keywords
+     */
+    function updateKeywordsPreview(selectElement, extraKeywordsElement, previewElement) {
+        const selectedProfileIds = Array.from(selectElement.selectedOptions).map(opt => opt.value);
+        const extraKeywords = extraKeywordsElement ? extraKeywordsElement.value : "";
+        const resolved = getResolvedKeywords(selectedProfileIds, extraKeywords);
+        
+        if (resolved.length === 0) {
+            previewElement.innerHTML = '<small class="text-muted">Select profiles to see merged keywords</small>';
+        } else {
+            const badges = resolved.slice(0, 20).map(kw => 
+                `<span class="badge bg-secondary me-1 mb-1">${kw}</span>`
+            ).join('');
+            const more = resolved.length > 20 ? ` <span class="text-muted">... +${resolved.length - 20} more</span>` : '';
+            previewElement.innerHTML = `<small><strong>Total: ${resolved.length} keywords</strong></small><div class="mt-2">${badges}${more}</div>`;
+        }
+    }
+    
+    /**
+     * Initialize edit channel handler
+     */
+    function initializeEditChannelHandler() {
+        document.body.addEventListener("click", async (e) => {
+            const editButton = e.target.closest(".edit-channel");
+            if (!editButton) return;
+            
+            const chatId = editButton.dataset.chatId;
+            
+            try {
+                // Fetch channel data (profiles already loaded eagerly)
+                const response = await fetch(`/api/config/channels/${chatId}`);
+                if (!response.ok) throw new Error("Failed to load channel data");
+                const data = await response.json();
+                const channel = data.channel;
+                
+                // Populate form
+                document.getElementById("edit-channel-id").value = channel.chat_id;
+                document.getElementById("edit-channel-name").value = channel.name || "";
+                document.getElementById("edit-channel-vip-senders").value = (channel.vip_senders || []).join(", ");
+                document.getElementById("edit-channel-keywords").value = (channel.keywords || []).join(", ");
+                document.getElementById("edit-channel-reaction-threshold").value = channel.reaction_threshold || 10;
+                document.getElementById("edit-channel-reply-threshold").value = channel.reply_threshold || 50;
+                document.getElementById("edit-channel-rate-limit").value = channel.rate_limit || 10;
+                
+                // Populate profile selector
+                const profileSelect = document.getElementById("edit-channel-profiles");
+                populateProfileSelector(profileSelect, channel.profiles || []);
+                
+                // Populate overrides
+                const overrides = channel.overrides || {};
+                document.getElementById("edit-channel-keywords-extra").value = (overrides.keywords_extra || []).join(", ");
+                document.getElementById("edit-channel-min-score").value = overrides.min_score || "";
+                
+                // Update preview (listeners already attached in initializeModalHandlers)
+                handleEditChannelPreviewUpdate();
+                
+                // Show modal
+                const modal = new bootstrap.Modal(document.getElementById("editChannelModal"));
+                modal.show();
+                
+            } catch (error) {
+                console.error("Failed to load channel:", error);
+                showToast("Failed to load channel data", "error");
+            }
+        });
+    }
+    
+    /**
+     * Initialize save channel handler
+     */
+    function initializeSaveChannelHandler() {
+        const saveButton = document.getElementById("btn-save-channel");
+        if (!saveButton) return;
+        
+        saveButton.addEventListener("click", async () => {
+            // Disable button and show spinner
+            const originalText = saveButton.innerHTML;
+            saveButton.disabled = true;
+            saveButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...';
+            
+            try {
+                const chatId = document.getElementById("edit-channel-id").value;
+                
+                // === CLIENT-SIDE VALIDATION ===
+                
+                // 1. Validate channel name (required, non-empty)
+                const channelName = document.getElementById("edit-channel-name").value?.trim();
+                if (!channelName) {
+                    showToast("Channel name is required and cannot be empty", "error");
+                    return;
+                }
+                
+                // 2. Validate and parse thresholds (must be integers >= 0)
+                const reactionThresholdInput = document.getElementById("edit-channel-reaction-threshold").value;
+                const replyThresholdInput = document.getElementById("edit-channel-reply-threshold").value;
+                const rateLimitInput = document.getElementById("edit-channel-rate-limit").value;
+                
+                const reactionThreshold = parseInt(reactionThresholdInput, 10);
+                const replyThreshold = parseInt(replyThresholdInput, 10);
+                const rateLimit = parseInt(rateLimitInput, 10);
+                
+                // Check for NaN and enforce minimums
+                if (isNaN(reactionThreshold) || reactionThreshold < 0) {
+                    showToast("Reaction threshold must be a number >= 0 (default: 10)", "error");
+                    return;
+                }
+                if (isNaN(replyThreshold) || replyThreshold < 0) {
+                    showToast("Reply threshold must be a number >= 0 (default: 50)", "error");
+                    return;
+                }
+                if (isNaN(rateLimit) || rateLimit < 1) {
+                    showToast("Rate limit must be a number >= 1 (default: 10)", "error");
+                    return;
+                }
+                
+                // 3. Validate VIP senders format (basic validation: non-empty, reasonable length)
+                const vipSendersRaw = document.getElementById("edit-channel-vip-senders").value;
+                const vipSenders = vipSendersRaw
+                    .split(',')
+                    .map(s => s.trim())
+                    .filter(Boolean);
+                
+                // Validate each VIP sender entry
+                const invalidVipSenders = [];
+                const validVipSenderPattern = /^[a-zA-Z0-9_@.+-]+$/; // username, email-like, or @handle
+                vipSenders.forEach(sender => {
+                    if (sender.length > 100 || !validVipSenderPattern.test(sender)) {
+                        invalidVipSenders.push(sender);
+                    }
+                });
+                
+                if (invalidVipSenders.length > 0) {
+                    showToast(`Invalid VIP sender format: ${invalidVipSenders.join(', ')}. Use usernames, @handles, or email-like identifiers.`, "error");
+                    return;
+                }
+                
+                // 4. Validate and build payload
+                const profileSelect = document.getElementById("edit-channel-profiles");
+                const selectedProfiles = Array.from(profileSelect.selectedOptions).map(opt => opt.value);
+                
+                const keywordsExtra = document.getElementById("edit-channel-keywords-extra").value
+                    .split(',').map(s => s.trim()).filter(Boolean);
+                const minScoreInput = document.getElementById("edit-channel-min-score").value?.trim();
+                
+                const payload = {
+                    name: channelName,
+                    vip_senders: vipSenders,
+                    keywords: document.getElementById("edit-channel-keywords").value
+                        .split(',').map(s => s.trim()).filter(Boolean),
+                    profiles: selectedProfiles,
+                    overrides: {},
+                    reaction_threshold: reactionThreshold,
+                    reply_threshold: replyThreshold,
+                    rate_limit: rateLimit,
+                };
+                
+                // Add overrides only if specified
+                if (keywordsExtra.length > 0) {
+                    payload.overrides.keywords_extra = keywordsExtra;
+                }
+                if (minScoreInput) {
+                    const minScore = parseFloat(minScoreInput);
+                    if (isNaN(minScore) || minScore < 0 || minScore > 1) {
+                        showToast("min_score must be a number between 0 and 1", "error");
+                        return;
+                    }
+                    payload.overrides.min_score = minScore;
+                }
+                
+                // 5. Client-side validation: check profile IDs exist
+                if (selectedProfiles.length > 0) {
+                    const available = globalProfiles.map(p => p.id);
+                    const invalid = selectedProfiles.filter(p => !available.includes(p));
+                    if (invalid.length > 0) {
+                        showToast(`Invalid profile ids: ${invalid.join(',')}`, 'error');
+                        return;
+                    }
+                }
+                
+                // === SEND API REQUEST ===
+                const response = await fetch(`/api/config/channels/${chatId}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || "Failed to update channel");
+                }
+                
+                showToast("Channel updated successfully", "success");
+                bootstrap.Modal.getInstance(document.getElementById("editChannelModal")).hide();
+                await refreshChannelsTable();
+            } catch (error) {
+                console.error("Failed to save channel:", error);
+                const msg = (error && error.message) ? error.message : 'Failed to save channel';
+                showToast(msg, "error");
+            } finally {
+                saveButton.disabled = false;
+                saveButton.innerHTML = originalText;
+            }
+        });
+    }
+    
+    /**
+     * Initialize edit user handler
+     */
+    function initializeEditUserHandler() {
+        document.body.addEventListener("click", async (e) => {
+            const editButton = e.target.closest(".edit-user");
+            if (!editButton) return;
+            
+            const userId = editButton.dataset.userId;
+            
+            try {
+                // Fetch user data (profiles already loaded eagerly)
+                const response = await fetch(`/api/config/users/${userId}`);
+                if (!response.ok) throw new Error("Failed to load user data");
+                const data = await response.json();
+                const user = data.user;
+                
+                // Populate form
+                document.getElementById("edit-user-id").value = user.id;
+                document.getElementById("edit-user-name").value = user.name || "";
+                document.getElementById("edit-user-username").value = user.username || "";
+                
+                // Populate profile selector
+                const profileSelect = document.getElementById("edit-user-profiles");
+                populateProfileSelector(profileSelect, user.profiles || []);
+                
+                // Populate overrides
+                const overrides = user.overrides || {};
+                document.getElementById("edit-user-keywords-extra").value = (overrides.keywords_extra || []).join(", ");
+                document.getElementById("edit-user-min-score").value = overrides.min_score || "";
+                
+                // Update preview (listeners already attached in initializeModalHandlers)
+                handleEditUserPreviewUpdate();
+                
+                // Show modal
+                const modal = new bootstrap.Modal(document.getElementById("editUserModal"));
+                modal.show();
+                
+            } catch (error) {
+                console.error("Failed to load user:", error);
+                showToast("Failed to load user data", "error");
+            }
+        });
+    }
+    
+    /**
+     * Initialize save user handler
+     */
+    function initializeSaveUserHandler() {
+        const saveButton = document.getElementById("btn-save-user");
+        if (!saveButton) return;
+        
+        saveButton.addEventListener("click", async () => {
+            // Disable button and show spinner
+            const originalText = saveButton.innerHTML;
+            saveButton.disabled = true;
+            saveButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...';
+            const userId = document.getElementById("edit-user-id").value;
+            const profileSelect = document.getElementById("edit-user-profiles");
+            const selectedProfiles = Array.from(profileSelect.selectedOptions).map(opt => opt.value);
+            
+            const keywordsExtra = document.getElementById("edit-user-keywords-extra").value
+                .split(',').map(s => s.trim()).filter(Boolean);
+            const minScore = document.getElementById("edit-user-min-score").value;
+            
+            const payload = {
+                name: document.getElementById("edit-user-name").value,
+                username: document.getElementById("edit-user-username").value,
+                profiles: selectedProfiles,
+                overrides: {},
+            };
+            
+            // Add overrides only if specified
+            if (keywordsExtra.length > 0) {
+                payload.overrides.keywords_extra = keywordsExtra;
+            }
+            if (minScore) {
+                payload.overrides.min_score = parseFloat(minScore);
+            }
+            // Client-side validation: check profile IDs exist
+            if (selectedProfiles.length > 0) {
+                const available = globalProfiles.map(p => p.id);
+                const invalid = selectedProfiles.filter(p => !available.includes(p));
+                if (invalid.length > 0) {
+                    saveButton.disabled = false;
+                    saveButton.innerHTML = originalText;
+                    showToast(`Invalid profile ids: ${invalid.join(',')}`, 'error');
+                    return;
+                }
+            }
+            // Validate min_score range if provided
+            if (payload.overrides && payload.overrides.min_score !== undefined) {
+                const ms = payload.overrides.min_score;
+                if (isNaN(ms) || ms < 0 || ms > 1) {
+                    saveButton.disabled = false;
+                    saveButton.innerHTML = originalText;
+                    showToast('min_score must be a number between 0 and 1', 'error');
+                    return;
+                }
+            }
+
+            try {
+                const response = await fetch(`/api/config/users/${userId}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || "Failed to update user");
+                }
+                showToast("User updated successfully", "success");
+                bootstrap.Modal.getInstance(document.getElementById("editUserModal")).hide();
+                await refreshUsersTable();
+            } catch (error) {
+                console.error("Failed to save user:", error);
+                const msg = (error && error.message) ? error.message : 'Failed to save user';
+                showToast(msg, "error");
+            } finally {
+                saveButton.disabled = false;
+                saveButton.innerHTML = originalText;
+            }
+        });
+    }
+    
+    // ============================================================================
     // CONSOLIDATED DOM INITIALIZATION
     // ============================================================================
     document.addEventListener("DOMContentLoaded", () => {
+        // Pre-load global profiles for instant validation (eager loading)
+        loadGlobalProfiles().catch(err => {
+            console.error("Failed to pre-load global profiles:", err);
+            // Non-critical - profiles will be loaded on-demand if this fails
+        });
+        
         // Initialize all handlers in predictable order
         initializeConfigHandlers();
         initializeModalHandlers();
@@ -2437,6 +3345,12 @@
         initializeCopyUserIdHandler();
         initializeDeleteUserHandler();
         initializeCleanDbHandler();
+        
+        // Profile binding handlers
+        initializeEditChannelHandler();
+        initializeSaveChannelHandler();
+        initializeEditUserHandler();
+        initializeSaveUserHandler();
         
         // Handle Add Channels button - switch to channels tab when clicked
         const btnAddChannels = document.getElementById("btn-add-channels");

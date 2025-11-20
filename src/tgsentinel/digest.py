@@ -1,4 +1,5 @@
 import datetime as dt
+import json
 import logging
 import time
 
@@ -7,6 +8,59 @@ from telethon import TelegramClient
 from telethon.tl.types import PeerChannel, PeerChat, PeerUser
 
 log = logging.getLogger(__name__)
+
+
+def format_alert_triggers(trigger_annotations_json: str, max_keywords: int = 3) -> str:
+    """Format trigger annotations for digest display.
+
+    Args:
+        trigger_annotations_json: JSON string with category -> [keywords] mapping
+        max_keywords: Maximum keywords to show per category
+
+    Returns:
+        Formatted string like "🔒 security: CVE, exploit • ⚡ urgency: critical"
+        Empty string if no annotations
+    """
+    if not trigger_annotations_json:
+        return ""
+
+    try:
+        annotations = json.loads(trigger_annotations_json)
+    except (json.JSONDecodeError, TypeError):
+        return ""
+
+    if not annotations or not isinstance(annotations, dict):
+        return ""
+
+    # Category emoji mapping
+    category_icons = {
+        "security": "🔒",
+        "urgency": "⚡",
+        "action": "✅",
+        "decision": "🗳️",
+        "release": "📦",
+        "risk": "⚠️",
+        "opportunity": "💎",
+        "importance": "❗",
+        "keywords": "🔍",
+    }
+
+    parts = []
+    for category, keywords in annotations.items():
+        if not keywords:
+            continue
+
+        icon = category_icons.get(category, "•")
+        # Limit keywords shown
+        shown_keywords = keywords[:max_keywords]
+        if len(keywords) > max_keywords:
+            shown_keywords.append(f"+{len(keywords) - max_keywords} more")
+
+        keywords_str = ", ".join(shown_keywords)
+        parts.append(f"{icon} {category}: {keywords_str}")
+
+    return " • ".join(parts) if parts else ""
+
 
 DIGEST_QUERY = """
 SELECT 
@@ -17,6 +71,7 @@ SELECT
     sender_name,
     message_text,
     triggers,
+    trigger_annotations,
     created_at
 FROM messages
 WHERE alerted = 1 
@@ -175,6 +230,9 @@ async def send_digest(
         stored_sender_name = r.sender_name if hasattr(r, "sender_name") else None
         stored_message_text = r.message_text if hasattr(r, "message_text") else None
         stored_triggers = r.triggers if hasattr(r, "triggers") else None
+        trigger_annotations_json = (
+            r.trigger_annotations if hasattr(r, "trigger_annotations") else ""
+        )
 
         # Get channel name - prioritize config, then stored title, then fallback
         chat_name = (
@@ -260,10 +318,14 @@ async def send_digest(
                 msg_text = "[No content available]"
 
         # Build the digest entry (compact format, no extra newlines)
+        # Format trigger annotations for rich display
+        triggers_formatted = format_alert_triggers(trigger_annotations_json)
+        trigger_line = f"\n🎯 {triggers_formatted}" if triggers_formatted else ""
+
         lines.append(
             f"**{idx}. [{chat_name}]({msg_link})** — Score: {score:.2f}\n"
             f"👤 {sender_name} • 🕐 {msg_time}\n"
-            f"💬 _{msg_text}_"
+            f"💬 _{msg_text}_{trigger_line}"
         )
 
     msg_text = "\n".join(lines)

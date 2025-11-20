@@ -100,23 +100,6 @@ body {
   text-shadow: 0 0 6px rgba(102,126,234,0.35);
 }
 
-/* When UI is locked, block interactions and scrolling */
-body.locked-ui {
-  overflow: hidden;
-}
-body.locked-ui header,
-body.locked-ui nav,
-body.locked-ui main,
-body.locked-ui footer {
-  pointer-events: none;
-  -webkit-user-select: none;
-  user-select: none;
-}
-/* Allow interactions inside unlock modal only */
-.modal#unlockModal, .modal-backdrop.show {
-  pointer-events: auto;
-}
-
 /* Lock overlay to block app interaction until login */
 .lock-overlay {
   position: fixed;

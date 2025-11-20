@@ -1,55 +1,397 @@
-# TG Sentinel Architecture Compliance Report
+# TG Sentinel Architecture Compliance Checklist
 
-**Generated**: 2025-11-16  
-**Review Scope**: Full codebase against dual-database architecture instructions
+**Purpose**: Validation checklist for ensuring code changes comply with TG Sentinel's dual-database architecture and service boundary requirements.
 
-## Executive Summary
-
-The codebase has been reviewed and updated to comply with the dual-database architecture defined in `.github/instructions/DB_Architecture.instructions.md`. Key violations have been fixed, and the system now properly separates UI and Sentinel concerns.
+**Reference**: See `.github/instructions/DB_Architecture.instructions.md` for detailed architecture specification.
 
 ---
 
-## Architecture Compliance Status
+## Quick Validation Commands
 
-### ✅ **COMPLIANT**: Docker Compose Configuration
+```bash
+# 1. Clean rebuild (REQUIRED after auth/session changes)
+docker compose down -v && docker compose build && docker compose up -d
 
-**File**: `docker-compose.yml`
+# 2. Follow logs
+docker compose logs -f sentinel
+docker compose logs -f ui
 
-- **Status**: FULLY COMPLIANT
-- **Key Points**:
-  - Three separate named volumes: `tgsentinel_redis_data`, `tgsentinel_sentinel_data`, `tgsentinel_ui_data`
-  - Sentinel service mounts only `tgsentinel_sentinel_data:/app/data`
-  - UI service mounts only `tgsentinel_ui_data:/app/data`
-  - Correct environment variables:
-    - Sentinel: `TG_SESSION_PATH=/app/data/tgsentinel.session`, `DB_URI=sqlite:////app/data/sentinel.db`
-    - UI: `UI_DB_URI=sqlite:////app/data/ui.db`, `SENTINEL_API_BASE_URL=http://sentinel:8080/api`
-  - Services communicate via `tgsentinel_net` Docker network
+# 3. Inspect Redis state
+docker exec -it tgsentinel-redis-1 redis-cli
+> KEYS tgsentinel:*
+> GET tgsentinel:worker_status
+> TTL tgsentinel:user_info
 
-**No changes needed**.
+# 4. Verify volume separation
+docker exec tgsentinel-ui-1 ls -lah /app/data/
+docker exec tgsentinel-sentinel-1 ls -lah /app/data/
+```
 
 ---
 
-### ✅ **FIXED**: UI Application (ui/app.py)
+## Docker Configuration Checklist
 
-**File**: `ui/app.py`
+### ✅ docker-compose.yml
 
-**Previous Violations**:
+- [ ] Three separate named volumes defined:
+  - `tgsentinel_redis_data`
+  - `tgsentinel_sentinel_data`
+  - `tgsentinel_ui_data`
+- [ ] Sentinel service:
+  - [ ] Mounts only `tgsentinel_sentinel_data:/app/data`
+  - [ ] Environment: `TG_SESSION_PATH=/app/data/tgsentinel.session`
+  - [ ] Environment: `DB_URI=sqlite:////app/data/sentinel.db`
+  - [ ] Port: `8080:8080`
+- [ ] UI service:
+  - [ ] Mounts only `tgsentinel_ui_data:/app/data`
+  - [ ] Environment: `SENTINEL_API_BASE_URL=http://sentinel:8080/api`
+  - [ ] Port: `5001:5000`
+- [ ] Services communicate via `tgsentinel_net` Docker network
 
-1. ❌ Imported `init_db` from `tgsentinel.store` (sentinel module)
-2. ❌ Initialized sentinel database engine directly
-3. ❌ Used sentinel engine for `_query_one`, `_query_all`, `_execute` operations
-4. ❌ Accessed sentinel DB file for size calculation in `_compute_health()`
-5. ❌ Accessed sentinel session file (`data/tgsentinel.session`) for checkpoint timestamp
-6. ❌ `serve_data_file()` had fallback to access sentinel volume
+---
 
-**Fixes Applied**:
+## Service Boundary Compliance
 
-1. ✅ Removed `from tgsentinel.store import init_db` import
-2. ✅ Removed sentinel DB initialization; set `engine = None`
-3. ✅ Refactored `_query_one`, `_query_all`, `_execute` to use `ui.database.get_ui_db()`
-4. ✅ Changed `_compute_health()` to only access UI DB for size calculation
-5. ✅ Removed checkpoint file access (session file belongs to sentinel)
-6. ✅ Fixed `serve_data_file()` to only serve from UI volume with security checks
+### ✅ UI Service (ui/)
+
+**Must NOT contain**:
+
+- [ ] No imports from `src.tgsentinel` modules
+- [ ] No `from telethon import` statements
+- [ ] No direct file access to `tgsentinel.session`
+- [ ] No direct database connections to `sentinel.db`
+- [ ] No `TelegramClient` instantiation
+
+**Must ONLY use**:
+
+- [ ] HTTP requests to `SENTINEL_API_BASE_URL/api/*`
+- [ ] Redis pub/sub for events (read-only)
+- [ ] Own UI database (if implemented)
+
+**Validation commands**:
+
+```bash
+# Should return NO results
+grep -r "from src.tgsentinel import" ui/
+grep -r "from tgsentinel import" ui/
+grep -r "from telethon import" ui/
+grep -r "TelegramClient(" ui/
+grep -r "tgsentinel.session" ui/
+grep -r "sentinel.db" ui/
+```
+
+### ✅ Sentinel Service (src/tgsentinel/)
+
+**Owns exclusively**:
+
+- [ ] `TelegramClient` instance creation and management
+- [ ] Access to `tgsentinel.session` SQLite file
+- [ ] Access to `sentinel.db`
+- [ ] All MTProto operations
+
+**Must provide**:
+
+- [ ] HTTP API endpoints for UI at `/api/*`
+- [ ] Session import endpoint: `POST /api/session/import`
+- [ ] Status endpoint: `GET /api/status`
+- [ ] Job management endpoints
+
+**Must NOT**:
+
+- [ ] Import UI modules from `ui/`
+- [ ] Access UI database directly
+
+---
+
+## Redis Key Schema Compliance
+
+### Auth/Session Keys
+
+- [ ] `tgsentinel:worker_status` — Has TTL (3600s recommended)
+- [ ] `tgsentinel:user_info` — Has TTL (3600s recommended)
+- [ ] `tgsentinel:credentials:ui` — Has TTL (3600s recommended)
+- [ ] `tgsentinel:credentials:sentinel` — Has TTL (3600s recommended)
+- [ ] `tgsentinel:relogin:handshake` — Canonical handshake key
+- [ ] `tgsentinel:relogin` — Legacy (being migrated to :handshake)
+
+**Validation**:
+
+```bash
+# Check TTLs (should NOT be -1)
+redis-cli TTL tgsentinel:worker_status
+redis-cli TTL tgsentinel:user_info
+```
+
+### Request/Response Patterns
+
+- [ ] Pattern: `tgsentinel:request:{operation}:{request_id}`
+- [ ] Pattern: `tgsentinel:response:{operation}:{request_id}`
+- [ ] Operations: `get_dialogs`, `get_users`, `get_chats`
+- [ ] TTL set appropriately for request/response pairs
+
+### Jobs/Progress
+
+- [ ] `tgsentinel:jobs:{job_id}:progress` — Hash with state machine fields
+- [ ] `tgsentinel:jobs:{job_id}:logs` — Stream with TTL
+- [ ] Progress fields: `status`, `percent`, `step`, `message`, `started_at`, `updated_at`, `error_code`
+
+### Pub/Sub Channels
+
+- [ ] `tgsentinel:session_updated` — Session import/change events
+
+---
+
+## Concurrency Compliance
+
+### Handler Registration
+
+- [ ] All long-running handlers registered in central task registry
+- [ ] Handler tags present in logs: `[CHATS-HANDLER]`, `[DIALOGS-HANDLER]`, `[USERS-HANDLER]`, `[CACHE-REFRESHER]`, `[JOBS-HANDLER]`
+- [ ] Handlers started via `asyncio.gather()` in `main.py`
+- [ ] Graceful shutdown implemented (cancel tasks, await completion, close connections)
+
+### Async Hygiene
+
+- [ ] No threads except via `run_in_executor` for blocking I/O
+- [ ] CPU-bound work (embeddings) uses `ProcessPoolExecutor`
+- [ ] I/O-bound work stays in asyncio loop
+- [ ] SQLite access protected by `client_lock` (asyncio.Lock)
+
+**Validation**:
+
+```bash
+# Check for threading violations
+grep -r "threading.Thread" src/tgsentinel/
+grep -r "Thread(" src/tgsentinel/
+```
+
+---
+
+## Session Management Compliance
+
+### Single-Owner Pattern
+
+- [ ] Only Sentinel container creates `TelegramClient`
+- [ ] Session file location: `/app/data/tgsentinel.session` in Sentinel volume
+- [ ] UI submits auth via Redis: `tgsentinel:auth_queue`
+- [ ] Sentinel processes auth requests and saves session
+- [ ] No concurrent session access (single writer)
+
+### Session Upload Flow
+
+- [ ] UI endpoint: `POST /api/session/upload`
+- [ ] Sentinel endpoint: `POST /api/session/import`
+- [ ] UI forwards uploaded file to Sentinel (not direct file system copy)
+- [ ] Sentinel validates and writes to own volume
+- [ ] Sentinel publishes `tgsentinel:session_updated` event
+
+**Validation**:
+
+```bash
+# Test session upload
+curl -F "session_file=@my.session" http://localhost:5001/api/session/upload
+
+# Check Sentinel status
+curl http://localhost:8080/api/status
+```
+
+---
+
+## Logging Compliance
+
+### Structured Logging
+
+- [ ] All logs use JSON format with mandatory fields
+- [ ] Handler tags present: `[HANDLER-TAG]`
+- [ ] Correlation fields: `request_id`, `correlation_id`, `job_id`
+- [ ] Log levels used appropriately (DEBUG/INFO/WARNING/ERROR/CRITICAL)
+
+### Security
+
+- [ ] No session file paths in logs
+- [ ] No `API_ID` or `API_HASH` values in logs
+- [ ] No raw credential data in logs
+- [ ] No handshake keys or tokens in logs
+- [ ] Phone numbers masked when logged
+
+**Validation**:
+
+```bash
+# Check for sensitive data leaks
+docker compose logs sentinel | grep -i "API_HASH"
+docker compose logs sentinel | grep -i "tgsentinel.session"
+docker compose logs ui | grep -i "API_HASH"
+```
+
+---
+
+## Testing Compliance
+
+### Test Organization
+
+- [ ] Unit tests in `tests/unit/{tgsentinel,ui}/`
+- [ ] Integration tests in `tests/integration/`
+- [ ] Contract tests in `tests/contracts/`
+- [ ] Markers used: `@pytest.mark.unit`, `@pytest.mark.integration`, `@pytest.mark.contract`, `@pytest.mark.e2e`
+
+### Test Isolation
+
+- [ ] Unit tests: No network, no Redis, no filesystem (< 10ms)
+- [ ] Integration tests: Real Redis, test database
+- [ ] Service boundaries respected (UI tests don't import Sentinel modules)
+
+**Run tests**:
+
+```bash
+make test              # All tests
+pytest -m unit         # Unit only
+pytest -m integration  # Integration only
+```
+
+---
+
+## Authentication Workflow Validation
+
+**Full validation workflow** (see `.github/instructions/AUTH.instructions.md` for complete steps):
+
+1. [ ] Clean rebuild: `docker compose down -v && docker compose build && docker compose up -d`
+2. [ ] Upload session file via UI: `POST /api/session/upload`
+3. [ ] Verify Sentinel imports: Check logs for successful import
+4. [ ] Check Redis state:
+   - [ ] `tgsentinel:worker_status` shows `"authorized": true`
+   - [ ] `tgsentinel:user_info` contains user data
+   - [ ] All keys have appropriate TTLs
+5. [ ] UI displays:
+   - [ ] Username and avatar
+   - [ ] Worker status badge
+   - [ ] No broken images or stale data
+6. [ ] Logout cleanup:
+   - [ ] All auth-related Redis keys removed
+   - [ ] No stale handshake data
+   - [ ] UI shows logged-out state
+7. [ ] Review logs:
+   - [ ] No errors or stack traces
+   - [ ] No sensitive data exposed
+
+---
+
+## Common Violations & Fixes
+
+### ❌ UI accesses Sentinel DB directly
+
+**Violation**:
+
+```python
+# ui/app.py
+from tgsentinel.store import init_db
+engine = init_db(cfg.db_uri)
+```
+
+**Fix**:
+
+```python
+# Use HTTP API instead
+import requests
+response = requests.get(f"{SENTINEL_API_BASE_URL}/messages", ...)
+```
+
+### ❌ UI imports Telethon
+
+**Violation**:
+
+```python
+# ui/routes/something.py
+from telethon import TelegramClient
+```
+
+**Fix**:
+
+```python
+# Delegate via HTTP to Sentinel
+requests.post(f"{SENTINEL_API_BASE_URL}/telegram/some_operation", ...)
+```
+
+### ❌ Shared volume for session file
+
+**Violation**:
+
+```yaml
+# docker-compose.yml
+volumes:
+  - shared_data:/app/data # Both UI and Sentinel
+```
+
+**Fix**:
+
+```yaml
+sentinel:
+  volumes:
+    - tgsentinel_sentinel_data:/app/data
+ui:
+  volumes:
+    - tgsentinel_ui_data:/app/data
+```
+
+### ❌ Redis keys without TTL
+
+**Violation**:
+
+```python
+redis_client.set("tgsentinel:worker_status", json.dumps(status))
+```
+
+**Fix**:
+
+```python
+redis_client.setex("tgsentinel:worker_status", 3600, json.dumps(status))
+```
+
+### ❌ Sensitive data in logs
+
+**Violation**:
+
+```python
+log.info(f"Session path: {cfg.telegram_session}")
+log.info(f"API credentials: {cfg.api_id}, {cfg.api_hash}")
+```
+
+**Fix**:
+
+```python
+log.info("[SESSION] Initializing from configured path")
+log.info("[AUTH] Using configured API credentials")
+```
+
+---
+
+## Post-Change Validation Checklist
+
+After making code changes, validate:
+
+- [ ] Run `make format` (black + isort)
+- [ ] Run tests: `make test`
+- [ ] Clean Docker rebuild
+- [ ] Follow logs for errors/warnings
+- [ ] Test session upload flow
+- [ ] Check Redis keys and TTLs
+- [ ] Verify UI functionality
+- [ ] Test logout and cleanup
+- [ ] Review logs for sensitive data leaks
+
+---
+
+## Related Documentation
+
+- **Architecture Spec**: `.github/instructions/DB_Architecture.instructions.md`
+- **Auth Validation**: `.github/instructions/AUTH.instructions.md`
+- **Concurrency Rules**: `.github/instructions/Concurrency.instructions.md`
+- **Test Guidelines**: `.github/instructions/TESTS.instructions.md`
+- **UI Patterns**: `.github/instructions/UI_UX.instructions.md`
+- **Engineering Guide**: `docs/ENGINEERING_GUIDELINES.md`
+
+---
+
+**Last Updated**: 2025-11-20 5. ✅ Removed checkpoint file access (session file belongs to sentinel) 6. ✅ Fixed `serve_data_file()` to only serve from UI volume with security checks
 
 **Current Status**: COMPLIANT
 

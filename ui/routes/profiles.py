@@ -1186,3 +1186,410 @@ def backtest_alert_profile():
     except Exception as exc:
         logger.error(f"Error backtesting alert profile: {exc}", exc_info=True)
         return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Global Profile Routes (Two-Layer Architecture)
+# ═══════════════════════════════════════════════════════════════════
+
+
+@profiles_bp.get("/global/list")
+def list_global_profiles():
+    """List all global profiles from config/profiles.yml.
+
+    Returns:
+        JSON array of profile objects with id, name, and configuration.
+    """
+    try:
+        if not _profile_service:
+            return (
+                jsonify(
+                    {"status": "error", "message": "ProfileService not initialized"}
+                ),
+                500,
+            )
+
+        profiles = _profile_service.list_global_profiles()
+        return jsonify({"status": "ok", "profiles": profiles})
+
+    except Exception as exc:
+        logger.error(f"Failed to list global profiles: {exc}", exc_info=True)
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@profiles_bp.get("/global/<profile_id>")
+def get_global_profile(profile_id: str):
+    """Get a single global profile by ID.
+
+    Args:
+        profile_id: Profile identifier (e.g., 'security', 'releases').
+
+    Returns:
+        JSON object with profile configuration or 404 if not found.
+    """
+    try:
+        if not _profile_service:
+            return (
+                jsonify(
+                    {"status": "error", "message": "ProfileService not initialized"}
+                ),
+                500,
+            )
+
+        profile = _profile_service.get_global_profile(profile_id)
+        if profile is None:
+            return (
+                jsonify(
+                    {"status": "error", "message": f"Profile '{profile_id}' not found"}
+                ),
+                404,
+            )
+
+        return jsonify({"status": "ok", "profile": profile})
+
+    except Exception as exc:
+        logger.error(
+            f"Failed to get global profile '{profile_id}': {exc}", exc_info=True
+        )
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@profiles_bp.post("/global/create")
+def create_global_profile():
+    """Create a new global profile.
+
+    Request body:
+        {
+            "id": "profile_identifier",
+            "profile": {
+                "name": "Profile Name",
+                "keywords": [...],
+                "scoring_weights": {...},
+                ...
+            }
+        }
+
+    Returns:
+        JSON with status and created profile ID.
+    """
+    try:
+        if not request.is_json:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Content-Type must be application/json",
+                    }
+                ),
+                400,
+            )
+
+        if not _profile_service:
+            return (
+                jsonify(
+                    {"status": "error", "message": "ProfileService not initialized"}
+                ),
+                500,
+            )
+
+        data = request.get_json()
+        profile_id = data.get("id", "").strip()
+        profile_data = data.get("profile", {})
+
+        if not profile_id:
+            return (
+                jsonify({"status": "error", "message": "Profile ID is required"}),
+                400,
+            )
+
+        # Validate profile structure
+        validation = _profile_service.validate_global_profile(profile_data)
+        if not validation["valid"]:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Profile validation failed",
+                        "errors": validation["errors"],
+                    }
+                ),
+                400,
+            )
+
+        # Check if profile already exists
+        existing = _profile_service.get_global_profile(profile_id)
+        if existing is not None:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": f"Profile '{profile_id}' already exists. Use update endpoint instead.",
+                    }
+                ),
+                409,
+            )
+
+        # Create profile
+        success = _profile_service.create_global_profile(profile_id, profile_data)
+        if not success:
+            return (
+                jsonify({"status": "error", "message": "Failed to create profile"}),
+                500,
+            )
+
+        logger.info(f"Created global profile: {profile_id}")
+        return (
+            jsonify(
+                {
+                    "status": "ok",
+                    "id": profile_id,
+                    "message": "Profile created successfully",
+                }
+            ),
+            201,
+        )
+
+    except Exception as exc:
+        logger.error(f"Failed to create global profile: {exc}", exc_info=True)
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@profiles_bp.put("/global/<profile_id>")
+def update_global_profile(profile_id: str):
+    """Update an existing global profile.
+
+    Args:
+        profile_id: Profile identifier to update.
+
+    Request body:
+        {
+            "profile": {
+                "name": "Updated Name",
+                "keywords": [...],
+                ...
+            }
+        }
+
+    Returns:
+        JSON with status and update confirmation.
+    """
+    try:
+        if not request.is_json:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Content-Type must be application/json",
+                    }
+                ),
+                400,
+            )
+
+        if not _profile_service:
+            return (
+                jsonify(
+                    {"status": "error", "message": "ProfileService not initialized"}
+                ),
+                500,
+            )
+
+        data = request.get_json()
+        profile_data = data.get("profile", {})
+
+        # Validate profile structure
+        validation = _profile_service.validate_global_profile(profile_data)
+        if not validation["valid"]:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Profile validation failed",
+                        "errors": validation["errors"],
+                    }
+                ),
+                400,
+            )
+
+        # Check if profile exists
+        existing = _profile_service.get_global_profile(profile_id)
+        if existing is None:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": f"Profile '{profile_id}' not found. Use create endpoint instead.",
+                    }
+                ),
+                404,
+            )
+
+        # Update profile
+        success = _profile_service.update_global_profile(profile_id, profile_data)
+        if not success:
+            return (
+                jsonify({"status": "error", "message": "Failed to update profile"}),
+                500,
+            )
+
+        logger.info(f"Updated global profile: {profile_id}")
+        return jsonify(
+            {
+                "status": "ok",
+                "id": profile_id,
+                "message": "Profile updated successfully",
+            }
+        )
+
+    except Exception as exc:
+        logger.error(
+            f"Failed to update global profile '{profile_id}': {exc}", exc_info=True
+        )
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@profiles_bp.delete("/global/<profile_id>")
+def delete_global_profile(profile_id: str):
+    """Delete a global profile.
+
+    Args:
+        profile_id: Profile identifier to delete.
+
+    Returns:
+        JSON with status and deletion confirmation.
+    """
+    try:
+        if not _profile_service:
+            return (
+                jsonify(
+                    {"status": "error", "message": "ProfileService not initialized"}
+                ),
+                500,
+            )
+
+        # Check usage before deletion
+        usage = _profile_service.get_profile_usage(profile_id)
+        if usage["channels"] or usage["users"]:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": f"Profile '{profile_id}' is in use and cannot be deleted",
+                        "usage": usage,
+                    }
+                ),
+                409,
+            )
+
+        # Delete profile
+        success = _profile_service.delete_global_profile(profile_id)
+        if not success:
+            return (
+                jsonify({"status": "error", "message": "Failed to delete profile"}),
+                500,
+            )
+
+        logger.info(f"Deleted global profile: {profile_id}")
+        return jsonify(
+            {
+                "status": "ok",
+                "id": profile_id,
+                "message": "Profile deleted successfully",
+            }
+        )
+
+    except Exception as exc:
+        logger.error(
+            f"Failed to delete global profile '{profile_id}': {exc}", exc_info=True
+        )
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@profiles_bp.post("/global/validate")
+def validate_global_profile():
+    """Validate a global profile configuration without saving.
+
+    Request body:
+        {
+            "profile": {
+                "name": "Profile Name",
+                "keywords": [...],
+                ...
+            }
+        }
+
+    Returns:
+        JSON with validation results.
+    """
+    try:
+        if not request.is_json:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Content-Type must be application/json",
+                    }
+                ),
+                400,
+            )
+
+        if not _profile_service:
+            return (
+                jsonify(
+                    {"status": "error", "message": "ProfileService not initialized"}
+                ),
+                500,
+            )
+
+        data = request.get_json()
+        profile_data = data.get("profile", {})
+
+        validation = _profile_service.validate_global_profile(profile_data)
+
+        return jsonify(
+            {
+                "status": "ok",
+                "valid": validation["valid"],
+                "errors": validation["errors"],
+            }
+        )
+
+    except Exception as exc:
+        logger.error(f"Failed to validate profile: {exc}", exc_info=True)
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@profiles_bp.get("/global/<profile_id>/usage")
+def get_profile_usage(profile_id: str):
+    """Get usage information for a global profile.
+
+    Args:
+        profile_id: Profile identifier.
+
+    Returns:
+        JSON with list of channels and users using this profile.
+    """
+    try:
+        if not _profile_service:
+            return (
+                jsonify(
+                    {"status": "error", "message": "ProfileService not initialized"}
+                ),
+                500,
+            )
+
+        usage = _profile_service.get_profile_usage(profile_id)
+
+        return jsonify(
+            {
+                "status": "ok",
+                "profile_id": profile_id,
+                "usage": usage,
+                "in_use": len(usage["channels"]) > 0 or len(usage["users"]) > 0,
+            }
+        )
+
+    except Exception as exc:
+        logger.error(
+            f"Failed to get usage for profile '{profile_id}': {exc}", exc_info=True
+        )
+        return jsonify({"status": "error", "message": str(exc)}), 500

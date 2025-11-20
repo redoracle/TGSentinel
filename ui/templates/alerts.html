@@ -37,7 +37,16 @@
             <tbody>
                         {%- for alert in alerts %}
                         <tr>
-                            <td data-label="Channel">{{ alert.chat_name }}</td>
+                            <td data-label="Channel">
+                                <a href="#" class="text-decoration-none channel-link" 
+                                   data-chat-id="{{ alert.chat_id }}" 
+                                   data-chat-name="{{ alert.chat_name | e }}" 
+                                   data-bs-toggle="modal" 
+                                   data-bs-target="#channelActionsModal"
+                                   title="Click to manage channel">
+                                    {{ alert.chat_name }}
+                                </a>
+                            </td>
                             <td data-label="Sender">{{ alert.sender | default("Unknown") }}</td>
                             <td data-label="Excerpt"
                                 class="alert-excerpt"
@@ -84,8 +93,8 @@
     </div>
 </section>
 
-<section class="row g-4">
-    <div class="col-12 col-xl-7">
+<section class="row g-4 mb-4">
+    <div class="col-12">
         <article class="card" aria-labelledby="digest-timeline-heading">
             <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
                 <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#digest-timeline-body" aria-expanded="true" aria-controls="digest-timeline-body" style="text-decoration: none; color: inherit;">
@@ -121,8 +130,11 @@
             </div>
         </article>
     </div>
-    <div class="col-12 col-xl-5">
-        <article class="card h-100" aria-labelledby="quick-actions-heading">
+</section>
+
+<section class="row g-4">
+    <div class="col-12">
+        <article class="card" aria-labelledby="quick-actions-heading">
             <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
                 <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#quick-actions-body" aria-expanded="true" aria-controls="quick-actions-body" style="text-decoration: none; color: inherit;">
                     <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
@@ -142,14 +154,100 @@
                     <button class="btn btn-outline-primary btn-action" type="button" data-action="whitelist">Whitelist Sender</button>
                 </div>
                 <div class="mt-4">
-                    <label class="form-label" for="threshold-slider">Adjust score threshold</label>
-                    <input type="range" class="form-range" id="threshold-slider" min="0" max="1" step="0.05" value="0.5">
-                    <p class="text-muted small mb-0">Current: <span id="threshold-value">0.50</span></p>
+                    <label class="form-label" for="threshold-slider">Adjust score threshold (0.0 - 10.0)</label>
+                    <input type="range" class="form-range" id="threshold-slider" min="0" max="10" step="0.1" value="5.0">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <p class="text-muted small mb-0">Current: <span id="threshold-value">5.0</span></p>
+                        <button class="btn btn-primary btn-sm" type="button" id="btn-save-threshold">Save</button>
+                    </div>
                 </div>
             </div>
         </article>
     </div>
 </section>
+
+<!-- Channel Quick Actions Modal -->
+<div class="modal fade" id="channelActionsModal" tabindex="-1" aria-labelledby="channelActionsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="channelActionsModalLabel">
+                    <i class="bi bi-gear-fill me-2"></i>
+                    <span id="modal-channel-name">Channel Actions</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info mb-3">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <small>Quick actions for <strong id="modal-channel-name-2"></strong></small>
+                </div>
+                
+                <div class="d-grid gap-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="card-title">Channel Settings</h6>
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-outline-warning btn-sm channel-action" data-action="mute" type="button">
+                                    <i class="bi bi-volume-mute-fill me-2"></i>Mute Channel
+                                </button>
+                                <button class="btn btn-outline-success btn-sm channel-action" data-action="unmute" type="button">
+                                    <i class="bi bi-volume-up-fill me-2"></i>Unmute Channel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="card-title">Thresholds</h6>
+                            <div class="mb-3">
+                                <label class="form-label" for="channel-reaction-threshold">Reaction Threshold</label>
+                                <input type="number" class="form-control form-control-sm" id="channel-reaction-threshold" min="0" max="100" value="5">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label" for="channel-reply-threshold">Reply Threshold</label>
+                                <input type="number" class="form-control form-control-sm" id="channel-reply-threshold" min="0" max="100" value="3">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label" for="channel-rate-limit">Rate Limit (per hour)</label>
+                                <input type="number" class="form-control form-control-sm" id="channel-rate-limit" min="0" max="100" value="10">
+                            </div>
+                            <button class="btn btn-primary btn-sm w-100 channel-action" data-action="update-thresholds" type="button">
+                                <i class="bi bi-save me-2"></i>Save Thresholds
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="card-title">Keywords</h6>
+                            <div class="mb-3">
+                                <label class="form-label" for="channel-keywords">Keywords (comma-separated)</label>
+                                <textarea class="form-control form-control-sm" id="channel-keywords" rows="2" placeholder="urgent, important, breaking"></textarea>
+                            </div>
+                            <button class="btn btn-primary btn-sm w-100 channel-action" data-action="update-keywords" type="button">
+                                <i class="bi bi-save me-2"></i>Save Keywords
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="card border-danger">
+                        <div class="card-body">
+                            <h6 class="card-title text-danger">Danger Zone</h6>
+                            <button class="btn btn-outline-danger btn-sm w-100 channel-action" data-action="remove" type="button">
+                                <i class="bi bi-trash-fill me-2"></i>Remove Channel from Monitoring
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -209,7 +307,16 @@
             
             return `
             <tr>
-                <td data-label="Channel">${escapeHtml(alert.chat_name)}</td>
+                <td data-label="Channel">
+                    <a href="#" class="text-decoration-none channel-link" 
+                       data-chat-id="${escapeHtml(alert.chat_id)}" 
+                       data-chat-name="${escapeHtml(alert.chat_name)}" 
+                       data-bs-toggle="modal" 
+                       data-bs-target="#channelActionsModal"
+                       title="Click to manage channel">
+                        ${escapeHtml(alert.chat_name)}
+                    </a>
+                </td>
                 <td data-label="Sender">${escapeHtml(alert.sender || "Unknown")}</td>
                 <td data-label="Excerpt" class="alert-excerpt" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-custom-class="excerpt-tooltip" data-bs-title="${escapeHtml(alert.message_text || alert.excerpt)}">${escapeHtml(alert.excerpt)}</td>
                 <td data-label="Score"><span class="badge bg-danger" style="z-index: 1;">${escapeHtml(Number(alert.score || 0).toFixed(2))}</span></td>
@@ -379,14 +486,273 @@
             }
         });
         document.getElementById("threshold-slider")?.addEventListener("input", (event) => {
-            document.getElementById("threshold-value").textContent = Number(event.target.value).toFixed(2);
+            document.getElementById("threshold-value").textContent = Number(event.target.value).toFixed(1);
         });
+        document.getElementById("btn-save-threshold")?.addEventListener("click", saveThreshold);
         document.querySelectorAll(".btn-action").forEach((button) => {
             button.addEventListener("click", () => {
                 const action = button.getAttribute("data-action");
                 showToast(`${action} action queued`, "info");
             });
         });
+    }
+
+    async function loadThreshold() {
+        try {
+            // Fetch from UI proxy endpoint (which queries Sentinel internally)
+            const response = await fetch("/api/config/threshold");
+            if (!response.ok) {
+                throw new Error("Failed to load config from Sentinel");
+            }
+            const data = await response.json();
+            if (data.status === "ok" && data.threshold !== undefined) {
+                const threshold = Number(data.threshold);
+                document.getElementById("threshold-slider").value = threshold;
+                document.getElementById("threshold-value").textContent = threshold.toFixed(1);
+            }
+        } catch (error) {
+            console.error("Error loading threshold:", error);
+            // Keep default value if load fails
+        }
+    }
+
+    async function saveThreshold() {
+        const slider = document.getElementById("threshold-slider");
+        const threshold = Number(slider.value);
+        
+        try {
+            // Save via UI proxy endpoint (which updates Sentinel config)
+            const response = await fetch("/api/config/threshold", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ threshold })
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || "Failed to save threshold");
+            }
+            
+            const data = await response.json();
+            if (data.status === "ok") {
+                showToast("Threshold saved successfully", "success");
+            } else {
+                throw new Error(data.message || "Unknown error");
+            }
+        } catch (error) {
+            console.error("Error saving threshold:", error);
+            showToast(`Failed to save threshold: ${error.message}`, "error");
+        }
+    }
+
+    // Channel modal state
+    let currentChannelId = null;
+    let currentChannelName = null;
+    let currentChannelConfig = null;
+
+    // Initialize channel modal
+    function initChannelModal() {
+        const modal = document.getElementById('channelActionsModal');
+        if (!modal) return;
+
+        modal.addEventListener('show.bs.modal', async function(event) {
+            const button = event.relatedTarget;
+            currentChannelId = button.getAttribute('data-chat-id');
+            currentChannelName = button.getAttribute('data-chat-name');
+
+            // Update modal title
+            document.getElementById('modal-channel-name').textContent = currentChannelName;
+            document.getElementById('modal-channel-name-2').textContent = currentChannelName;
+
+            // Load channel configuration from Sentinel
+            await loadChannelConfig(currentChannelId);
+        });
+
+        // Handle channel actions using event delegation
+        modal.addEventListener('click', async function(event) {
+            const button = event.target.closest('.channel-action');
+            if (button) {
+                const action = button.getAttribute('data-action');
+                await handleChannelAction(action);
+            }
+        });
+    }
+
+    async function loadChannelConfig(chatId) {
+        try {
+            // Fetch full config for channel details
+            const configResponse = await fetch(`/api/config/channels`);
+            if (configResponse.ok) {
+                const configData = await configResponse.json();
+                const channels = configData.channels || [];
+                currentChannelConfig = channels.find(ch => ch.id == chatId || ch.chat_id == chatId);
+
+                if (currentChannelConfig) {
+                    // Populate form fields with current values
+                    document.getElementById('channel-reaction-threshold').value = currentChannelConfig.reaction_threshold || 5;
+                    document.getElementById('channel-reply-threshold').value = currentChannelConfig.reply_threshold || 3;
+                    document.getElementById('channel-rate-limit').value = currentChannelConfig.rate_limit_per_hour || 10;
+                    document.getElementById('channel-keywords').value = (currentChannelConfig.keywords || []).join(', ');
+                }
+            }
+        } catch (error) {
+            console.error('Error loading channel config:', error);
+            showToast('Failed to load channel configuration', 'error');
+        }
+    }
+
+    async function handleChannelAction(action) {
+        if (!currentChannelId) {
+            showToast('No channel selected', 'error');
+            return;
+        }
+
+        try {
+            switch(action) {
+                case 'mute':
+                    await muteChannel(currentChannelId, true);
+                    break;
+                case 'unmute':
+                    await muteChannel(currentChannelId, false);
+                    break;
+                case 'update-thresholds':
+                    await updateChannelThresholds(currentChannelId);
+                    break;
+                case 'update-keywords':
+                    await updateChannelKeywords(currentChannelId);
+                    break;
+                case 'remove':
+                    await removeChannel(currentChannelId);
+                    break;
+                default:
+                    showToast('Unknown action', 'warning');
+            }
+        } catch (error) {
+            console.error(`Error handling ${action}:`, error);
+            showToast(`Failed to ${action}: ${error.message}`, 'error');
+        }
+    }
+
+    async function muteChannel(chatId, mute) {
+        try {
+            // Update rate_limit to effectively mute/unmute (set to 0 or restore)
+            const rateLimit = mute ? 0 : (currentChannelConfig?.rate_limit_per_hour || 10);
+            
+            const response = await fetch(`/api/config/channels/${chatId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rate_limit_per_hour: rateLimit })
+            });
+
+            if (!response.ok) {
+                let errorMessage = 'Failed to update config';
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData.message || errorMessage;
+                } catch {
+                    // JSON parsing failed, use default message
+                }
+                throw new Error(errorMessage);
+            }
+
+            showToast(`Channel ${mute ? 'muted' : 'unmuted'} successfully`, 'success');
+            bootstrap.Modal.getInstance(document.getElementById('channelActionsModal'))?.hide();
+            refreshAlerts();
+        } catch (error) {
+            throw new Error(`Failed to ${mute ? 'mute' : 'unmute'} channel: ${error.message}`);
+        }
+    }
+
+    async function updateChannelThresholds(chatId) {
+        try {
+            const reactionThreshold = parseInt(document.getElementById('channel-reaction-threshold').value, 10);
+            const replyThreshold = parseInt(document.getElementById('channel-reply-threshold').value, 10);
+            const rateLimit = parseInt(document.getElementById('channel-rate-limit').value, 10);
+
+            const response = await fetch(`/api/config/channels/${chatId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    reaction_threshold: reactionThreshold,
+                    reply_threshold: replyThreshold,
+                    rate_limit_per_hour: rateLimit
+                })
+            });
+
+            if (!response.ok) {
+                let errorMessage = 'Failed to update config';
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData.message || errorMessage;
+                } catch {
+                    // JSON parsing failed, use default message
+                }
+                throw new Error(errorMessage);
+            }
+
+            showToast('Thresholds updated successfully', 'success');
+        } catch (error) {
+            throw new Error(`Failed to update thresholds: ${error.message}`);
+        }
+    }
+
+    async function updateChannelKeywords(chatId) {
+        try {
+            const keywordsText = document.getElementById('channel-keywords').value;
+            const keywords = keywordsText.split(',').map(k => k.trim()).filter(k => k.length > 0);
+
+            const response = await fetch(`/api/config/channels/${chatId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ keywords })
+            });
+
+            if (!response.ok) {
+                let errorMessage = 'Failed to update config';
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData.message || errorMessage;
+                } catch {
+                    // JSON parsing failed, use default message
+                }
+                throw new Error(errorMessage);
+            }
+
+            showToast('Keywords updated successfully', 'success');
+        } catch (error) {
+            throw new Error(`Failed to update keywords: ${error.message}`);
+        }
+    }
+
+    async function removeChannel(chatId) {
+        if (!confirm(`Are you sure you want to remove "${currentChannelName}" from monitoring?`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/config/channels/${chatId}`, {
+                method: 'DELETE'
+            });
+
+            if (!response.ok) {
+                let errorMessage = 'Failed to remove channel';
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData.message || errorMessage;
+                } catch {
+                    // JSON parsing failed, use default message
+                }
+                throw new Error(errorMessage);
+            }
+
+            showToast('Channel removed successfully', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('channelActionsModal'))?.hide();
+            refreshAlerts();
+        } catch (error) {
+            throw new Error(`Failed to remove channel: ${error.message}`);
+        }
     }
 
     // Interval management to prevent duplicate timers
@@ -412,9 +778,11 @@
     }
 
     document.addEventListener("DOMContentLoaded", () => {
+        loadThreshold();
         refreshAlerts();
         refreshDigests();
         bindInteractions();
+        initChannelModal();
         startIntervals();
     });
 

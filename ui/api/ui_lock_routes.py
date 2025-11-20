@@ -49,7 +49,11 @@ def api_ui_lock():
         payload = request.get_json(silent=True) or {}
         action = str(payload.get("action", "")).strip().lower()
         if action == "lock":
+            session.permanent = True  # Ensure lock persists across browser restarts
             session["ui_locked"] = True
+            session.pop(
+                "ui_has_been_unlocked", None
+            )  # Clear unlocked flag so it stays locked
             session.modified = True
             return jsonify({"status": "ok", "locked": True})
         if action == "unlock":
@@ -57,6 +61,10 @@ def api_ui_lock():
             if UI_LOCK_PASSWORD and pwd != UI_LOCK_PASSWORD:
                 return jsonify({"status": "error", "message": "Invalid password"}), 403
             session.pop("ui_locked", None)
+            session.permanent = True  # Keep unlocked state across browser restarts
+            session["ui_has_been_unlocked"] = (
+                True  # Track that user has unlocked in this session
+            )
             session.modified = True
             return jsonify({"status": "ok", "locked": False})
         return jsonify({"status": "error", "message": "Unknown action"}), 400
@@ -69,13 +77,24 @@ def api_ui_lock():
 def api_ui_lock_status():
     """Return the current UI lock status and configuration hints."""
     try:
+        # Check if UI lock is enabled
+        ui_lock_enabled = bool(UI_LOCK_PASSWORD or os.getenv("UI_LOCK_TIMEOUT"))
+
+        # Determine lock state:
+        # - If explicitly locked: locked=True
+        # - If never unlocked in this session AND UI_LOCK enabled: locked=True (default locked)
+        # - If unlocked before in this session: locked=False
+        explicitly_locked = bool(session.get("ui_locked"))
+        has_been_unlocked = bool(session.get("ui_has_been_unlocked"))
+
+        # Default to locked if UI_LOCK is enabled and user hasn't unlocked yet
+        locked = explicitly_locked or (ui_lock_enabled and not has_been_unlocked)
+
         return jsonify(
             {
-                "locked": bool(session.get("ui_locked")),
+                "locked": locked,
                 "timeout": UI_LOCK_TIMEOUT,
-                "enabled": (
-                    True if UI_LOCK_PASSWORD or os.getenv("UI_LOCK_TIMEOUT") else False
-                ),
+                "enabled": ui_lock_enabled,
             }
         )
     except Exception as exc:
