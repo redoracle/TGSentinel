@@ -42,8 +42,8 @@ flowchart TD
     C --> D[Heuristic Filter]
     D -->|passes threshold| E[Semantic Scorer]
     E -->|importance score| F[Notifier / Digest Generator]
-    F -->|alerts| G[User (Saved Messages / Private Channel)]
-    F --> H[(SQLite ]
+    F -->|alerts| G["User (Saved Messages / Private Channel)"]
+    F --> H[(SQLite)]
     F --> I[Prometheus Metrics]
 ```
 
@@ -194,22 +194,58 @@ For technical details, see [Engineering Guidelines: Session Management](docs/ENG
    Required `.env` variables:
 
    ```bash
-   TG_API_ID=12345678
-   TG_API_HASH=0123456789abcdef0123456789abcdef
+   TG_API_ID=changeme
+   TG_API_HASH=changeme
+   TG_PHONE=changeme
 
    # Webhook encryption key (required if using webhooks)
    # Generate with: python3 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
-   WEBHOOK_SECRET_KEY=your_generated_fernet_key_here
+   WEBHOOK_SECRET_KEY=changeme
 
    # Alert settings
    ALERT_MODE=both              # dm | channel | both
-   ALERT_CHANNEL=@your_bot      # Your notification channel/bot
+   ALERT_CHANNEL=changeme       # Your notification channel/bot
    HOURLY_DIGEST=true
    DAILY_DIGEST=true
 
    # Optional: customize other settings
    EMBEDDINGS_MODEL=all-MiniLM-L6-v2
    SIMILARITY_THRESHOLD=0.42
+
+   # Redis configuration
+   REDIS_HOST=redis
+   REDIS_PORT=6379
+   REDIS_STREAM=tgsentinel:messages
+   REDIS_GROUP=workers
+   REDIS_CONSUMER=worker-1
+
+   # Storage paths
+   DB_URI=sqlite:////app/data/sentinel.db
+   UI_DB_URI=sqlite:////app/data/ui.db
+   TG_SESSION_PATH=/app/data/tgsentinel.session
+
+   # Sentinel API
+   SENTINEL_API_PORT=8080
+   SENTINEL_API_BASE_URL=http://sentinel:8080/api
+
+   # UI security
+   UI_SECRET_KEY=2cecbcb9ed37253a7c608643ca1a898f19f173195561d11a4f10a6b5cf3380eb
+   UI_LOCK_PASSWORD=changeme
+   UI_LOCK_TIMEOUT=900
+
+   # Admin operations
+   ADMIN_TOKEN=changeme
+
+   # Anomaly detection
+   ANOMALY_VOLUME_THRESHOLD=4.0
+   ANOMALY_IMPORTANCE_THRESHOLD=2.5
+   ANOMALY_ALERT_RATE=0.6
+   ANOMALY_USE_STDDEV=true
+   ANOMALY_STDDEV_MULTIPLIER=2.5
+
+   # Runtime
+   PYTHONUNBUFFERED=1
+   LOG_LEVEL=INFO
    ```
 
 3. **Configure Channels** (optional)
@@ -298,24 +334,40 @@ make docker-logs       # Follow logs
 
 All settings can be overridden via environment variables:
 
-| Variable               | Default                           | Description                                               |
-| ---------------------- | --------------------------------- | --------------------------------------------------------- |
-| `TG_API_ID`            | _(required)_                      | Telegram API ID from my.telegram.org                      |
-| `TG_API_HASH`          | _(required)_                      | Telegram API hash                                         |
-| `WEBHOOK_SECRET_KEY`   | _(required for webhooks)_         | Fernet encryption key for webhook secrets (fail-fast)     |
-| `ALERT_MODE`           | `dm`                              | Alert destination: `dm`, `channel`, or `both`             |
-| `ALERT_CHANNEL`        | `""`                              | Target channel/bot username (e.g., `@kit_red_bot`)        |
-| `HOURLY_DIGEST`        | `true`                            | Enable hourly digest                                      |
-| `DAILY_DIGEST`         | `true`                            | Enable daily digest                                       |
-| `DIGEST_TOP_N`         | `10`                              | Number of top messages in digest                          |
-| `EMBEDDINGS_MODEL`     | `all-MiniLM-L6-v2`                | Sentence transformer model (empty to disable)             |
-| `SIMILARITY_THRESHOLD` | `0.42`                            | Semantic similarity threshold (0-1)                       |
-| `REDIS_HOST`           | `redis`                           | Redis hostname                                            |
-| `REDIS_PORT`           | `6379`                            | Redis port                                                |
-| `DB_URI`               | `sqlite:////app/data/sentinel.db` | Database connection string                                |
-| `UI_SKIP_AUTH`         | `""`                              | DEV ONLY: when set to `true`, UI gating is disabled       |
-| `UI_LOCK_PASSWORD`     | `""`                              | Optional UI lock password (empty disables password check) |
-| `UI_LOCK_TIMEOUT`      | `900`                             | Idle timeout in seconds before UI auto-locks              |
+| Variable                       | Default                                                            | Description                                               |
+| ------------------------------ | ------------------------------------------------------------------ | --------------------------------------------------------- |
+| `TG_API_ID`                    | `changeme` _(required)_                                            | Telegram API ID from my.telegram.org                      |
+| `TG_API_HASH`                  | `changeme` _(required)_                                            | Telegram API hash                                         |
+| `TG_PHONE`                     | `changeme` _(required)_                                            | Phone number for Telegram authentication                  |
+| `WEBHOOK_SECRET_KEY`           | `changeme` _(required for webhooks)_                               | Fernet encryption key for webhook secrets (fail-fast)     |
+| `ALERT_MODE`                   | `both`                                                             | Alert destination: `dm`, `channel`, or `both`             |
+| `ALERT_CHANNEL`                | `changeme`                                                         | Target channel/bot username (e.g., `@kit_red_bot`)        |
+| `HOURLY_DIGEST`                | `true`                                                             | Enable hourly digest                                      |
+| `DAILY_DIGEST`                 | `true`                                                             | Enable daily digest                                       |
+| `EMBEDDINGS_MODEL`             | `all-MiniLM-L6-v2`                                                 | Sentence transformer model (empty to disable)             |
+| `SIMILARITY_THRESHOLD`         | `0.42`                                                             | Semantic similarity threshold (0-1)                       |
+| `REDIS_HOST`                   | `redis`                                                            | Redis hostname                                            |
+| `REDIS_PORT`                   | `6379`                                                             | Redis port                                                |
+| `REDIS_STREAM`                 | `tgsentinel:messages`                                              | Redis stream key for processed messages                   |
+| `REDIS_GROUP`                  | `workers`                                                          | Redis consumer group name                                 |
+| `REDIS_CONSUMER`               | `worker-1`                                                         | Logical consumer ID                                       |
+| `DB_URI`                       | `sqlite:////app/data/sentinel.db`                                  | Sentinel worker database connection string                |
+| `UI_DB_URI`                    | `sqlite:////app/data/ui.db`                                        | UI service database connection string                     |
+| `TG_SESSION_PATH`              | `/app/data/tgsentinel.session`                                     | Absolute path to Telethon session file                    |
+| `SENTINEL_API_PORT`            | `8080`                                                             | Port where sentinel Flask API listens                     |
+| `SENTINEL_API_BASE_URL`        | `http://sentinel:8080/api`                                         | Base URL for UI to reach sentinel APIs                    |
+| `UI_SECRET_KEY`                | `2cecbcb9ed37253a7c608643ca1a898f19f173195561d11a4f10a6b5cf3380eb` | Flask secret key for sessions and CSRF                    |
+| `UI_SKIP_AUTH`                 | `""` (disabled)                                                    | DEV ONLY: when set to `true`, UI gating is disabled       |
+| `UI_LOCK_PASSWORD`             | `changeme`                                                         | Optional UI lock password (empty disables password check) |
+| `UI_LOCK_TIMEOUT`              | `900`                                                              | Idle timeout in seconds before UI auto-locks              |
+| `ADMIN_TOKEN`                  | `changeme`                                                         | Token protecting privileged sentinel admin endpoints      |
+| `ANOMALY_VOLUME_THRESHOLD`     | `4.0`                                                              | Multiplier for baseline message volume anomaly detection  |
+| `ANOMALY_IMPORTANCE_THRESHOLD` | `2.5`                                                              | Multiplier for message importance scores                  |
+| `ANOMALY_ALERT_RATE`           | `0.6`                                                              | Minimum alert rate (0-1) to trigger anomaly alerting      |
+| `ANOMALY_USE_STDDEV`           | `true`                                                             | Enable stddev-based anomaly mode                          |
+| `ANOMALY_STDDEV_MULTIPLIER`    | `2.5`                                                              | Stddev multiplier when ANOMALY_USE_STDDEV=true            |
+| `PYTHONUNBUFFERED`             | `1`                                                                | Force unbuffered stdout/stderr for Docker logs            |
+| `LOG_LEVEL`                    | `INFO`                                                             | Global log level for both services                        |
 
 ### YAML Configuration
 
@@ -323,36 +375,39 @@ All settings can be overridden via environment variables:
 
 ```yaml
 telegram:
-  api_id: 123456
-  api_hash: "your_api_hash_here"
+  api_id: changeme
+  api_hash: "changeme"
+  phone: "+1234567890"
   session: "tgsentinel.session"
 
 redis:
-  host: localhost
+  host: redis
   port: 6379
   stream: "tgsentinel:messages"
+  group: "workers"
+  consumer: "worker-1"
 
 database:
-  uri: "sqlite:///data/sentinel.db"
+  uri: "sqlite:////app/data/sentinel.db"
 
 alerts:
-  mode: "dm" # dm | channel | both
+  mode: "both" # dm | channel | both
+  target_channel: "changeme"
   digest_hourly: true
   digest_daily: true
 
 channels:
   - id: -100123456789
-    name: "Algorand Dev"
+    name: "My Channel"
     vip_senders: [12345, 67890]
-    keywords: ["release", "security", "CVE", "go-algorand"]
+    keywords: ["important", "urgent", "security"]
     reaction_threshold: 8
     reply_threshold: 10
     rate_limit_per_hour: 5
 
 interests:
-  - "algorand core development"
-  - "blockchain security advisories"
-  - "governance proposals"
+  - "topic I care about"
+  - "another important subject"
 ```
 
 ---
