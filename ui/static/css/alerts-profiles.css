@@ -187,9 +187,16 @@
 }
 
 /* Modern scrollbar properties (Firefox 64+, Chrome 121+) */
-.alert-profiles-list-container {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(102, 126, 234, 0.5) transparent;
+@supports (scrollbar-width: thin) {
+  .alert-profiles-list-container {
+    scrollbar-width: thin;
+  }
+}
+
+@supports (scrollbar-color: auto) {
+  .alert-profiles-list-container {
+    scrollbar-color: rgba(102, 126, 234, 0.5) transparent;
+  }
 }
 
 .alert-profiles-list-container::-webkit-scrollbar {
@@ -663,6 +670,12 @@
 /* Text reset - inherits parent color */
 .text-reset {
   color: inherit !important;
+}
+
+/* Similarity tester progress bar */
+.similarity-progress-bar {
+  width: 200px;
+  height: 30px;
 }
 
 

@@ -3002,7 +3002,11 @@ def create_api_app() -> Flask:
 
             # Import semantic module (only available in Sentinel container)
             try:
-                from tgsentinel.semantic import _model, score_text
+                from tgsentinel.semantic import _model, load_interests, score_text
+
+                logger.info(
+                    f"[API] Backtest: _model is {'loaded' if _model else 'None'}"
+                )
 
                 if _model is None:
                     return (
@@ -3014,6 +3018,26 @@ def create_api_app() -> Flask:
                         ),
                         500,
                     )
+
+                # Load profile's positive samples into the semantic scorer
+                positive_samples = profile.get("positive_samples", [])
+                if not positive_samples:
+                    return (
+                        jsonify(
+                            {
+                                "status": "error",
+                                "message": "Profile must have positive_samples for semantic scoring",
+                            }
+                        ),
+                        400,
+                    )
+
+                logger.info(
+                    f"[API] Backtest: loading {len(positive_samples)} positive samples into scorer"
+                )
+                load_interests(positive_samples)
+                logger.info(f"[API] Backtest: positive samples loaded")
+
             except ImportError as ie:
                 logger.error(f"[API] Semantic module import failed: {ie}")
                 return (
@@ -3066,14 +3090,28 @@ def create_api_app() -> Flask:
             matches = []
             threshold = profile.get("threshold", 0.42)
 
+            logger.info(
+                f"[API] Backtest: scoring {len(messages)} messages with threshold {threshold}"
+            )
+
             for msg in messages:
                 message_text = msg.get("message_text", "")
                 if not message_text:
+                    logger.debug(
+                        f"[API] Backtest: skipping message {msg.get('msg_id')} - no text"
+                    )
                     continue
 
                 # Score text with semantic model
                 score = score_text(message_text)
+                logger.debug(
+                    f"[API] Backtest: msg {msg.get('msg_id')} scored {score} (text: {message_text[:50]}...)"
+                )
+
                 if score is None:
+                    logger.debug(
+                        f"[API] Backtest: score is None for message {msg.get('msg_id')}"
+                    )
                     continue
 
                 if score >= threshold:
@@ -3129,6 +3167,195 @@ def create_api_app() -> Flask:
             logger.error(
                 f"[API] Error backtesting interest profile: {exc}", exc_info=True
             )
+            return (
+                jsonify({"status": "error", "message": str(exc)}),
+                500,
+            )
+
+    @app.route("/api/profiles/interest/test_similarity", methods=["POST"])
+    def test_similarity():
+        """Test semantic similarity of a text sample against an interest profile.
+
+        This endpoint uses the embeddings model loaded in the Sentinel container
+        to compute real-time similarity scores between a test message and the
+        positive training samples of an interest profile.
+
+        Request body:
+            {
+                "sample": "text to test",
+                "profile_id": "3000" or "profile_name"
+            }
+
+        Returns:
+            {
+                "status": "ok",
+                "score": 0.XXX,
+                "interpretation": "...",
+                "profile_id": "...",
+                "model": "all-MiniLM-L6-v2"
+            }
+        """
+        try:
+            if not request.is_json:
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "Content-Type must be application/json",
+                        }
+                    ),
+                    400,
+                )
+
+            data = request.get_json()
+            sample = data.get("sample", "").strip()
+            profile_id = data.get("profile_id", "").strip()
+
+            if not sample:
+                return (
+                    jsonify({"status": "error", "message": "Sample text is required"}),
+                    400,
+                )
+
+            if not profile_id:
+                return (
+                    jsonify({"status": "error", "message": "Profile ID is required"}),
+                    400,
+                )
+
+            # Import semantic module
+            try:
+                from tgsentinel.semantic import _model
+
+                if _model is None:
+                    return (
+                        jsonify(
+                            {
+                                "status": "error",
+                                "message": "Semantic model not loaded. Ensure EMBEDDINGS_MODEL environment variable is set.",
+                            }
+                        ),
+                        500,
+                    )
+            except ImportError as ie:
+                logger.error(f"[API] Semantic module import failed: {ie}")
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "Semantic module not available in Sentinel container",
+                        }
+                    ),
+                    500,
+                )
+
+            # Load profile to get positive samples
+            if not _config:
+                return (
+                    jsonify(
+                        {"status": "error", "message": "Configuration not initialized"}
+                    ),
+                    500,
+                )
+
+            # Try to find profile in loaded profiles
+            profile = None
+            profiles_dict = getattr(_config, "_global_profiles", {})
+
+            if profile_id in profiles_dict:
+                profile = profiles_dict[profile_id]
+            else:
+                # Try loading from YAML files directly
+                import os
+
+                config_dir = os.path.dirname(getattr(_config, "_config_path", "config"))
+                if not config_dir:
+                    config_dir = "config"
+
+                interest_path = os.path.join(config_dir, "profiles_interest.yml")
+                if os.path.exists(interest_path):
+                    import yaml
+
+                    with open(interest_path, "r", encoding="utf-8") as f:
+                        data = yaml.safe_load(f) or {}
+                        profiles_data = (
+                            data.get("profiles", data) if "profiles" in data else data
+                        )
+                        if profile_id in profiles_data:
+                            profile = profiles_data[profile_id]
+
+            if not profile:
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Profile '{profile_id}' not found",
+                        }
+                    ),
+                    404,
+                )
+
+            # Get positive samples from profile
+            positive_samples = profile.get("positive_samples", [])
+            if not positive_samples:
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "Profile has no positive training samples",
+                        }
+                    ),
+                    400,
+                )
+
+            # Compute embeddings for sample and positive samples
+            import numpy as np
+
+            sample_embedding = _model.encode([sample], normalize_embeddings=True)[0]
+            positive_embeddings = _model.encode(
+                positive_samples, normalize_embeddings=True
+            )
+
+            # Compute cosine similarity with each positive sample
+            similarities = [
+                float(np.dot(sample_embedding, pos_emb))
+                for pos_emb in positive_embeddings
+            ]
+
+            # Use max similarity as the score (most similar to any positive sample)
+            score = max(similarities) if similarities else 0.0
+            score = max(0.0, min(1.0, score))  # Clamp to [0, 1]
+
+            # Provide interpretation
+            if score < 0.30:
+                interpretation = "Very different from profile interests"
+            elif score < 0.50:
+                interpretation = "Somewhat related"
+            elif score < 0.70:
+                interpretation = "Moderately similar"
+            elif score < 0.85:
+                interpretation = "Highly similar"
+            else:
+                interpretation = "Very closely matches profile"
+
+            logger.info(
+                f"[API] Similarity test for profile '{profile_id}': score={score:.3f}"
+            )
+
+            return jsonify(
+                {
+                    "status": "ok",
+                    "score": round(score, 3),
+                    "interpretation": interpretation,
+                    "profile_id": profile_id,
+                    "model": "all-MiniLM-L6-v2",
+                    "num_positive_samples": len(positive_samples),
+                    "sample_length": len(sample),
+                }
+            )
+
+        except Exception as exc:
+            logger.error(f"[API] Error testing similarity: {exc}", exc_info=True)
             return (
                 jsonify({"status": "error", "message": str(exc)}),
                 500,

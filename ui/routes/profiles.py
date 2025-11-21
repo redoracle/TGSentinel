@@ -117,7 +117,10 @@ def train_profile():
 
 @profiles_bp.post("/test")
 def test_profile():
-    """Test semantic similarity for an interest profile."""
+    """Test semantic similarity for an interest profile.
+
+    Proxies the request to the Sentinel API which has the embeddings model loaded.
+    """
     if not request.is_json:
         return (
             jsonify(
@@ -130,11 +133,60 @@ def test_profile():
     if payload is None:
         return jsonify({"status": "error", "message": "Invalid JSON payload"}), 400
 
-    sample = payload.get("sample", "")
-    interest = payload.get("interest", "")
-    score = round(0.42 + len(sample) % 37 / 100, 2)
-    logger.debug("Similarity test for '%s' -> %.2f", interest, score)
-    return jsonify({"score": score})
+    sample = payload.get("sample", "").strip()
+    interest = payload.get("interest", "").strip()
+
+    if not sample:
+        return jsonify({"status": "error", "message": "Sample text is required"}), 400
+
+    if not interest:
+        return (
+            jsonify({"status": "error", "message": "Interest/profile is required"}),
+            400,
+        )
+
+    try:
+        # Get Sentinel API base URL
+        sentinel_url = os.getenv("SENTINEL_API_BASE_URL", "http://sentinel:8080/api")
+
+        # Forward request to Sentinel API
+        response = requests.post(
+            f"{sentinel_url}/profiles/interest/test_similarity",
+            json={"sample": sample, "profile_id": interest},
+            timeout=10,
+        )
+
+        if response.status_code != 200:
+            logger.error(
+                f"Sentinel API returned {response.status_code}: {response.text}"
+            )
+            return (
+                jsonify({"status": "error", "message": "Failed to test similarity"}),
+                response.status_code,
+            )
+
+        result = response.json()
+
+        # Return simplified response for backward compatibility
+        return jsonify(
+            {
+                "score": result.get("score", 0.0),
+                "interpretation": result.get("interpretation", ""),
+                "model": result.get("model", "all-MiniLM-L6-v2"),
+            }
+        )
+
+    except requests.exceptions.RequestException as exc:
+        logger.error(f"Error connecting to Sentinel API: {exc}")
+        return (
+            jsonify(
+                {"status": "error", "message": "Could not connect to Sentinel service"}
+            ),
+            500,
+        )
+    except Exception as exc:
+        logger.error(f"Error testing similarity: {exc}", exc_info=True)
+        return jsonify({"status": "error", "message": str(exc)}), 500
 
 
 @profiles_bp.post("/toggle")
@@ -579,6 +631,8 @@ def backtest_interest_profile():
     if not payload:
         return jsonify({"status": "error", "message": "Invalid JSON payload"}), 400
 
+    # Accept either profile_id or name (prefer profile_id)
+    profile_id = payload.get("profile_id")
     profile_name = payload.get("name", "").strip()
 
     # Safely parse and validate hours_back
@@ -611,8 +665,11 @@ def backtest_interest_profile():
             400,
         )
 
-    if not profile_name:
-        return jsonify({"status": "error", "message": "Profile name required"}), 400
+    if not profile_id and not profile_name:
+        return (
+            jsonify({"status": "error", "message": "Profile ID or name required"}),
+            400,
+        )
 
     # Validate hours_back bounds (prevent resource exhaustion)
     if hours_back < 0 or hours_back > 168:
@@ -639,12 +696,78 @@ def backtest_interest_profile():
         )
 
     try:
-        # Get profile
-        profile = (
-            _profile_service.get_profile(profile_name) if _profile_service else None
-        )
-        if not profile:
-            return jsonify({"status": "error", "message": "Profile not found"}), 404
+        # Get profile - use profile_id if available, otherwise search by name
+        sentinel_url = os.getenv("SENTINEL_API_BASE_URL", "http://sentinel:8080/api")
+
+        if profile_id:
+            # Fetch by ID from Sentinel API
+            profile_url = f"{sentinel_url}/profiles/interest/{profile_id}"
+            resp = requests.get(profile_url, timeout=10)
+            if resp.status_code == 404:
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Profile {profile_id} not found",
+                        }
+                    ),
+                    404,
+                )
+            resp.raise_for_status()
+            data = resp.json()
+            if data.get("status") != "ok":
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Failed to fetch profile: {data.get('message')}",
+                        }
+                    ),
+                    500,
+                )
+            profile = data.get("data")
+            if not profile:
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Profile {profile_id} not found",
+                        }
+                    ),
+                    404,
+                )
+            # Use profile name from the fetched profile
+            profile_name = profile.get("name", str(profile_id))
+        else:
+            # Fetch by name: get all profiles and find matching name
+            profiles_url = f"{sentinel_url}/profiles/interest"
+            resp = requests.get(profiles_url, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            if data.get("status") != "ok":
+                return (
+                    jsonify({"status": "error", "message": "Failed to fetch profiles"}),
+                    500,
+                )
+
+            all_profiles = data.get("data", {})
+            profile = None
+            for pid, pdata in all_profiles.items():
+                if pdata.get("name") == profile_name:
+                    profile = pdata
+                    profile_id = pid
+                    break
+
+            if not profile:
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Profile '{profile_name}' not found",
+                        }
+                    ),
+                    404,
+                )
 
         # Fetch historical messages
         cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours_back)).strftime(
@@ -1229,9 +1352,8 @@ def list_interest_profiles():
         profiles = _profile_service.load_profiles()
 
         # Convert to list format for UI
-        profiles_list = [
-            {**profile, "id": profile_id} for profile_id, profile in profiles.items()
-        ]
+        # Profiles from Sentinel API already have 'id' field, so we don't need to add it
+        profiles_list = [profile for profile_id, profile in profiles.items()]
 
         return jsonify({"status": "ok", "profiles": profiles_list})
 

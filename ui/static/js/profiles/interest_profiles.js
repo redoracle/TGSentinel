@@ -49,9 +49,10 @@
     
     /**
      * Load all interest profiles from the server
+     * @param {number} retryCount - Internal retry counter (default: 0)
      * @returns {Promise<void>}
      */
-    async function loadInterestProfiles() {
+    async function loadInterestProfiles(retryCount = 0) {
         try {
             const response = await fetch(interestProfileEndpoints.list);
             if (!response.ok) throw new Error("Failed to load interest profiles");
@@ -66,11 +67,46 @@
                 countEl.textContent = allInterestProfiles.length;
             }
             
+            // Update profile selector for similarity tester
+            updateProfileSelector();
+            
             renderInterestProfiles(filteredInterestProfiles);
         } catch (error) {
             console.error("Failed to load interest profiles:", error);
-            window.SharedUtils.showToast("Failed to load interest profiles", "error");
+            
+            // Retry up to 3 times with increasing delays (for Sentinel startup race condition)
+            if (retryCount < 3) {
+                const delay = (retryCount + 1) * 2000; // 2s, 4s, 6s
+                console.log(`Retrying in ${delay}ms... (attempt ${retryCount + 1}/3)`);
+                setTimeout(() => loadInterestProfiles(retryCount + 1), delay);
+            } else {
+                window.SharedUtils.showToast("Failed to load interest profiles", "error");
+            }
         }
+    }
+    
+    /**
+     * Update the profile selector dropdown in the similarity tester
+     */
+    function updateProfileSelector() {
+        const selectEl = document.getElementById("profile-select");
+        if (!selectEl) return;
+        
+        // Clear existing options except the first (placeholder)
+        selectEl.innerHTML = '<option value="">Choose a profile...</option>';
+        
+        // Add option for each enabled profile
+        allInterestProfiles.forEach(profile => {
+            const isEnabled = profile.enabled !== false;
+            const option = document.createElement("option");
+            option.value = profile.id || profile.name;
+            option.textContent = profile.name + (isEnabled ? "" : " (disabled)");
+            if (!isEnabled) {
+                option.disabled = true;
+                option.classList.add("text-muted");
+            }
+            selectEl.appendChild(option);
+        });
     }
     
     /**
@@ -648,7 +684,7 @@
      * @returns {Promise<void>}
      */
     async function runSimilarityTest() {
-        const sample = document.getElementById("test-phrase").value.trim();
+        const sample = document.getElementById("test-phrase")?.value.trim();
         if (!sample) {
             window.SharedUtils.showToast("Enter a phrase to test", "warning");
             return;
@@ -666,6 +702,20 @@
             window.SharedUtils.showToast("Select an interest profile", "warning");
             return;
         }
+
+        // Show loading state
+        const btnTest = document.getElementById("btn-run-test");
+        const resultContainer = document.getElementById("similarity-result-container");
+        const scoreValueEl = document.getElementById("similarity-score-value");
+        const scoreBarEl = document.getElementById("similarity-score-bar");
+        
+        if (btnTest) {
+            btnTest.disabled = true;
+            btnTest.innerHTML = `
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Testing...
+            `;
+        }
         
         try {
             const response = await fetch(interestProfileEndpoints.test, {
@@ -673,53 +723,98 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ sample, interest }),
             });
+            
             if (!response.ok) {
-                throw new Error("Test failed");
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.message || "Test failed");
             }
+            
             const payload = await response.json();
+            
             if (typeof payload !== "object" || payload === null) {
                 console.warn("Unexpected similarity payload", payload);
                 throw new Error("Malformed response");
             }
+            
             const score = Number(payload.score);
             if (!Number.isFinite(score)) {
                 console.warn("Similarity score missing or invalid", payload);
                 throw new Error("Invalid score");
             }
             
-            if (score < 0 || score > 1) {
-                console.warn(
-                    `Similarity score out of range [0,1]: ${score} for sample "${sample}" against interest "${interest}"`
-                );
+            // Clamp score to [0, 1] range
+            const clampedScore = Math.max(0, Math.min(score, 1));
+            const formatted = clampedScore.toFixed(3);
+            const percentage = Math.round(clampedScore * 100);
+            
+            // Update score display
+            if (scoreValueEl) {
+                scoreValueEl.textContent = formatted;
             }
             
-            const clamped = Math.max(0, Math.min(score, 1));
-            const formatted = clamped.toFixed(2);
-            const resultEl = document.getElementById("test-result");
-            if (resultEl) {
-                resultEl.textContent = `Score: ${formatted}`;
+            // Update progress bar
+            if (scoreBarEl) {
+                scoreBarEl.style.width = `${percentage}%`;
+                scoreBarEl.setAttribute("aria-valuenow", percentage.toString());
+                
+                // Color code the progress bar based on score
+                scoreBarEl.className = "progress-bar";
+                if (clampedScore < 0.30) {
+                    scoreBarEl.classList.add("bg-secondary");
+                } else if (clampedScore < 0.50) {
+                    scoreBarEl.classList.add("bg-info");
+                } else if (clampedScore < 0.70) {
+                    scoreBarEl.classList.add("bg-primary");
+                } else if (clampedScore < 0.85) {
+                    scoreBarEl.classList.add("bg-success");
+                } else {
+                    scoreBarEl.classList.add("bg-success");
+                }
             }
             
-            // Also append to log if available
-            const log = document.getElementById("profile-log");
-            if (log) {
-                const entry = document.createElement("div");
-                entry.className = "log-entry";
-                const time = document.createElement("span");
-                time.className = "log-time";
-                time.textContent = new Date().toLocaleTimeString();
-                const msg = document.createElement("span");
-                msg.className = "log-message";
-                msg.textContent = `Similarity test for "${sample}" → ${formatted}`;
-                entry.appendChild(time);
-                entry.appendChild(document.createTextNode(" "));
-                entry.appendChild(msg);
-                log.appendChild(entry);
-                log.scrollTop = log.scrollHeight;
+            // Show result container
+            if (resultContainer) {
+                resultContainer.classList.remove("d-none");
+                resultContainer.classList.remove("alert-info");
+                
+                // Color code the alert based on score
+                if (clampedScore < 0.30) {
+                    resultContainer.classList.add("alert-secondary");
+                } else if (clampedScore < 0.70) {
+                    resultContainer.classList.add("alert-info");
+                } else {
+                    resultContainer.classList.add("alert-success");
+                }
             }
+            
+            // Show interpretation if provided
+            const interpretation = payload.interpretation || "";
+            if (interpretation) {
+                console.log(`Interpretation: ${interpretation}`);
+            }
+            
+            window.SharedUtils.showToast(
+                `Similarity score: ${formatted} - ${interpretation}`,
+                clampedScore >= 0.50 ? "success" : "info"
+            );
+            
         } catch (error) {
-            console.error(error);
-            window.SharedUtils.showToast("Unable to compute similarity", "error");
+            console.error("Failed to run similarity test:", error);
+            window.SharedUtils.showToast(
+                error.message || "Failed to test similarity",
+                "error"
+            );
+        } finally {
+            // Restore button state
+            if (btnTest) {
+                btnTest.disabled = false;
+                btnTest.innerHTML = `
+                    <svg width="16" height="16" fill="currentColor" class="bi bi-lightning-charge" viewBox="0 0 16 16">
+                        <path d="M11.251.068a.5.5 0 0 1 .227.58L9.677 6.5H13a.5.5 0 0 1 .364.843l-8 8.5a.5.5 0 0 1-.842-.49L6.323 9.5H3a.5.5 0 0 1-.364-.843l8-8.5a.5.5 0 0 1 .615-.09z"/>
+                    </svg>
+                    Test Similarity
+                `;
+            }
         }
     }
     
