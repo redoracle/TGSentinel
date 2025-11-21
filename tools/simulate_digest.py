@@ -2,7 +2,6 @@
 """Test script to trigger digest delivery immediately."""
 
 import asyncio
-import os
 import sys
 
 # Add src to path

@@ -178,14 +178,15 @@ async def main() -> int:
 
         # Read latest messages (most recent first), then process in chronological order
         entries = r.xrevrange(stream_name, "+", "-", count=args.limit)
+
         if entries:
-            for _id, fields in reversed(entries):
+            for _id, fields in reversed(entries):  # type: ignore[arg-type]
                 try:
                     payload = json.loads(fields.get("json", "{}"))
                 except Exception:
                     continue
                 _score_and_store(cfg, payload, engine)
-        log.info("Processed %d messages from stream '%s'", len(entries), stream_name)
+        log.info("Processed %d messages from stream '%s'", len(entries), stream_name)  # type: ignore[arg-type]
     else:
         log.info("Skipping scoring step (using existing DB state)")
 

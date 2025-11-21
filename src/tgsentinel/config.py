@@ -464,18 +464,46 @@ def _load_global_profiles(profiles_path: str) -> Dict[str, ProfileDefinition]:
                     # Create a copy to avoid modifying the original
                     data_copy = dict(profile_data)
 
+                    # Define fields that are valid for ProfileDefinition
+                    valid_fields = {
+                        "id",
+                        "name",
+                        "keywords",
+                        "action_keywords",
+                        "decision_keywords",
+                        "urgency_keywords",
+                        "importance_keywords",
+                        "release_keywords",
+                        "security_keywords",
+                        "risk_keywords",
+                        "opportunity_keywords",
+                        "detect_codes",
+                        "detect_documents",
+                        "prioritize_pinned",
+                        "prioritize_admin",
+                        "detect_polls",
+                        "scoring_weights",
+                        "digest",
+                    }
+
                     # Remove fields not part of ProfileDefinition
-                    if "overrides" in data_copy:
-                        data_copy.pop("overrides")
+                    # This filters out UI-specific fields like 'channels', 'overrides', timestamps, etc.
+                    filtered_data = {
+                        k: v for k, v in data_copy.items() if k in valid_fields
+                    }
 
                     # Convert digest config if present
-                    if "digest" in data_copy and isinstance(data_copy["digest"], dict):
-                        data_copy["digest"] = ProfileDigestConfig(**data_copy["digest"])
+                    if "digest" in filtered_data and isinstance(
+                        filtered_data["digest"], dict
+                    ):
+                        filtered_data["digest"] = ProfileDigestConfig(
+                            **filtered_data["digest"]
+                        )
 
                     # Ensure id field matches key
-                    data_copy["id"] = profile_id
+                    filtered_data["id"] = profile_id
 
-                    profile = ProfileDefinition(**data_copy)
+                    profile = ProfileDefinition(**filtered_data)
                     file_profiles[profile_id] = profile
                 except Exception as e:
                     log.error(

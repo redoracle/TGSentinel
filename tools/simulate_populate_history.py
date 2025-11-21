@@ -346,7 +346,7 @@ async def main():
 
             # Show stream info
             stream_len = r.xlen(args.stream)
-            log.info(f"\nRedis stream info:")
+            log.info("\nRedis stream info:")
             log.info(f"  Stream: {args.stream}")
             log.info(f"  Total entries: {stream_len}")
             log.info(f"  Added this run: {added}")

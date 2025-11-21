@@ -640,3 +640,29 @@
   }
 }
 
+/* ============================================================================
+   Utility Classes for Code Quality Fixes
+   ========================================================================= */
+
+/* Entity selector container - replaces inline min-height */
+.entity-selector-container {
+  min-height: 80px;
+}
+
+/* Modal entity list - replaces inline max-height and overflow */
+.modal-entity-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* Small font size utility - replaces inline font-size: 0.875rem */
+.fs-7 {
+  font-size: 0.875rem !important;
+}
+
+/* Text reset - inherits parent color */
+.text-reset {
+  color: inherit !important;
+}
+
+
