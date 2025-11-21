@@ -1,0 +1,805 @@
+/**
+ * Interest Profiles Module
+ * 
+ * Manages Interest (semantic-based) Profiles CRUD operations and UI rendering.
+ * 
+ * Public API:
+ *   - init(endpoints): Initialize with API endpoints
+ *   - loadInterestProfiles(): Fetch and render all profiles
+ *   - selectInterestProfile(id): Load profile into form
+ *   - saveInterestProfile(event): Create/update profile
+ *   - deleteInterestProfile(): Delete current profile
+ *   - toggleInterestProfile(id, event): Enable/disable profile
+ *   - backtestInterestProfile(): Run backtest for current profile
+ *   - resetInterestProfileForm(): Clear form for new profile
+ *   - newInterestProfile(): Reset form and show toast
+ *   - filterInterestProfiles(searchTerm): Filter profiles by name/description
+ *   - exportInterestProfile(id): Export single profile as JSON
+ *   - duplicateInterestProfile(id): Clone existing profile
+ *   - exportAllInterestProfiles(): Export all profiles as JSON
+ *   - bulkToggleInterestProfiles(enabled): Enable/disable all profiles
+ *   - runSimilarityTest(): Test phrase against selected profile
+ * 
+ * Dependencies:
+ *   - window.SharedUtils (escapeHtml, formatDate, showToast, parseCSV)
+ *   - window.EntitySelector (getSelectedEntityIds, setSelectedEntityIds)
+ *   - window.DigestEditor (extractDigestConfigFromForm, populateDigestConfigInForm)
+ *   - Bootstrap 5 (modal, form controls)
+ */
+
+(function() {
+    'use strict';
+    
+    // ============= MODULE STATE =============
+    
+    let currentInterestProfile = null;
+    let allInterestProfiles = [];
+    let filteredInterestProfiles = [];
+    let interestProfileEndpoints = {};
+    
+    // ============= PUBLIC API =============
+    
+    /**
+     * Initialize the Interest Profiles module with API endpoints
+     * @param {Object} endpoints - Object containing API endpoint URLs
+     */
+    function init(endpoints) {
+        interestProfileEndpoints = endpoints;
+    }
+    
+    /**
+     * Load all interest profiles from the server
+     * @returns {Promise<void>}
+     */
+    async function loadInterestProfiles() {
+        try {
+            const response = await fetch(interestProfileEndpoints.list);
+            if (!response.ok) throw new Error("Failed to load interest profiles");
+            const data = await response.json();
+            
+            allInterestProfiles = data.profiles || [];
+            filteredInterestProfiles = [...allInterestProfiles];
+            
+            // Update profile count
+            const countEl = document.getElementById("interest-profiles-count");
+            if (countEl) {
+                countEl.textContent = allInterestProfiles.length;
+            }
+            
+            renderInterestProfiles(filteredInterestProfiles);
+        } catch (error) {
+            console.error("Failed to load interest profiles:", error);
+            window.SharedUtils.showToast("Failed to load interest profiles", "error");
+        }
+    }
+    
+    /**
+     * Render the list of interest profiles
+     * @param {Array} profiles - Array of profile objects to render
+     */
+    function renderInterestProfiles(profiles) {
+        const listEl = document.getElementById("interest-profiles-list");
+        if (!listEl) return;
+        
+        if (!profiles || profiles.length === 0) {
+            listEl.innerHTML = `
+                <div class="alert-profiles-empty">
+                    <svg fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2Z"/>
+                    </svg>
+                    <p class="mb-2">No interest profiles yet</p>
+                    <small>Create your first profile to get started</small>
+                </div>
+            `;
+            return;
+        }
+        
+        listEl.innerHTML = profiles.map(profile => {
+            const isEnabled = profile.enabled !== false;
+            const scheduleCount = (profile.digest_schedules || []).length;
+            const keywordCount = (profile.keywords || []).length;
+            const entityCount = (profile.channels || []).length + (profile.users || []).length;
+            const sampleCount = (profile.positive_samples || []).length + (profile.negative_samples || []).length;
+            
+            return `
+                <button type="button" class="list-group-item list-group-item-action alert-profile-item ${currentInterestProfile && currentInterestProfile.id === profile.id ? 'active' : ''}" 
+                        data-profile-id="${profile.id}"
+                        onclick="window.InterestProfiles.selectInterestProfile(${profile.id})">
+                    <div class="d-flex w-100 justify-content-between align-items-start">
+                        <div class="flex-grow-1 min-w-0 me-2">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <h6 class="mb-0 text-truncate">${window.SharedUtils.escapeHtml(profile.name)}</h6>
+                                <span class="badge ${isEnabled ? 'bg-success' : 'bg-secondary'} badge-sm">${isEnabled ? 'ON' : 'OFF'}</span>
+                            </div>
+                            ${profile.description ? `<p class="mb-1 small text-muted text-truncate">${window.SharedUtils.escapeHtml(profile.description)}</p>` : ''}
+                            <div class="d-flex gap-2 flex-wrap">
+                                <small class="text-muted">ID: ${profile.id}</small>
+                                ${sampleCount > 0 ? `<small class="text-muted">📝 ${sampleCount} samples</small>` : ''}
+                                ${keywordCount > 0 ? `<small class="text-muted">🔑 ${keywordCount}</small>` : ''}
+                                ${entityCount > 0 ? `<small class="text-muted">👥 ${entityCount}</small>` : ''}
+                                ${scheduleCount > 0 ? `<small class="text-muted">📅 ${scheduleCount}</small>` : ''}
+                                ${profile.threshold ? `<small class="text-muted">θ=${profile.threshold.toFixed(2)}</small>` : ''}
+                            </div>
+                        </div>
+                        <div class="d-flex flex-column align-items-end gap-2">
+                            <div class="form-check form-switch mb-0" onclick="event.stopPropagation()">
+                                <input class="form-check-input" type="checkbox" 
+                                       ${isEnabled ? 'checked' : ''}
+                                       onchange="window.InterestProfiles.toggleInterestProfile(${profile.id}, event)"
+                                       title="Enable/Disable">
+                            </div>
+                            <div class="btn-group btn-group-sm" role="group" onclick="event.stopPropagation()">
+                                <button type="button" class="btn btn-outline-secondary" 
+                                        onclick="window.InterestProfiles.exportInterestProfile(${profile.id})"
+                                        title="Export as JSON">
+                                    <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                                        <path d="M8.5 6.5a.5.5 0 0 0-1 0v3.793L6.354 9.146a.5.5 0 1 0-.708.708l2 2a.5.5 0 0 0 .708 0l2-2a.5.5 0 0 0-.708-.708L8.5 10.293V6.5z"/>
+                                        <path d="M14 14V4.5L9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2zM9.5 3A1.5 1.5 0 0 0 11 4.5h2V14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h5.5v2z"/>
+                                    </svg>
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" 
+                                        onclick="window.InterestProfiles.duplicateInterestProfile(${profile.id})"
+                                        title="Duplicate">
+                                    <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                                        <path d="M4 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V2zm2-1a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H6zM2 5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-1h1v1a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h1v1H2z"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </button>
+            `;
+        }).join('');
+    }
+    
+    /**
+     * Select and load a specific interest profile into the form
+     * @param {number} profileId - ID of profile to load
+     * @returns {Promise<void>}
+     */
+    async function selectInterestProfile(profileId) {
+        try {
+            const response = await fetch(`${interestProfileEndpoints.get}/${profileId}`);
+            if (!response.ok) throw new Error("Failed to load profile");
+            
+            const data = await response.json();
+            const profile = data.profile;
+            
+            currentInterestProfile = profile;
+            
+            // Update form fields
+            document.getElementById("interest-profile-id").value = profile.id || "";
+            document.getElementById("interest-profile-id-display").value = profile.id || "Auto-generated";
+            document.getElementById("topic-name").value = profile.name || "";
+            document.getElementById("topic-description").value = profile.description || "";
+            
+            // Samples
+            document.getElementById("positive-samples").value = (profile.positive_samples || []).join("\n");
+            document.getElementById("negative-samples").value = (profile.negative_samples || []).join("\n");
+            
+            // Advanced fields
+            document.getElementById("similarity-threshold").value = profile.threshold || 0.42;
+            document.getElementById("profile-weight").value = profile.weight || 1.0;
+            document.getElementById("profile-enabled").value = profile.enabled !== false ? "true" : "false";
+            document.getElementById("profile-priority").value = profile.priority || "normal";
+            document.getElementById("profile-keywords").value = (profile.keywords || []).join(", ");
+            
+            // Set channel and user selections using the helper function
+            if (window.EntitySelector) {
+                window.EntitySelector.setSelectedEntityIds('interest', profile.channels || [], profile.users || []);
+            }
+            
+            document.getElementById("profile-tags").value = (profile.tags || []).join(", ");
+            document.getElementById("profile-notify-always").checked = profile.notify_always || false;
+            document.getElementById("profile-include-in-digest").checked = profile.include_digest !== false;
+            
+            // Digest schedules
+            populateInterestDigestSchedules(profile.digest_schedules || []);
+            document.getElementById("interest-digest-mode").value = profile.digest_mode || "dm";
+            document.getElementById("interest-digest-target-channel").value = profile.digest_target_channel || "";
+            
+            // Update UI state
+            const deleteBtn = document.getElementById("btn-delete-interest-profile");
+            if (deleteBtn) {
+                deleteBtn.classList.remove("d-none");
+            }
+            
+            // Highlight in list
+            renderInterestProfiles(filteredInterestProfiles);
+            
+            window.SharedUtils.showToast(`Loaded: ${profile.name}`, "info");
+        } catch (error) {
+            console.error("Failed to select profile:", error);
+            window.SharedUtils.showToast("Failed to load profile", "error");
+        }
+    }
+    
+    /**
+     * Save the current interest profile (create or update)
+     * @param {Event} event - Form submission event
+     * @returns {Promise<void>}
+     */
+    async function saveInterestProfile(event) {
+        event.preventDefault();
+        
+        const profileId = document.getElementById("interest-profile-id").value;
+        const name = document.getElementById("topic-name").value.trim();
+        
+        if (!name) {
+            window.SharedUtils.showToast("Profile name is required", "warning");
+            return;
+        }
+        
+        // Collect all form data
+        const profileData = {
+            id: profileId ? parseInt(profileId) : undefined,
+            name: name,
+            description: document.getElementById("topic-description").value.trim(),
+            enabled: document.getElementById("profile-enabled").value === "true",
+            positive_samples: document.getElementById("positive-samples").value
+                .split("\n").map(s => s.trim()).filter(s => s),
+            negative_samples: document.getElementById("negative-samples").value
+                .split("\n").map(s => s.trim()).filter(s => s),
+            threshold: parseFloat(document.getElementById("similarity-threshold").value) || 0.42,
+            weight: parseFloat(document.getElementById("profile-weight").value) || 1.0,
+            priority: document.getElementById("profile-priority").value,
+            keywords: document.getElementById("profile-keywords").value
+                .split(",").map(s => s.trim()).filter(s => s),
+            channels: window.EntitySelector ? window.EntitySelector.getSelectedEntityIds('interest', 'channels') : [],
+            users: window.EntitySelector ? window.EntitySelector.getSelectedEntityIds('interest', 'users') : [],
+            tags: document.getElementById("profile-tags").value
+                .split(",").map(s => s.trim()).filter(s => s),
+            notify_always: document.getElementById("profile-notify-always").checked,
+            include_digest: document.getElementById("profile-include-in-digest").checked,
+            digest_schedules: extractInterestDigestSchedules(),
+            digest_mode: document.getElementById("interest-digest-mode").value,
+            digest_target_channel: document.getElementById("interest-digest-target-channel").value.trim()
+        };
+        
+        try {
+            const response = await fetch(interestProfileEndpoints.upsert, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(profileData)
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || "Failed to save profile");
+            }
+            
+            const result = await response.json();
+            window.SharedUtils.showToast(profileId ? "Profile updated" : "Profile created", "success");
+            
+            // Reload list and select the profile
+            await loadInterestProfiles();
+            if (result.profile_id) {
+                await selectInterestProfile(result.profile_id);
+            }
+        } catch (error) {
+            console.error("Failed to save profile:", error);
+            window.SharedUtils.showToast(error.message || "Failed to save profile", "error");
+        }
+    }
+    
+    /**
+     * Delete the currently selected interest profile
+     * @returns {Promise<void>}
+     */
+    async function deleteInterestProfile() {
+        const profileId = document.getElementById("interest-profile-id").value;
+        const profileName = document.getElementById("topic-name").value;
+        
+        if (!profileId) {
+            window.SharedUtils.showToast("No profile selected", "warning");
+            return;
+        }
+        
+        if (!confirm(`Delete profile "${profileName}"?`)) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`${interestProfileEndpoints.delete}/${profileId}`, {
+                method: "DELETE"
+            });
+            
+            if (!response.ok) throw new Error("Failed to delete profile");
+            
+            window.SharedUtils.showToast("Profile deleted", "success");
+            resetInterestProfileForm();
+            await loadInterestProfiles();
+        } catch (error) {
+            console.error("Failed to delete profile:", error);
+            window.SharedUtils.showToast("Failed to delete profile", "error");
+        }
+    }
+    
+    /**
+     * Toggle enable/disable state of a profile
+     * @param {number} profileId - ID of profile to toggle
+     * @param {Event} event - Change event from checkbox
+     * @returns {Promise<void>}
+     */
+    async function toggleInterestProfile(profileId, event) {
+        event.stopPropagation();
+        
+        const checkbox = event.target;
+        const newEnabledState = checkbox.checked;
+        
+        try {
+            const response = await fetch(`${interestProfileEndpoints.toggle}/${profileId}/toggle`, {
+                method: "POST"
+            });
+            
+            if (!response.ok) throw new Error("Failed to toggle profile");
+            
+            const data = await response.json();
+            window.SharedUtils.showToast(`Profile ${data.enabled ? 'enabled' : 'disabled'}`, "success");
+            
+            // Reload list
+            await loadInterestProfiles();
+        } catch (error) {
+            console.error("Failed to toggle profile:", error);
+            window.SharedUtils.showToast("Failed to toggle profile", "error");
+            // Revert checkbox
+            checkbox.checked = !newEnabledState;
+        }
+    }
+    
+    /**
+     * Run backtest for the current interest profile
+     * @returns {Promise<void>}
+     */
+    async function backtestInterestProfile() {
+        const profileId = document.getElementById("interest-profile-id").value;
+        const profileName = document.getElementById("topic-name").value;
+        
+        if (!profileId) {
+            window.SharedUtils.showToast("Please select or save a profile first", "warning");
+            return;
+        }
+        
+        const modalEl = document.getElementById('backtestModal');
+        const modal = new bootstrap.Modal(modalEl);
+        
+        // Apply glass backdrop effect
+        window.SharedUtils.applyGlassBackdrop(modalEl);
+        
+        modal.show();
+        
+        document.getElementById('backtest-loading').classList.remove('d-none');
+        document.getElementById('backtest-results').classList.add('d-none');
+        document.getElementById('backtest-error').classList.add('d-none');
+        
+        try {
+            const response = await fetch(interestProfileEndpoints.backtest, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: profileName,
+                    hours_back: 24,
+                    max_messages: 100
+                })
+            });
+            
+            if (!response.ok) throw new Error("Backtest failed");
+            const data = await response.json();
+            
+            // Display results
+            document.getElementById('backtest-loading').classList.add('d-none');
+            document.getElementById('backtest-results').classList.remove('d-none');
+            
+            // Statistics
+            document.getElementById('stat-total-messages').textContent = data.stats.total_messages || 0;
+            document.getElementById('stat-matched').textContent = data.stats.matched_messages || 0;
+            document.getElementById('stat-match-rate').textContent = (data.stats.match_rate || 0).toFixed(1) + '%';
+            document.getElementById('stat-avg-score').textContent = (data.stats.avg_score || data.stats.average_score || 0).toFixed(2);
+            
+            // Recommendations
+            const recsList = document.getElementById('recommendations-list');
+            if (data.recommendations && data.recommendations.length > 0) {
+                recsList.innerHTML = data.recommendations.map(r => `<li>${window.SharedUtils.escapeHtml(r)}</li>`).join('');
+            } else {
+                recsList.innerHTML = '<li>Profile is working well!</li>';
+            }
+            
+            // Matches table
+            const tbody = document.getElementById('backtest-matches-tbody');
+            if (data.matches && data.matches.length > 0) {
+                tbody.innerHTML = data.matches.map(match => `
+                    <tr>
+                        <td>${window.SharedUtils.escapeHtml(match.chat_title || 'Unknown')}</td>
+                        <td>${match.message_id}</td>
+                        <td><span class="badge bg-primary">${match.score.toFixed(2)}</span></td>
+                        <td><small>${window.SharedUtils.escapeHtml((match.triggers || []).join(', '))}</small></td>
+                        <td>${match.would_alert ? '<span class="badge bg-success">Yes</span>' : '<span class="badge bg-secondary">No</span>'}</td>
+                        <td><small>${window.SharedUtils.escapeHtml((match.text_preview || '').substring(0, 100))}</small></td>
+                    </tr>
+                `).join('');
+            } else {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No matches found</td></tr>';
+            }
+        } catch (error) {
+            console.error("Backtest failed:", error);
+            document.getElementById('backtest-loading').classList.add('d-none');
+            document.getElementById('backtest-error').textContent = `Backtest failed: ${error.message}`;
+            document.getElementById('backtest-error').classList.remove('d-none');
+        }
+    }
+    
+    /**
+     * Reset the interest profile form to create a new profile
+     */
+    function resetInterestProfileForm() {
+        currentInterestProfile = null;
+        document.getElementById("interest-profile-id").value = "";
+        document.getElementById("interest-profile-id-display").value = "Auto-generated";
+        document.getElementById("topic-name").value = "";
+        document.getElementById("topic-description").value = "";
+        document.getElementById("positive-samples").value = "";
+        document.getElementById("negative-samples").value = "";
+        document.getElementById("similarity-threshold").value = "0.42";
+        document.getElementById("profile-weight").value = "1.0";
+        document.getElementById("profile-enabled").value = "true";
+        document.getElementById("profile-priority").value = "normal";
+        document.getElementById("profile-keywords").value = "";
+        document.getElementById("profile-tags").value = "";
+        document.getElementById("profile-notify-always").checked = false;
+        document.getElementById("profile-include-in-digest").checked = true;
+        
+        // Clear digest schedules
+        for (let i = 1; i <= 3; i++) {
+            document.getElementById(`interest-digest-schedule-${i}-type`).value = "";
+            document.getElementById(`interest-digest-schedule-${i}-top-n`).value = 10 * i;
+            document.getElementById(`interest-digest-schedule-${i}-min-score`).value = 6.0 - i;
+        }
+        
+        document.getElementById("interest-digest-mode").value = "dm";
+        document.getElementById("interest-digest-target-channel").value = "";
+        
+        const deleteBtn = document.getElementById("btn-delete-interest-profile");
+        if (deleteBtn) {
+            deleteBtn.classList.add("d-none");
+        }
+        
+        renderInterestProfiles(filteredInterestProfiles);
+    }
+    
+    /**
+     * Reset form and show "new profile" toast
+     */
+    function newInterestProfile() {
+        resetInterestProfileForm();
+        window.SharedUtils.showToast("Create new interest profile", "info");
+    }
+    
+    /**
+     * Filter profiles by search term
+     * @param {string} searchTerm - Search term to filter by
+     */
+    function filterInterestProfiles(searchTerm) {
+        if (!searchTerm || searchTerm.trim() === "") {
+            filteredInterestProfiles = [...allInterestProfiles];
+        } else {
+            const lowerSearch = searchTerm.toLowerCase();
+            filteredInterestProfiles = allInterestProfiles.filter(profile => {
+                const name = (profile.name || "").toLowerCase();
+                const description = (profile.description || "").toLowerCase();
+                return name.includes(lowerSearch) || description.includes(lowerSearch);
+            });
+        }
+        renderInterestProfiles(filteredInterestProfiles);
+    }
+    
+    /**
+     * Export a single profile as JSON file
+     * @param {number} profileId - ID of profile to export
+     */
+    function exportInterestProfile(profileId) {
+        const profile = allInterestProfiles.find(p => p.id === profileId);
+        if (!profile) {
+            window.SharedUtils.showToast("Profile not found", "error");
+            return;
+        }
+        
+        const dataStr = JSON.stringify(profile, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `interest-profile-${profile.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        window.SharedUtils.showToast(`Exported: ${profile.name}`, 'success');
+    }
+    
+    /**
+     * Duplicate an existing profile
+     * @param {number} profileId - ID of profile to duplicate
+     * @returns {Promise<void>}
+     */
+    async function duplicateInterestProfile(profileId) {
+        const profile = allInterestProfiles.find(p => p.id === profileId);
+        if (!profile) {
+            window.SharedUtils.showToast("Profile not found", "error");
+            return;
+        }
+        
+        // Create a copy with modified name
+        const copy = {
+            ...profile,
+            id: undefined, // New profile gets auto-generated ID
+            name: `${profile.name} (Copy)`,
+            enabled: false // Start disabled
+        };
+        
+        try {
+            const response = await fetch(interestProfileEndpoints.upsert, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(copy)
+            });
+            
+            if (!response.ok) throw new Error("Failed to duplicate profile");
+            
+            const result = await response.json();
+            window.SharedUtils.showToast(`Duplicated: ${copy.name}`, "success");
+            
+            // Reload list and select the new profile
+            await loadInterestProfiles();
+            if (result.profile_id) {
+                await selectInterestProfile(result.profile_id);
+            }
+        } catch (error) {
+            console.error("Failed to duplicate profile:", error);
+            window.SharedUtils.showToast("Failed to duplicate profile", "error");
+        }
+    }
+    
+    /**
+     * Export all profiles as JSON file
+     */
+    function exportAllInterestProfiles() {
+        const dataStr = JSON.stringify(allInterestProfiles, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `interest-profiles-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        window.SharedUtils.showToast(`Exported ${allInterestProfiles.length} profiles`, 'success');
+    }
+    
+    /**
+     * Bulk enable or disable all profiles
+     * @param {boolean} enabled - True to enable, false to disable
+     * @returns {Promise<void>}
+     */
+    async function bulkToggleInterestProfiles(enabled) {
+        if (!confirm(`Are you sure you want to ${enabled ? 'enable' : 'disable'} all interest profiles?`)) {
+            return;
+        }
+        
+        // Create AbortController with timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        
+        try {
+            // Build array of fetch promises
+            const togglePromises = allInterestProfiles.map(profile =>
+                fetch(`${interestProfileEndpoints.toggle}/${profile.id}/toggle`, {
+                    method: 'POST',
+                    signal: controller.signal
+                })
+                .then(response => ({ profile, response, success: response.ok }))
+                .catch(error => ({ profile, error, success: false }))
+            );
+            
+            // Wait for all requests to complete
+            const results = await Promise.allSettled(togglePromises);
+            
+            // Process results and count successes/failures
+            let successCount = 0;
+            let failCount = 0;
+            
+            results.forEach(result => {
+                if (result.status === 'fulfilled') {
+                    const { profile, success, error } = result.value;
+                    if (success) {
+                        successCount++;
+                    } else {
+                        failCount++;
+                        console.error(`Failed to toggle profile ${profile.id}:`, error || 'Request failed');
+                    }
+                } else {
+                    // Promise was rejected
+                    failCount++;
+                    console.error('Toggle request failed:', result.reason);
+                }
+            });
+            
+            // Show consolidated toast
+            window.SharedUtils.showToast(
+                `${successCount} profiles ${enabled ? 'enabled' : 'disabled'}${failCount > 0 ? `, ${failCount} failed` : ''}`, 
+                failCount > 0 ? 'warning' : 'success'
+            );
+            
+        } catch (error) {
+            console.error('Bulk toggle operation failed:', error);
+            window.SharedUtils.showToast('Bulk toggle operation failed', 'error');
+        } finally {
+            clearTimeout(timeoutId);
+        }
+        
+        // Reload profiles after all requests complete
+        await loadInterestProfiles();
+    }
+    
+    /**
+     * Test similarity of a phrase against the selected profile
+     * @returns {Promise<void>}
+     */
+    async function runSimilarityTest() {
+        const sample = document.getElementById("test-phrase").value.trim();
+        if (!sample) {
+            window.SharedUtils.showToast("Enter a phrase to test", "warning");
+            return;
+        }
+        
+        const selectEl = document.getElementById("profile-select");
+        if (!selectEl) {
+            console.error("Profile select element not found");
+            window.SharedUtils.showToast("Profile selector unavailable", "error");
+            return;
+        }
+        
+        const interest = selectEl.value?.trim();
+        if (!interest) {
+            window.SharedUtils.showToast("Select an interest profile", "warning");
+            return;
+        }
+        
+        try {
+            const response = await fetch(interestProfileEndpoints.test, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ sample, interest }),
+            });
+            if (!response.ok) {
+                throw new Error("Test failed");
+            }
+            const payload = await response.json();
+            if (typeof payload !== "object" || payload === null) {
+                console.warn("Unexpected similarity payload", payload);
+                throw new Error("Malformed response");
+            }
+            const score = Number(payload.score);
+            if (!Number.isFinite(score)) {
+                console.warn("Similarity score missing or invalid", payload);
+                throw new Error("Invalid score");
+            }
+            
+            if (score < 0 || score > 1) {
+                console.warn(
+                    `Similarity score out of range [0,1]: ${score} for sample "${sample}" against interest "${interest}"`
+                );
+            }
+            
+            const clamped = Math.max(0, Math.min(score, 1));
+            const formatted = clamped.toFixed(2);
+            const resultEl = document.getElementById("test-result");
+            if (resultEl) {
+                resultEl.textContent = `Score: ${formatted}`;
+            }
+            
+            // Also append to log if available
+            const log = document.getElementById("profile-log");
+            if (log) {
+                const entry = document.createElement("div");
+                entry.className = "log-entry";
+                const time = document.createElement("span");
+                time.className = "log-time";
+                time.textContent = new Date().toLocaleTimeString();
+                const msg = document.createElement("span");
+                msg.className = "log-message";
+                msg.textContent = `Similarity test for "${sample}" → ${formatted}`;
+                entry.appendChild(time);
+                entry.appendChild(document.createTextNode(" "));
+                entry.appendChild(msg);
+                log.appendChild(entry);
+                log.scrollTop = log.scrollHeight;
+            }
+        } catch (error) {
+            console.error(error);
+            window.SharedUtils.showToast("Unable to compute similarity", "error");
+        }
+    }
+    
+    // ============= PRIVATE HELPERS =============
+    
+    /**
+     * Extract digest schedules from form fields
+     * @returns {Array} Array of digest schedule objects
+     */
+    function extractInterestDigestSchedules() {
+        const schedules = [];
+        for (let i = 1; i <= 3; i++) {
+            const type = document.getElementById(`interest-digest-schedule-${i}-type`).value;
+            if (!type) continue;
+            
+            const schedule = {
+                schedule_type: type,
+                top_n: parseInt(document.getElementById(`interest-digest-schedule-${i}-top-n`).value) || 10,
+                min_score: parseFloat(document.getElementById(`interest-digest-schedule-${i}-min-score`).value) || 5.0
+            };
+            
+            if (type === 'daily') {
+                schedule.daily_hour = parseInt(document.getElementById(`interest-digest-schedule-${i}-daily-hour`).value) || 8;
+            } else if (type === 'weekly') {
+                schedule.weekly_day = parseInt(document.getElementById(`interest-digest-schedule-${i}-weekly-day`).value) || 0;
+                schedule.weekly_hour = parseInt(document.getElementById(`interest-digest-schedule-${i}-weekly-hour`).value) || 8;
+            }
+            
+            schedules.push(schedule);
+        }
+        return schedules;
+    }
+    
+    /**
+     * Populate digest schedule fields from data
+     * @param {Array} schedules - Array of schedule objects
+     */
+    function populateInterestDigestSchedules(schedules) {
+        // Clear all first
+        for (let i = 1; i <= 3; i++) {
+            document.getElementById(`interest-digest-schedule-${i}-type`).value = "";
+            document.getElementById(`interest-digest-schedule-${i}-top-n`).value = 10 * i;
+            document.getElementById(`interest-digest-schedule-${i}-min-score`).value = 6.0 - i;
+        }
+        
+        // Populate provided schedules
+        schedules.forEach((schedule, index) => {
+            if (index >= 3) return;
+            const i = index + 1;
+            document.getElementById(`interest-digest-schedule-${i}-type`).value = schedule.schedule_type || "";
+            document.getElementById(`interest-digest-schedule-${i}-top-n`).value = schedule.top_n || 10;
+            document.getElementById(`interest-digest-schedule-${i}-min-score`).value = schedule.min_score || 5.0;
+            
+            if (schedule.schedule_type === 'daily') {
+                document.getElementById(`interest-digest-schedule-${i}-daily-hour`).value = schedule.daily_hour || 8;
+            } else if (schedule.schedule_type === 'weekly') {
+                document.getElementById(`interest-digest-schedule-${i}-weekly-day`).value = schedule.weekly_day || 0;
+                document.getElementById(`interest-digest-schedule-${i}-weekly-hour`).value = schedule.weekly_hour || 8;
+            }
+        });
+    }
+    
+    // ============= EXPORT PUBLIC API =============
+    
+    window.InterestProfiles = {
+        init,
+        loadInterestProfiles,
+        selectInterestProfile,
+        saveInterestProfile,
+        deleteInterestProfile,
+        toggleInterestProfile,
+        backtestInterestProfile,
+        resetInterestProfileForm,
+        newInterestProfile,
+        filterInterestProfiles,
+        exportInterestProfile,
+        duplicateInterestProfile,
+        exportAllInterestProfiles,
+        bulkToggleInterestProfiles,
+        runSimilarityTest
+    };
+    
+})();

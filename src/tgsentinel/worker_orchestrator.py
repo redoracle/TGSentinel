@@ -15,6 +15,8 @@ from telethon import TelegramClient
 
 from .config import AppCfg
 from .digest import send_digest
+from .digest_scheduler import DigestScheduler
+from .digest_worker import UnifiedDigestWorker
 from .metrics import dump
 from .redis_operations import RedisManager
 from .store import cleanup_old_messages, vacuum_database
@@ -71,6 +73,12 @@ class WorkerOrchestrator:
         self.dialogs_handler = dialogs_handler
         self.users_handler = users_handler
 
+        # Initialize digest scheduler and unified worker
+        self.digest_scheduler = DigestScheduler(cfg)
+        self.unified_digest = UnifiedDigestWorker(
+            cfg, engine, self.digest_scheduler, redis_manager
+        )
+
     async def worker(self) -> None:
         """Main message processing worker."""
         # Get current client dynamically (handles session imports)
@@ -78,7 +86,11 @@ class WorkerOrchestrator:
         await process_loop(self.cfg, current_client, self.engine, self.handshake_gate)
 
     async def periodic_digest(self) -> None:
-        """Send hourly digests periodically."""
+        """Send hourly digests periodically (DEPRECATED - use unified_digest_worker).
+
+        Kept for backward compatibility during migration.
+        Will be removed once unified digest worker is fully validated.
+        """
         # Only run if hourly digests are enabled
         if not self.cfg.alerts.digest.hourly:
             log.info("[DIGEST] Hourly digests disabled, worker sleeping")
@@ -104,7 +116,11 @@ class WorkerOrchestrator:
             await asyncio.sleep(3600)  # Every hour
 
     async def daily_digest(self) -> None:
-        """Send daily digests periodically."""
+        """Send daily digests periodically (DEPRECATED - use unified_digest_worker).
+
+        Kept for backward compatibility during migration.
+        Will be removed once unified digest worker is fully validated.
+        """
         # Only run if daily digests are enabled
         if not self.cfg.alerts.digest.daily:
             log.info("[DIGEST] Daily digests disabled, worker sleeping")
@@ -128,6 +144,17 @@ class WorkerOrchestrator:
                 min_score=0.0,
             )
             await asyncio.sleep(86400)  # Every 24 hours
+
+    async def unified_digest_worker(self) -> None:
+        """Unified digest worker using schedule-driven architecture.
+
+        Replaces periodic_digest() and daily_digest() with a single worker that:
+        - Discovers due schedules every 5 minutes
+        - Collects messages per schedule with deduplication
+        - Formats and delivers digests with profile badges
+        """
+        current_client = self.client_ref()
+        await self.unified_digest.run(current_client, self.handshake_gate)
 
     async def metrics_logger(self) -> None:
         """Log metrics periodically."""
@@ -241,8 +268,7 @@ class WorkerOrchestrator:
         """
         worker_names = [
             "worker",
-            "periodic_digest",
-            "daily_digest",
+            "unified_digest_worker",  # New schedule-driven digest worker
             "metrics_logger",
             "worker_status_refresher",
             "database_cleanup_worker",
@@ -256,8 +282,7 @@ class WorkerOrchestrator:
 
         results = await asyncio.gather(
             self.worker(),
-            self.periodic_digest(),
-            self.daily_digest(),
+            self.unified_digest_worker(),  # Replaces periodic_digest + daily_digest
             self.metrics_logger(),
             self.worker_status_refresher(),
             self.database_cleanup_worker(),

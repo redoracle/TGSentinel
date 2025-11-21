@@ -463,3 +463,56 @@ class DataService:
             logger.warning(f"Failed to fetch digests from Sentinel API: {e}")
             # Return empty list on error
             return []
+
+    def load_digest_schedules(self) -> List[Dict[str, Any]]:
+        """Load all configured digest schedules from Sentinel API.
+
+        Returns:
+            List of digest schedule dictionaries with profile info
+        """
+        try:
+            sentinel_api_url = os.getenv(
+                "SENTINEL_API_BASE_URL", "http://sentinel:8080/api"
+            )
+            response = requests.get(f"{sentinel_api_url}/digest/schedules", timeout=5)
+            response.raise_for_status()
+            data = response.json()
+
+            if data.get("status") == "ok":
+                return data.get("data", {}).get("schedules", [])
+
+            return []
+
+        except requests.RequestException as e:
+            logger.warning(f"Failed to fetch digest schedules from Sentinel API: {e}")
+            return []
+
+    def load_profile_digest_config(self, profile_id: str) -> Dict[str, Any]:
+        """Load digest configuration for a specific profile from Sentinel API.
+
+        Args:
+            profile_id: Profile identifier
+
+        Returns:
+            Dictionary with profile's digest configuration
+        """
+        try:
+            sentinel_api_url = os.getenv(
+                "SENTINEL_API_BASE_URL", "http://sentinel:8080/api"
+            )
+            response = requests.get(
+                f"{sentinel_api_url}/digest/schedules/{profile_id}", timeout=5
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            if data.get("status") == "ok":
+                return data.get("data", {})
+
+            return {}
+
+        except requests.RequestException as e:
+            logger.warning(
+                f"Failed to fetch digest config for {profile_id} from Sentinel API: {e}"
+            )
+            return {}

@@ -116,7 +116,7 @@ def test_format_alert_triggers_real_world_example():
     annotations = {
         "security": ["CVE", "vulnerability", "exploit"],
         "urgency": ["critical", "urgent"],
-        "keywords": ["Algorand"],
+        "keywords": ["marketing"],
     }
     result = format_alert_triggers(json.dumps(annotations), max_keywords=2)
 
@@ -124,7 +124,7 @@ def test_format_alert_triggers_real_world_example():
     assert "🔒 security: CVE, vulnerability" in result
     assert "+1 more" in result
     assert "⚡ urgency: critical, urgent" in result
-    assert "🔍 keywords: Algorand" in result
+    assert "🔍 keywords: marketing" in result
 
 
 if __name__ == "__main__":

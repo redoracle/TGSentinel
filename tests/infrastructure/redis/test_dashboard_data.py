@@ -103,7 +103,7 @@ def test_redis():
     test_messages = [
         {
             "chat_id": -100123456789,
-            "chat_title": "Algorand Dev",
+            "chat_title": "marketing Dev",
             "msg_id": 1001,
             "sender_id": 12345,
             "mentioned": False,
@@ -154,7 +154,7 @@ def app_with_test_data(test_db, test_redis):
     # Mock config with test channels
     mock_config = MagicMock()
     mock_config.channels = [
-        SimpleNamespace(id=-100123456789, name="Algorand Dev", enabled=True),
+        SimpleNamespace(id=-100123456789, name="marketing Dev", enabled=True),
         SimpleNamespace(id=-100987654321, name="Security Feeds", enabled=True),
         SimpleNamespace(id=355791041, name="Stakelovelace Italia", enabled=True),
         SimpleNamespace(id=186207886, name="Stakelovelace Official ENG", enabled=True),
@@ -275,7 +275,7 @@ def test_dashboard_activity_with_data(app_with_test_data):
     assert "Unknown chat" not in chat_names
 
     # Check expected channel names appear
-    expected_names = {"Algorand Dev", "Security Feeds", "Stakelovelace Italia"}
+    expected_names = {"marketing Dev", "Security Feeds", "Stakelovelace Italia"}
     actual_names = set(chat_names)
     assert actual_names == expected_names
 

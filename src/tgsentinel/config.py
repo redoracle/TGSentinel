@@ -1,11 +1,93 @@
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from datetime import time
+from enum import Enum
+from typing import Any, Dict, List, Optional
 
 import yaml
 
 log = logging.getLogger(__name__)
+
+
+class DigestSchedule(str, Enum):
+    """Supported digest schedule types."""
+
+    HOURLY = "hourly"
+    EVERY_4H = "every_4h"
+    EVERY_6H = "every_6h"
+    EVERY_12H = "every_12h"
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    NONE = "none"  # Instant alerts only, no digest
+
+
+@dataclass
+class ScheduleConfig:
+    """Configuration for a specific digest schedule."""
+
+    schedule: DigestSchedule
+    enabled: bool = True
+    top_n: Optional[int] = None  # Override profile-level top_n
+    min_score: Optional[float] = None  # Override profile-level min_score
+
+    # Schedule-specific timing (only applicable to certain schedules)
+    daily_hour: int = 8  # For DAILY: hour in UTC (0-23)
+    weekly_day: int = 0  # For WEEKLY: day of week (0=Monday, 6=Sunday)
+    weekly_hour: int = 8  # For WEEKLY: hour in UTC (0-23)
+
+    def __post_init__(self):
+        """Validate schedule configuration."""
+        if isinstance(self.schedule, str):
+            self.schedule = DigestSchedule(self.schedule)
+        if not (0 <= self.daily_hour <= 23):
+            raise ValueError(f"daily_hour must be 0-23, got {self.daily_hour}")
+        if not (0 <= self.weekly_day <= 6):
+            raise ValueError(f"weekly_day must be 0-6, got {self.weekly_day}")
+        if not (0 <= self.weekly_hour <= 23):
+            raise ValueError(f"weekly_hour must be 0-23, got {self.weekly_hour}")
+        if self.min_score is not None and not (0.0 <= self.min_score <= 10.0):
+            raise ValueError(f"min_score must be 0.0-10.0, got {self.min_score}")
+        if self.top_n is not None:
+            if not isinstance(self.top_n, int):
+                raise ValueError(
+                    f"top_n must be an integer, got {type(self.top_n).__name__}"
+                )
+            if self.top_n <= 0:
+                raise ValueError(f"top_n must be greater than zero, got {self.top_n}")
+
+
+@dataclass
+class ProfileDigestConfig:
+    """Digest configuration for a profile (supports up to 3 schedules)."""
+
+    schedules: List[ScheduleConfig] = field(default_factory=list)
+    top_n: int = 10  # Default for all schedules
+    min_score: float = 5.0  # Default minimum score
+    mode: str = "dm"  # dm|channel|both
+    target_channel: Optional[str] = None  # Override alert target channel
+
+    def __post_init__(self):
+        """Validate digest configuration."""
+        if len(self.schedules) > 3:
+            raise ValueError(
+                f"Maximum 3 schedules per profile, got {len(self.schedules)}"
+            )
+        if not (0.0 <= self.min_score <= 10.0):
+            raise ValueError(f"min_score must be 0.0-10.0, got {self.min_score}")
+        if self.mode not in {"dm", "channel", "both"}:
+            raise ValueError(f"mode must be dm|channel|both, got {self.mode}")
+
+        # Convert dict schedules to ScheduleConfig objects
+        converted = []
+        for sched in self.schedules:
+            if isinstance(sched, dict):
+                converted.append(ScheduleConfig(**sched))
+            elif isinstance(sched, ScheduleConfig):
+                converted.append(sched)
+            else:
+                raise ValueError(f"Invalid schedule type: {type(sched)}")
+        self.schedules = converted
 
 
 @dataclass
@@ -33,6 +115,9 @@ class ProfileDefinition:
 
     # Scoring weights (category → weight multiplier)
     scoring_weights: Dict[str, float] = field(default_factory=dict)
+
+    # Digest configuration (optional, per-profile schedules)
+    digest: Optional[ProfileDigestConfig] = None
 
     def __post_init__(self):
         """Set default scoring weights if not provided."""
@@ -62,6 +147,7 @@ class ChannelOverrides:
     urgency_keywords_extra: List[str] = field(default_factory=list)
     scoring_weights: Dict[str, float] = field(default_factory=dict)
     min_score: float | None = None
+    digest: Optional[ProfileDigestConfig] = None  # Digest schedule override
 
 
 @dataclass
@@ -110,6 +196,9 @@ class ChannelRule:
     profiles: List[str] = field(default_factory=list)
     overrides: ChannelOverrides = field(default_factory=ChannelOverrides)
 
+    # Direct digest configuration (takes precedence over profile-level)
+    digest: Optional[ProfileDigestConfig] = None
+
 
 @dataclass
 class MonitoredUser:
@@ -122,12 +211,16 @@ class MonitoredUser:
     profiles: List[str] = field(default_factory=list)
     overrides: ChannelOverrides = field(default_factory=ChannelOverrides)
 
+    # Direct digest configuration (takes precedence over profile-level)
+    digest: Optional[ProfileDigestConfig] = None
+
 
 @dataclass
 class DigestCfg:
     hourly: bool = True
     daily: bool = False
     top_n: int = 10
+    check_interval_seconds: int = 300  # Default 5 minutes
 
 
 @dataclass
@@ -241,41 +334,205 @@ def _env_float(name: str, default: float) -> float:
         raise ValueError(f"{name} must be a float") from exc
 
 
-def _load_global_profiles(profiles_path: str) -> Dict[str, ProfileDefinition]:
-    """Load global profile definitions from profiles.yml.
+def _convert_legacy_digest(
+    digest_cfg: DigestCfg, mode: str = "dm", target_channel: str = ""
+) -> ProfileDigestConfig:
+    """Convert legacy DigestCfg (hourly/daily booleans) to new ProfileDigestConfig format.
+
+    This provides backward compatibility for old configurations.
 
     Args:
-        profiles_path: Path to profiles.yml file
+        digest_cfg: Legacy DigestCfg with hourly/daily flags
+        mode: Alert mode (dm|channel|both)
+        target_channel: Target channel for digest delivery
+
+    Returns:
+        ProfileDigestConfig with schedules matching the legacy flags
+    """
+    schedules = []
+
+    if digest_cfg.hourly:
+        schedules.append(
+            ScheduleConfig(
+                schedule=DigestSchedule.HOURLY,
+                enabled=True,
+                top_n=digest_cfg.top_n,
+            )
+        )
+
+    if digest_cfg.daily:
+        schedules.append(
+            ScheduleConfig(
+                schedule=DigestSchedule.DAILY,
+                enabled=True,
+                top_n=digest_cfg.top_n,
+                daily_hour=8,  # Default 08:00 UTC
+            )
+        )
+
+    # If no schedules enabled, return config with empty schedules (instant alerts only)
+    return ProfileDigestConfig(
+        schedules=schedules,
+        top_n=digest_cfg.top_n,
+        mode=mode,
+        target_channel=target_channel if target_channel else None,
+    )
+
+
+def _load_global_profiles(profiles_path: str) -> Dict[str, ProfileDefinition]:
+    """Load global profile definitions from unified YAML files.
+
+    Loads profiles from three separate YAML files in the config directory:
+    - profiles_alert.yml (Alert profiles, IDs 1000-1999)
+    - profiles_global.yml (Global profiles, IDs 2000-2999)
+    - profiles_interest.yml (Interest profiles, IDs 3000-3999)
+
+    Falls back to legacy profiles.yml if the unified files don't exist.
+
+    Args:
+        profiles_path: Path to profiles.yml file (or config directory)
 
     Returns:
         Dictionary mapping profile_id -> ProfileDefinition
     """
-    if not os.path.exists(profiles_path):
-        log.info(f"No profiles.yml found at {profiles_path}, using empty profiles")
-        return {}
+    # Determine config directory
+    if os.path.isfile(profiles_path):
+        config_dir = os.path.dirname(profiles_path)
+    else:
+        config_dir = (
+            profiles_path
+            if os.path.isdir(profiles_path)
+            else os.path.dirname(profiles_path)
+        )
 
-    try:
-        with open(profiles_path, "r", encoding="utf-8") as f:
-            profiles_data = yaml.safe_load(f) or {}
+    if not config_dir:
+        config_dir = "config"
 
-        profiles = {}
-        for profile_id, data in profiles_data.get("profiles", {}).items():
-            try:
-                # Create ChannelOverrides if present in YAML (for validation)
-                if "overrides" in data:
-                    data.pop("overrides")  # Not part of ProfileDefinition
+    # Define the three unified YAML files
+    alert_path = os.path.join(config_dir, "profiles_alert.yml")
+    global_path = os.path.join(config_dir, "profiles_global.yml")
+    interest_path = os.path.join(config_dir, "profiles_interest.yml")
+    legacy_path = os.path.join(config_dir, "profiles.yml")
 
-                profile = ProfileDefinition(id=profile_id, **data)
-                profiles[profile_id] = profile
-            except Exception as e:
-                log.error(f"Failed to load profile '{profile_id}': {e}")
-                continue
+    profiles = {}
+    loaded_files = []
 
-        log.info(f"Loaded {len(profiles)} global profiles from {profiles_path}")
+    # Helper function to load a single YAML file
+    def load_profile_file(
+        file_path: str, expected_id_range: Optional[tuple] = None
+    ) -> Dict[str, ProfileDefinition]:
+        """Load profiles from a single YAML file.
+
+        Args:
+            file_path: Path to YAML file
+            expected_id_range: Optional tuple (min_id, max_id) for validation
+
+        Returns:
+            Dictionary of loaded profiles
+        """
+        if not os.path.exists(file_path):
+            return {}
+
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+
+            file_profiles = {}
+            # Handle both flat dict and nested "profiles" key
+            profiles_data = data.get("profiles", data) if "profiles" in data else data
+
+            for profile_id, profile_data in profiles_data.items():
+                if not profile_data:  # Skip None/empty entries
+                    continue
+
+                try:
+                    # Convert profile_id to string if it's an integer
+                    profile_id = str(profile_id)
+
+                    # Validate ID range if specified
+                    if expected_id_range:
+                        try:
+                            numeric_id = int(profile_id)
+                            min_id, max_id = expected_id_range
+                            if not (min_id <= numeric_id <= max_id):
+                                log.warning(
+                                    f"Profile '{profile_id}' in {os.path.basename(file_path)} outside expected range {expected_id_range}"
+                                )
+                        except ValueError:
+                            pass  # Non-numeric IDs are allowed for interest profiles
+
+                    # Create a copy to avoid modifying the original
+                    data_copy = dict(profile_data)
+
+                    # Remove fields not part of ProfileDefinition
+                    if "overrides" in data_copy:
+                        data_copy.pop("overrides")
+
+                    # Convert digest config if present
+                    if "digest" in data_copy and isinstance(data_copy["digest"], dict):
+                        data_copy["digest"] = ProfileDigestConfig(**data_copy["digest"])
+
+                    # Ensure id field matches key
+                    data_copy["id"] = profile_id
+
+                    profile = ProfileDefinition(**data_copy)
+                    file_profiles[profile_id] = profile
+                except Exception as e:
+                    log.error(
+                        f"Failed to load profile '{profile_id}' from {file_path}: {e}"
+                    )
+                    continue
+
+            if file_profiles:
+                loaded_files.append(os.path.basename(file_path))
+            return file_profiles
+
+        except Exception as e:
+            log.error(f"Failed to load profiles from {file_path}: {e}")
+            return {}
+
+    # Try loading unified YAML files first
+    if (
+        os.path.exists(alert_path)
+        or os.path.exists(global_path)
+        or os.path.exists(interest_path)
+    ):
+        # Load alert profiles (IDs 1000-1999)
+        alert_profiles = load_profile_file(alert_path, expected_id_range=(1000, 1999))
+        profiles.update(alert_profiles)
+
+        # Load global profiles (IDs 2000-2999)
+        global_profiles_data = load_profile_file(
+            global_path, expected_id_range=(2000, 2999)
+        )
+        profiles.update(global_profiles_data)
+
+        # Load interest profiles (IDs 3000-3999 or named)
+        interest_profiles = load_profile_file(
+            interest_path, expected_id_range=(3000, 3999)
+        )
+        profiles.update(interest_profiles)
+
+        if loaded_files:
+            log.info(
+                f"Loaded {len(profiles)} global profiles from unified YAML files: {', '.join(loaded_files)}"
+            )
+        else:
+            log.info(f"No profiles found in unified YAML files at {config_dir}")
+
         return profiles
 
-    except Exception as e:
-        log.error(f"Failed to load profiles from {profiles_path}: {e}")
+    # Fall back to legacy profiles.yml
+    elif os.path.exists(legacy_path):
+        legacy_profiles = load_profile_file(legacy_path)
+        if legacy_profiles:
+            log.info(
+                f"Loaded {len(legacy_profiles)} global profiles from legacy profiles.yml (consider migrating to unified YAML files)"
+            )
+        return legacy_profiles
+
+    else:
+        log.info(f"No profile files found at {config_dir}, using empty profiles")
         return {}
 
 
@@ -417,6 +674,15 @@ logging:
 
     channels = [ChannelRule(**c) for c in y.get("channels", [])]
     monitored_users = [MonitoredUser(**u) for u in y.get("monitored_users", [])]
+
+    # Convert digest configs to new format if present
+    for channel in channels:
+        if channel.digest and isinstance(channel.digest, dict):
+            channel.digest = ProfileDigestConfig(**channel.digest)
+
+    for user in monitored_users:
+        if user.digest and isinstance(user.digest, dict):
+            user.digest = ProfileDigestConfig(**user.digest)
 
     # Get telegram session path with safe fallback
     telegram_config = y.get("telegram", {})

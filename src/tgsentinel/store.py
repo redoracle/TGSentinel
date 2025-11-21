@@ -105,6 +105,17 @@ CREATE TABLE IF NOT EXISTS feedback(
         _add_column_if_missing(con, "messages", "sender_id", "INTEGER")
         _add_column_if_missing(con, "messages", "trigger_annotations", "TEXT")  # JSON
 
+        # Digest scheduling columns (Phase 1)
+        _add_column_if_missing(
+            con, "messages", "matched_profiles", "TEXT"
+        )  # JSON: ["security", "critical"]
+        _add_column_if_missing(
+            con, "messages", "digest_schedule", "TEXT"
+        )  # "hourly", "daily", etc.
+        _add_column_if_missing(
+            con, "messages", "digest_processed", "INTEGER DEFAULT 0"
+        )  # 0=pending, 1=sent
+
         # Create indexes for performance on common queries
         # These are idempotent - IF NOT EXISTS prevents errors on re-run
         con.execute(
@@ -124,6 +135,13 @@ CREATE TABLE IF NOT EXISTS feedback(
             )
         )
 
+        # Digest-related indexes (Phase 1)
+        con.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS idx_messages_digest ON messages(digest_schedule, digest_processed, created_at)"
+            )
+        )
+
     log.info("DB ready")
     return engine
 
@@ -140,13 +158,15 @@ def upsert_message(
     triggers: str = "",
     sender_id: int = 0,
     trigger_annotations: str = "",  # JSON string
+    matched_profiles: str = "",  # JSON: ["security", "critical"]
+    digest_schedule: str = "",  # "hourly", "daily", etc.
 ):
     with engine.begin() as con:
         con.execute(
             text(
                 """
-          INSERT INTO messages(chat_id,msg_id,content_hash,score,alerted,chat_title,sender_name,message_text,triggers,sender_id,trigger_annotations)
-          VALUES(:c,:m,:h,:s,0,:title,:sender,:text,:triggers,:sender_id,:annotations)
+          INSERT INTO messages(chat_id,msg_id,content_hash,score,alerted,chat_title,sender_name,message_text,triggers,sender_id,trigger_annotations,matched_profiles,digest_schedule,digest_processed)
+          VALUES(:c,:m,:h,:s,0,:title,:sender,:text,:triggers,:sender_id,:annotations,:profiles,:schedule,0)
           ON CONFLICT(chat_id,msg_id) DO UPDATE SET 
             score=excluded.score, 
             content_hash=excluded.content_hash,
@@ -155,7 +175,9 @@ def upsert_message(
             message_text=excluded.message_text,
             triggers=excluded.triggers,
             sender_id=excluded.sender_id,
-            trigger_annotations=excluded.trigger_annotations
+            trigger_annotations=excluded.trigger_annotations,
+            matched_profiles=excluded.matched_profiles,
+            digest_schedule=excluded.digest_schedule
         """
             ),
             {
@@ -169,6 +191,8 @@ def upsert_message(
                 "triggers": triggers,
                 "sender_id": sender_id,
                 "annotations": trigger_annotations,
+                "profiles": matched_profiles,
+                "schedule": digest_schedule,
             },
         )
 

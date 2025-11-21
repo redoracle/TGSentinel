@@ -589,10 +589,15 @@ def init_app() -> None:
 
         # Initialize profile service
         try:
-            profile_service = init_profile_service(
-                data_dir=Path(__file__).parent.parent / "data"
+            sentinel_api_url = os.getenv(
+                "SENTINEL_API_BASE_URL", "http://sentinel:8080/api"
             )
-            logger.info("Initialized ProfileService")
+            profile_service = init_profile_service(
+                sentinel_api_base_url=sentinel_api_url
+            )
+            logger.info(
+                f"Initialized ProfileService (Sentinel API: {sentinel_api_url})"
+            )
         except Exception as ps_exc:
             logger.warning("Failed to initialize ProfileService: %s", ps_exc)
             profile_service = None
@@ -992,6 +997,33 @@ def init_app() -> None:
             logger.warning("Failed to import config info routes blueprint: %s", bp_exc)
         except Exception as bp_exc:
             logger.error("Failed to register config info routes blueprint: %s", bp_exc)
+
+        # Initialize digest service and register digest routes blueprint
+        try:
+            try:
+                from ui.services.digest_service import DigestService
+                from ui.routes.digest import digest_bp, init_digest_routes
+            except ImportError:
+                from services.digest_service import DigestService  # type: ignore
+                from routes.digest import digest_bp, init_digest_routes  # type: ignore
+
+            # Initialize digest service with Sentinel API base URL
+            sentinel_api_base_url = os.getenv(
+                "SENTINEL_API_BASE_URL", "http://sentinel:8080/api"
+            )
+            digest_service = DigestService(sentinel_api_base_url)
+            logger.info("Initialized DigestService")
+
+            # Initialize routes with service
+            init_digest_routes(digest_service)
+
+            # Register blueprint
+            app.register_blueprint(digest_bp)
+            logger.info("Registered digest routes blueprint")
+        except ImportError as bp_exc:
+            logger.warning("Failed to import digest routes blueprint: %s", bp_exc)
+        except Exception as bp_exc:
+            logger.error("Failed to register digest routes blueprint: %s", bp_exc)
 
         # Register Socket.IO handlers
         try:

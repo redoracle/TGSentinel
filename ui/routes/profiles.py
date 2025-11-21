@@ -9,12 +9,20 @@ This blueprint handles all profile-related operations:
 
 import json
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict
 
+import requests
 import yaml
 from flask import Blueprint, jsonify, make_response, request
+
+from ui.services.profiles_service import (
+    ALERT_PROFILE_ID_PREFIX,
+    GLOBAL_PROFILE_ID_PREFIX,
+    INTEREST_PROFILE_ID_PREFIX,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -660,86 +668,75 @@ def backtest_interest_profile():
             else []
         )
 
-        # Load semantic model if available
+        # Call Sentinel API for semantic scoring (model runs in Sentinel container)
         try:
-            from tgsentinel.semantic import _model, score_text
+            sentinel_url = os.getenv(
+                "SENTINEL_API_BASE_URL", "http://sentinel:8080/api"
+            )
+            backtest_url = f"{sentinel_url}/profiles/interest/backtest"
 
-            if _model is None:
+            payload = {
+                "profile_name": profile_name,
+                "profile": profile,
+                "hours_back": hours_back,
+                "max_messages": max_messages,
+            }
+
+            response = requests.post(
+                backtest_url, json=payload, timeout=30
+            )  # 30s timeout for semantic processing
+
+            if not response.ok:
+                error_data = response.json() if response.text else {}
+                error_msg = error_data.get("message", "Sentinel API request failed")
+                logger.error(
+                    f"Sentinel backtest API error: {response.status_code} - {error_msg}"
+                )
                 return (
                     jsonify(
-                        {"status": "error", "message": "Semantic model not loaded"}
+                        {
+                            "status": "error",
+                            "message": f"Semantic scoring failed: {error_msg}",
+                        }
                     ),
-                    500,
+                    response.status_code,
                 )
 
-            # Score messages
-            matches = []
-            threshold = profile.get("threshold", 0.42)
-
-            for msg in messages:
-                text = msg.get("message_text", "")
-                if not text:
-                    continue
-
-                # Score text with profile
-                score = score_text(text)
-                if score is None:
-                    continue
-
-                if score >= threshold:
-                    matches.append(
-                        {
-                            "message_id": msg["msg_id"],
-                            "chat_id": msg["chat_id"],
-                            "chat_title": msg["chat_title"],
-                            "sender_name": msg["sender_name"],
-                            "score": round(score, 3),
-                            "original_score": round(msg.get("score", 0.0), 2),
-                            "text_preview": text[:100]
-                            + ("..." if len(text) > 100 else ""),
-                            "timestamp": msg["created_at"],
-                        }
-                    )
-
-            # Calculate statistics
-            stats = {
-                "total_messages": len(messages),
-                "matched_messages": len(matches),
-                "match_rate": (
-                    round(len(matches) / len(messages) * 100, 1)
-                    if len(messages) > 0
-                    else 0
-                ),
-                "avg_score": (
-                    round(sum(m["score"] for m in matches) / len(matches), 3)
-                    if len(matches) > 0
-                    else 0
-                ),
-                "threshold": threshold,
-            }
-
-            result = {
-                "status": "ok",
-                "profile_name": profile_name,
-                "test_date": datetime.now(timezone.utc).isoformat(),
-                "parameters": {
-                    "hours_back": hours_back,
-                    "max_messages": max_messages,
-                },
-                "matches": matches[:50],  # Limit response size
-                "stats": stats,
-            }
-
+            # Return Sentinel's response directly
+            result = response.json()
             logger.info(
-                f"Backtest completed for interest profile {profile_name}: {stats}"
+                f"Interest profile backtest completed via Sentinel: {result.get('stats', {})}"
             )
             return jsonify(result)
 
-        except ImportError:
+        except requests.exceptions.Timeout:
+            logger.error("Sentinel backtest API timeout")
             return (
                 jsonify(
-                    {"status": "error", "message": "Semantic module not available"}
+                    {
+                        "status": "error",
+                        "message": "Semantic scoring timeout (>30s). Try reducing hours_back or max_messages.",
+                    }
                 ),
+                504,
+            )
+        except requests.exceptions.ConnectionError as ce:
+            logger.error(f"Sentinel backtest API connection error: {ce}")
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Cannot connect to Sentinel service. Is it running?",
+                    }
+                ),
+                503,
+            )
+        except Exception as exc:
+            logger.error(
+                f"Unexpected error calling Sentinel backtest: {exc}", exc_info=True
+            )
+            return (
+                jsonify({"status": "error", "message": f"Backtest failed: {str(exc)}"}),
                 500,
             )
 
@@ -813,17 +810,20 @@ def list_alert_profiles():
 @profiles_bp.get("/alert/get")
 def get_alert_profile():
     """Get a specific alert profile."""
-    profile_id = request.args.get("id", "").strip()
-    if not profile_id:
+    profile_id_str = request.args.get("id", "").strip()
+    if not profile_id_str:
         return jsonify({"status": "error", "message": "Profile ID required"}), 400
 
     try:
+        profile_id = int(profile_id_str)
         profile = (
             _profile_service.get_alert_profile(profile_id) if _profile_service else None
         )
         if not profile:
             return jsonify({"status": "error", "message": "Profile not found"}), 404
         return jsonify({"status": "ok", "profile": profile})
+    except ValueError:
+        return jsonify({"status": "error", "message": "Invalid profile ID format"}), 400
     except Exception as exc:
         logger.error(f"Error getting alert profile: {exc}")
         return jsonify({"status": "error", "message": "Internal server error"}), 500
@@ -844,9 +844,20 @@ def upsert_alert_profile():
     if not profile:
         return jsonify({"status": "error", "message": "Invalid JSON payload"}), 400
 
-    profile_id = profile.get("id", "").strip()
-    if not profile_id:
-        return jsonify({"status": "error", "message": "Profile ID required"}), 400
+    # Validate profile name is present
+    profile_name = profile.get("name", "").strip()
+    if not profile_name:
+        return jsonify({"status": "error", "message": "Profile name required"}), 400
+
+    # Convert ID to integer if provided (for updates)
+    if "id" in profile and profile["id"] is not None:
+        try:
+            profile["id"] = int(profile["id"])
+        except (ValueError, TypeError):
+            return (
+                jsonify({"status": "error", "message": "Invalid profile ID format"}),
+                400,
+            )
 
     # Add timestamps
     now = datetime.now(timezone.utc).isoformat()
@@ -861,9 +872,11 @@ def upsert_alert_profile():
                 500,
             )
 
-        # Sync to config file
-        if _profile_service:
-            _profile_service.sync_alert_profiles_to_config()
+        # Get the ID that was assigned/used
+        profile_id = profile.get("id")
+
+        # Note: No sync needed - save_alert_profiles() already sends to Sentinel API
+        # which writes directly to config/profiles_alert.yml
 
         logger.info(f"Alert profile upserted: {profile_id}")
         return jsonify({"status": "ok", "profile_id": profile_id})
@@ -875,11 +888,12 @@ def upsert_alert_profile():
 @profiles_bp.delete("/alert/delete")
 def delete_alert_profile():
     """Delete an alert profile."""
-    profile_id = request.args.get("id", "").strip()
-    if not profile_id:
+    profile_id_str = request.args.get("id", "").strip()
+    if not profile_id_str:
         return jsonify({"status": "error", "message": "Profile ID required"}), 400
 
     try:
+        profile_id = int(profile_id_str)
         if not _profile_service or not _profile_service.delete_alert_profile(
             profile_id
         ):
@@ -887,10 +901,14 @@ def delete_alert_profile():
 
         # Sync to config file
         if _profile_service:
-            _profile_service.sync_alert_profiles_to_config()
+            _profile_service.sync_alert_profiles_to_config(
+                _profile_service.tgsentinel_config
+            )
 
         logger.info(f"Alert profile deleted: {profile_id}")
         return jsonify({"status": "ok", "message": "Profile deleted"})
+    except ValueError:
+        return jsonify({"status": "error", "message": "Invalid profile ID format"}), 400
     except Exception as exc:
         logger.error(f"Error deleting alert profile: {exc}")
         return jsonify({"status": "error", "message": "Internal server error"}), 500
@@ -898,7 +916,7 @@ def delete_alert_profile():
 
 @profiles_bp.post("/alert/toggle")
 def toggle_alert_profile():
-    """Toggle alert profile enabled status."""
+    """Toggle alert profile enabled status via Sentinel API."""
     if not request.is_json:
         return (
             jsonify(
@@ -911,36 +929,35 @@ def toggle_alert_profile():
     if not payload:
         return jsonify({"status": "error", "message": "Invalid JSON payload"}), 400
 
-    profile_id = payload.get("id", "").strip()
-    enabled = payload.get("enabled", True)
+    profile_id_raw = payload.get("id")
 
-    if not profile_id:
+    if profile_id_raw is None or profile_id_raw == "":
         return jsonify({"status": "error", "message": "Profile ID required"}), 400
 
     try:
-        profile = (
-            _profile_service.get_alert_profile(profile_id) if _profile_service else None
-        )
-        if not profile:
-            return jsonify({"status": "error", "message": "Profile not found"}), 404
+        profile_id = int(profile_id_raw)
 
-        profile["enabled"] = bool(enabled)
-        profile["updated_at"] = datetime.now(timezone.utc).isoformat()
-
-        if not _profile_service or not _profile_service.upsert_alert_profile(profile):
+        # Use dedicated toggle method that calls Sentinel API
+        if not _profile_service or not _profile_service.toggle_alert_profile(
+            profile_id
+        ):
             return (
-                jsonify({"status": "error", "message": "Failed to update profile"}),
+                jsonify({"status": "error", "message": "Failed to toggle profile"}),
                 500,
             )
 
-        # Sync to config file
-        if _profile_service:
-            _profile_service.sync_alert_profiles_to_config()
+        # Fetch updated profile to return current state
+        profile = (
+            _profile_service.get_alert_profile(profile_id) if _profile_service else None
+        )
+        enabled = profile.get("enabled", False) if profile else False
 
         logger.info(
             f"Alert profile {profile_id} {'enabled' if enabled else 'disabled'}"
         )
         return jsonify({"status": "ok", "enabled": enabled})
+    except ValueError:
+        return jsonify({"status": "error", "message": "Invalid profile ID format"}), 400
     except Exception as exc:
         logger.error(f"Error toggling alert profile: {exc}")
         return jsonify({"status": "error", "message": "Internal server error"}), 500
@@ -1189,16 +1206,16 @@ def backtest_alert_profile():
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Global Profile Routes (Two-Layer Architecture)
+# Interest Profile CRUD Routes (Proxy to Sentinel API)
 # ═══════════════════════════════════════════════════════════════════
 
 
-@profiles_bp.get("/global/list")
-def list_global_profiles():
-    """List all global profiles from config/profiles.yml.
+@profiles_bp.get("/interest/list")
+def list_interest_profiles():
+    """List all interest profiles from Sentinel API.
 
     Returns:
-        JSON array of profile objects with id, name, and configuration.
+        JSON with list of all interest profiles.
     """
     try:
         if not _profile_service:
@@ -1209,23 +1226,29 @@ def list_global_profiles():
                 500,
             )
 
-        profiles = _profile_service.list_global_profiles()
-        return jsonify({"status": "ok", "profiles": profiles})
+        profiles = _profile_service.load_profiles()
+
+        # Convert to list format for UI
+        profiles_list = [
+            {**profile, "id": profile_id} for profile_id, profile in profiles.items()
+        ]
+
+        return jsonify({"status": "ok", "profiles": profiles_list})
 
     except Exception as exc:
-        logger.error(f"Failed to list global profiles: {exc}", exc_info=True)
+        logger.error(f"Failed to list interest profiles: {exc}", exc_info=True)
         return jsonify({"status": "error", "message": str(exc)}), 500
 
 
-@profiles_bp.get("/global/<profile_id>")
-def get_global_profile(profile_id: str):
-    """Get a single global profile by ID.
+@profiles_bp.get("/interest/<int:profile_id>")
+def get_interest_profile(profile_id: int):
+    """Get a single interest profile by ID.
 
     Args:
-        profile_id: Profile identifier (e.g., 'security', 'releases').
+        profile_id: Interest profile ID (3000-3999)
 
     Returns:
-        JSON object with profile configuration or 404 if not found.
+        JSON with profile data or error.
     """
     try:
         if not _profile_service:
@@ -1236,11 +1259,27 @@ def get_global_profile(profile_id: str):
                 500,
             )
 
-        profile = _profile_service.get_global_profile(profile_id)
+        # Validate ID range
+        if not (3000 <= profile_id < 4000):
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": f"Invalid interest profile ID: {profile_id}. Must be 3000-3999.",
+                    }
+                ),
+                400,
+            )
+
+        profile = _profile_service.get_profile(str(profile_id))
+
         if profile is None:
             return (
                 jsonify(
-                    {"status": "error", "message": f"Profile '{profile_id}' not found"}
+                    {
+                        "status": "error",
+                        "message": f"Interest profile {profile_id} not found",
+                    }
                 ),
                 404,
             )
@@ -1249,142 +1288,180 @@ def get_global_profile(profile_id: str):
 
     except Exception as exc:
         logger.error(
-            f"Failed to get global profile '{profile_id}': {exc}", exc_info=True
+            f"Failed to get interest profile {profile_id}: {exc}", exc_info=True
         )
         return jsonify({"status": "error", "message": str(exc)}), 500
 
 
-@profiles_bp.post("/global/create")
-def create_global_profile():
-    """Create a new global profile.
+@profiles_bp.post("/interest/upsert")
+def upsert_interest_profile():
+    """Create or update an interest profile.
 
-    Request body:
-        {
-            "id": "profile_identifier",
-            "profile": {
-                "name": "Profile Name",
-                "keywords": [...],
-                "scoring_weights": {...},
-                ...
-            }
-        }
+    Expects JSON payload with profile data including all UI fields.
 
     Returns:
-        JSON with status and created profile ID.
+        JSON with success/error status.
     """
-    try:
-        if not request.is_json:
-            return (
-                jsonify(
-                    {
-                        "status": "error",
-                        "message": "Content-Type must be application/json",
-                    }
-                ),
-                400,
-            )
-
-        if not _profile_service:
-            return (
-                jsonify(
-                    {"status": "error", "message": "ProfileService not initialized"}
-                ),
-                500,
-            )
-
-        data = request.get_json()
-        profile_id = data.get("id", "").strip()
-        profile_data = data.get("profile", {})
-
-        if not profile_id:
-            return (
-                jsonify({"status": "error", "message": "Profile ID is required"}),
-                400,
-            )
-
-        # Validate profile structure
-        validation = _profile_service.validate_global_profile(profile_data)
-        if not validation["valid"]:
-            return (
-                jsonify(
-                    {
-                        "status": "error",
-                        "message": "Profile validation failed",
-                        "errors": validation["errors"],
-                    }
-                ),
-                400,
-            )
-
-        # Check if profile already exists
-        existing = _profile_service.get_global_profile(profile_id)
-        if existing is not None:
-            return (
-                jsonify(
-                    {
-                        "status": "error",
-                        "message": f"Profile '{profile_id}' already exists. Use update endpoint instead.",
-                    }
-                ),
-                409,
-            )
-
-        # Create profile
-        success = _profile_service.create_global_profile(profile_id, profile_data)
-        if not success:
-            return (
-                jsonify({"status": "error", "message": "Failed to create profile"}),
-                500,
-            )
-
-        logger.info(f"Created global profile: {profile_id}")
+    if not request.is_json:
         return (
             jsonify(
+                {"status": "error", "message": "Content-Type must be application/json"}
+            ),
+            400,
+        )
+
+    try:
+        if not _profile_service:
+            return (
+                jsonify(
+                    {"status": "error", "message": "ProfileService not initialized"}
+                ),
+                500,
+            )
+
+        profile_data = request.get_json()
+
+        # Validate required fields
+        if "name" not in profile_data or not profile_data["name"].strip():
+            return (
+                jsonify({"status": "error", "message": "Profile name is required"}),
+                400,
+            )
+
+        # Generate ID if not provided
+        if "id" not in profile_data:
+            existing_profiles = _profile_service.load_profiles()
+            profile_data["id"] = _profile_service._generate_next_id(
+                INTEREST_PROFILE_ID_PREFIX, existing_profiles
+            )
+
+        # Validate ID range if provided
+        profile_id = profile_data.get("id")
+        if not (3000 <= profile_id < 4000):
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": f"Invalid interest profile ID: {profile_id}. Must be 3000-3999.",
+                    }
+                ),
+                400,
+            )
+
+        # Ensure all expected fields have defaults
+        profile_data.setdefault("description", "")
+        profile_data.setdefault("enabled", True)
+        profile_data.setdefault("positive_samples", [])
+        profile_data.setdefault("negative_samples", [])
+        profile_data.setdefault("threshold", 0.42)
+        profile_data.setdefault("weight", 1.0)
+        profile_data.setdefault("priority", "normal")
+        profile_data.setdefault("keywords", [])
+        profile_data.setdefault("channels", [])
+        profile_data.setdefault("tags", [])
+        profile_data.setdefault("notify_always", False)
+        profile_data.setdefault("include_digest", True)
+
+        # Digest schedules
+        profile_data.setdefault("digest_schedules", [])
+        profile_data.setdefault("digest_mode", "dm")
+        profile_data.setdefault("digest_target_channel", "")
+
+        success = _profile_service.upsert_profile(profile_data)
+
+        if success:
+            return jsonify(
                 {
                     "status": "ok",
-                    "id": profile_id,
-                    "message": "Profile created successfully",
+                    "message": f"Interest profile '{profile_data['name']}' saved successfully",
+                    "profile_id": profile_data["id"],
                 }
-            ),
-            201,
-        )
-
-    except Exception as exc:
-        logger.error(f"Failed to create global profile: {exc}", exc_info=True)
-        return jsonify({"status": "error", "message": str(exc)}), 500
-
-
-@profiles_bp.put("/global/<profile_id>")
-def update_global_profile(profile_id: str):
-    """Update an existing global profile.
-
-    Args:
-        profile_id: Profile identifier to update.
-
-    Request body:
-        {
-            "profile": {
-                "name": "Updated Name",
-                "keywords": [...],
-                ...
-            }
-        }
-
-    Returns:
-        JSON with status and update confirmation.
-    """
-    try:
-        if not request.is_json:
+            )
+        else:
             return (
                 jsonify(
                     {
                         "status": "error",
-                        "message": "Content-Type must be application/json",
+                        "message": "Failed to save interest profile to Sentinel",
+                    }
+                ),
+                500,
+            )
+
+    except Exception as exc:
+        logger.error(f"Failed to upsert interest profile: {exc}", exc_info=True)
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@profiles_bp.delete("/interest/<int:profile_id>")
+def delete_interest_profile(profile_id: int):
+    """Delete an interest profile.
+
+    Args:
+        profile_id: Interest profile ID to delete (3000-3999)
+
+    Returns:
+        JSON with success/error status.
+    """
+    try:
+        if not _profile_service:
+            return (
+                jsonify(
+                    {"status": "error", "message": "ProfileService not initialized"}
+                ),
+                500,
+            )
+
+        # Validate ID range
+        if not (3000 <= profile_id < 4000):
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": f"Invalid interest profile ID: {profile_id}. Must be 3000-3999.",
                     }
                 ),
                 400,
             )
 
+        success = _profile_service.delete_profile(str(profile_id))
+
+        if success:
+            return jsonify(
+                {
+                    "status": "ok",
+                    "message": f"Interest profile {profile_id} deleted successfully",
+                }
+            )
+        else:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": f"Failed to delete interest profile {profile_id}",
+                    }
+                ),
+                500,
+            )
+
+    except Exception as exc:
+        logger.error(
+            f"Failed to delete interest profile {profile_id}: {exc}", exc_info=True
+        )
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@profiles_bp.post("/interest/<int:profile_id>/toggle")
+def toggle_interest_profile(profile_id: int):
+    """Toggle interest profile enabled/disabled state.
+
+    Args:
+        profile_id: Interest profile ID to toggle (3000-3999)
+
+    Returns:
+        JSON with new enabled state.
+    """
+    try:
         if not _profile_service:
             return (
                 jsonify(
@@ -1393,203 +1470,54 @@ def update_global_profile(profile_id: str):
                 500,
             )
 
-        data = request.get_json()
-        profile_data = data.get("profile", {})
-
-        # Validate profile structure
-        validation = _profile_service.validate_global_profile(profile_data)
-        if not validation["valid"]:
+        # Validate ID range
+        if not (3000 <= profile_id < 4000):
             return (
                 jsonify(
                     {
                         "status": "error",
-                        "message": "Profile validation failed",
-                        "errors": validation["errors"],
+                        "message": f"Invalid interest profile ID: {profile_id}. Must be 3000-3999.",
                     }
                 ),
                 400,
             )
 
-        # Check if profile exists
-        existing = _profile_service.get_global_profile(profile_id)
-        if existing is None:
+        success = _profile_service.toggle_interest_profile(profile_id)
+
+        if success:
+            # Get updated profile to return new state
+            profile = _profile_service.get_profile(str(profile_id))
+            if profile:
+                return jsonify(
+                    {
+                        "status": "ok",
+                        "message": f"Interest profile {profile_id} toggled",
+                        "enabled": profile.get("enabled", False),
+                    }
+                )
+            else:
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Interest profile {profile_id} not found after toggle",
+                        }
+                    ),
+                    404,
+                )
+        else:
             return (
                 jsonify(
                     {
                         "status": "error",
-                        "message": f"Profile '{profile_id}' not found. Use create endpoint instead.",
+                        "message": f"Failed to toggle interest profile {profile_id}",
                     }
                 ),
-                404,
-            )
-
-        # Update profile
-        success = _profile_service.update_global_profile(profile_id, profile_data)
-        if not success:
-            return (
-                jsonify({"status": "error", "message": "Failed to update profile"}),
                 500,
             )
-
-        logger.info(f"Updated global profile: {profile_id}")
-        return jsonify(
-            {
-                "status": "ok",
-                "id": profile_id,
-                "message": "Profile updated successfully",
-            }
-        )
 
     except Exception as exc:
         logger.error(
-            f"Failed to update global profile '{profile_id}': {exc}", exc_info=True
-        )
-        return jsonify({"status": "error", "message": str(exc)}), 500
-
-
-@profiles_bp.delete("/global/<profile_id>")
-def delete_global_profile(profile_id: str):
-    """Delete a global profile.
-
-    Args:
-        profile_id: Profile identifier to delete.
-
-    Returns:
-        JSON with status and deletion confirmation.
-    """
-    try:
-        if not _profile_service:
-            return (
-                jsonify(
-                    {"status": "error", "message": "ProfileService not initialized"}
-                ),
-                500,
-            )
-
-        # Check usage before deletion
-        usage = _profile_service.get_profile_usage(profile_id)
-        if usage["channels"] or usage["users"]:
-            return (
-                jsonify(
-                    {
-                        "status": "error",
-                        "message": f"Profile '{profile_id}' is in use and cannot be deleted",
-                        "usage": usage,
-                    }
-                ),
-                409,
-            )
-
-        # Delete profile
-        success = _profile_service.delete_global_profile(profile_id)
-        if not success:
-            return (
-                jsonify({"status": "error", "message": "Failed to delete profile"}),
-                500,
-            )
-
-        logger.info(f"Deleted global profile: {profile_id}")
-        return jsonify(
-            {
-                "status": "ok",
-                "id": profile_id,
-                "message": "Profile deleted successfully",
-            }
-        )
-
-    except Exception as exc:
-        logger.error(
-            f"Failed to delete global profile '{profile_id}': {exc}", exc_info=True
-        )
-        return jsonify({"status": "error", "message": str(exc)}), 500
-
-
-@profiles_bp.post("/global/validate")
-def validate_global_profile():
-    """Validate a global profile configuration without saving.
-
-    Request body:
-        {
-            "profile": {
-                "name": "Profile Name",
-                "keywords": [...],
-                ...
-            }
-        }
-
-    Returns:
-        JSON with validation results.
-    """
-    try:
-        if not request.is_json:
-            return (
-                jsonify(
-                    {
-                        "status": "error",
-                        "message": "Content-Type must be application/json",
-                    }
-                ),
-                400,
-            )
-
-        if not _profile_service:
-            return (
-                jsonify(
-                    {"status": "error", "message": "ProfileService not initialized"}
-                ),
-                500,
-            )
-
-        data = request.get_json()
-        profile_data = data.get("profile", {})
-
-        validation = _profile_service.validate_global_profile(profile_data)
-
-        return jsonify(
-            {
-                "status": "ok",
-                "valid": validation["valid"],
-                "errors": validation["errors"],
-            }
-        )
-
-    except Exception as exc:
-        logger.error(f"Failed to validate profile: {exc}", exc_info=True)
-        return jsonify({"status": "error", "message": str(exc)}), 500
-
-
-@profiles_bp.get("/global/<profile_id>/usage")
-def get_profile_usage(profile_id: str):
-    """Get usage information for a global profile.
-
-    Args:
-        profile_id: Profile identifier.
-
-    Returns:
-        JSON with list of channels and users using this profile.
-    """
-    try:
-        if not _profile_service:
-            return (
-                jsonify(
-                    {"status": "error", "message": "ProfileService not initialized"}
-                ),
-                500,
-            )
-
-        usage = _profile_service.get_profile_usage(profile_id)
-
-        return jsonify(
-            {
-                "status": "ok",
-                "profile_id": profile_id,
-                "usage": usage,
-                "in_use": len(usage["channels"]) > 0 or len(usage["users"]) > 0,
-            }
-        )
-
-    except Exception as exc:
-        logger.error(
-            f"Failed to get usage for profile '{profile_id}': {exc}", exc_info=True
+            f"Failed to toggle interest profile {profile_id}: {exc}", exc_info=True
         )
         return jsonify({"status": "error", "message": str(exc)}), 500

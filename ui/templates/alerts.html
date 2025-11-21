@@ -29,6 +29,7 @@
                     <th>Sender</th>
                     <th>Excerpt</th>
                     <th>Score</th>
+                    <th>Profiles</th>
                     <th>Trigger</th>
                     <th>Timestamp</th>
                     <th class="text-center">Feedback</th>
@@ -112,20 +113,19 @@
                 </div>
             </div>
             <div class="collapse show card-body" id="digest-timeline-body">
-                <div class="timeline" id="digest-timeline" role="list">
-                    {%- for digest in digests %}
-                    <div class="card mb-3" role="listitem">
-                        <div class="card-body">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <h3 class="h5 mb-0">{{ digest.date }}</h3>
-                                <span class="badge bg-info z-index-1">{{ digest.items }} messages</span>
-                            </div>
-                            <p class="mb-0 text-muted">Average score: {{ digest.avg_score }}</p>
+                <div id="digest-schedules-container">
+                    <div class="mb-3 text-muted" id="digest-loading">
+                        <div class="spinner-border spinner-border-sm me-2" role="status">
+                            <span class="visually-hidden">Loading...</span>
                         </div>
+                        Loading digest schedules...
                     </div>
-                    {%- else %}
-                    <p class="text-muted">No digest batches yet.</p>
-                    {%- endfor %}
+                    <div id="digest-schedules" class="d-none">
+                        <!-- Schedule groups will be populated by JavaScript -->
+                    </div>
+                    <div id="digest-empty" class="d-none">
+                        <p class="text-muted mb-0">No digest schedules configured. Configure digest schedules in <a href="/profiles">Profiles</a> to enable batched alerts.</p>
+                    </div>
                 </div>
             </div>
         </article>
@@ -220,6 +220,7 @@
 <script>
     const alertsEndpoint = "{{ url_for('dashboard.recent_alerts') }}";
     const digestsEndpoint = "{{ url_for('dashboard.alert_digests') }}";
+    const digestSchedulesEndpoint = "/api/digest/schedules"; // Proxied through UI or direct to Sentinel
 
     function escapeHtml(value) {
         if (value === null || value === undefined) {
@@ -286,6 +287,7 @@
                 <td data-label="Sender">${escapeHtml(alert.sender || "Unknown")}</td>
                 <td data-label="Excerpt" class="alert-excerpt" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-custom-class="excerpt-tooltip" data-bs-title="${escapeHtml(alert.message_text || alert.excerpt)}">${escapeHtml(alert.excerpt)}</td>
                 <td data-label="Score"><span class="badge bg-danger" style="z-index: 1;">${escapeHtml(Number(alert.score || 0).toFixed(2))}</span></td>
+                <td data-label="Profiles">${renderProfileBadges(alert.matched_profiles)}</td>
                 <td data-label="Trigger">${escapeHtml(alert.trigger || "N/A")}</td>
                 <td data-label="Timestamp" class="alert-timestamp" data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="top" data-bs-custom-class="timestamp-tooltip" data-bs-title='<div><div><strong>Date:</strong> ${escapeHtml(date)}</div><div><strong>Time:</strong> ${escapeHtml(time)}</div><div><strong>Destination:</strong> ${escapeHtml(alert.sent_to || "dm")}</div></div>'>${timestampHtml}</td>
                 <td class="text-center" data-label="Feedback">
@@ -334,7 +336,127 @@
         initTooltips();
     });
 
+    function renderProfileBadges(matchedProfiles) {
+        if (!matchedProfiles || matchedProfiles.length === 0) {
+            return '<span class="text-muted">—</span>';
+        }
+        
+        // Parse if string (JSON)
+        let profiles = matchedProfiles;
+        if (typeof matchedProfiles === 'string') {
+            try {
+                profiles = JSON.parse(matchedProfiles);
+            } catch (e) {
+                return '<span class="text-muted">—</span>';
+            }
+        }
+        
+        // Show first 3 profiles as badges
+        const badgeColors = ['secondary', 'info', 'success', 'warning', 'primary'];
+        const badges = profiles.slice(0, 3).map((profile, idx) => {
+            const color = badgeColors[idx % badgeColors.length];
+            return `<span class="badge bg-${color} me-1" title="Profile: ${escapeHtml(profile)}">${escapeHtml(profile)}</span>`;
+        }).join('');
+        
+        const remaining = profiles.length - 3;
+        const remainingBadge = remaining > 0 ? `<span class="badge bg-dark" title="${remaining} more profile(s)">+${remaining}</span>` : '';
+        
+        return badges + remainingBadge;
+    }
+
+    async function loadDigestSchedules() {
+        const loadingEl = document.getElementById('digest-loading');
+        const schedulesEl = document.getElementById('digest-schedules');
+        const emptyEl = document.getElementById('digest-empty');
+        
+        try {
+            // Try fetching from Sentinel API via UI proxy or direct
+            const sentinelApiUrl = window.SENTINEL_API_BASE_URL || 'http://localhost:8080/api';
+            const response = await fetch(`${sentinelApiUrl}/digest/schedules`, {
+                headers: { 'Accept': 'application/json' }
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to fetch digest schedules');
+            }
+            
+            const data = await response.json();
+            
+            if (loadingEl) loadingEl.classList.add('d-none');
+            
+            if (!data.data || !data.data.schedules || data.data.schedules.length === 0) {
+                if (emptyEl) emptyEl.classList.remove('d-none');
+                return;
+            }
+            
+            renderDigestSchedules(data.data.schedules);
+            if (schedulesEl) schedulesEl.classList.remove('d-none');
+            
+        } catch (error) {
+            console.error('Failed to load digest schedules:', error);
+            if (loadingEl) loadingEl.classList.add('d-none');
+            if (emptyEl) {
+                emptyEl.innerHTML = '<p class="text-muted mb-0">Unable to load digest schedules. Check Sentinel API connection.</p>';
+                emptyEl.classList.remove('d-none');
+            }
+        }
+    }
+
+    function renderDigestSchedules(schedules) {
+        const container = document.getElementById('digest-schedules');
+        if (!container) return;
+        
+        const scheduleIcons = {
+            'hourly': '⏰',
+            'every_4h': '🕓',
+            'every_6h': '🕕',
+            'every_12h': '🕛',
+            'daily': '📅',
+            'weekly': '📊',
+            'none': '🚫'
+        };
+        
+        const scheduleNames = {
+            'hourly': 'Hourly',
+            'every_4h': 'Every 4 Hours',
+            'every_6h': 'Every 6 Hours',
+            'every_12h': 'Every 12 Hours',
+            'daily': 'Daily',
+            'weekly': 'Weekly',
+            'none': 'Disabled'
+        };
+        
+        const html = schedules.map(sched => {
+            const icon = scheduleIcons[sched.schedule] || '📬';
+            const name = scheduleNames[sched.schedule] || sched.schedule;
+            const profileBadges = renderProfileBadges(sched.profiles);
+            
+            return `
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <h4 class="h6 mb-0">${icon} ${name} Digest</h4>
+                            <span class="badge bg-${sched.enabled ? 'success' : 'secondary'}">
+                                ${sched.enabled ? 'Active' : 'Inactive'}
+                            </span>
+                        </div>
+                        <div class="mb-2">
+                            <strong>Profiles:</strong> ${profileBadges}
+                        </div>
+                        <div class="text-muted small">
+                            <div>Next run: ${sched.next_run ? new Date(sched.next_run).toLocaleString() : 'Not scheduled'}</div>
+                            <div>Last run: ${sched.last_run ? new Date(sched.last_run).toLocaleString() : 'Never'}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        container.innerHTML = html;
+    }
+
     function renderDigests(digests) {
+        // Legacy function kept for backward compatibility
         const timeline = document.getElementById("digest-timeline");
         if (!timeline) {
             return;
@@ -750,6 +872,9 @@
         bindInteractions();
         initChannelModal();
         startIntervals();
+        
+        // Load digest schedules (Phase 5)
+        loadDigestSchedules();
     });
 
     // Clean up intervals on page unload

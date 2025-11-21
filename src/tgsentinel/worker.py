@@ -9,7 +9,13 @@ from typing import Any, Dict, List, Optional, Tuple, cast
 from redis import Redis
 from telethon import TelegramClient
 
-from .config import AppCfg, ChannelRule, load_config
+from .config import (
+    AppCfg,
+    ChannelRule,
+    DigestSchedule,
+    ProfileDigestConfig,
+    load_config,
+)
 from .heuristics import run_heuristics
 from .metrics import inc
 from .notifier import notify_channel, notify_dm
@@ -43,6 +49,45 @@ def load_rules(cfg: AppCfg):
     for c in cfg.channels:
         rule_by_chat[c.id] = c
     return rule_by_chat
+
+
+def get_primary_digest_schedule(
+    digest_config: Optional[ProfileDigestConfig],
+) -> str:
+    """Get the primary (most frequent) digest schedule from config.
+
+    Returns the schedule with highest frequency for digest assignment.
+    Priority order: hourly > every_4h > every_6h > every_12h > daily > weekly > none
+
+    Args:
+        digest_config: Resolved digest configuration (may be None)
+
+    Returns:
+        Schedule name as string (e.g., "hourly", "daily") or empty string if no digest
+    """
+    if not digest_config or not digest_config.schedules:
+        return ""  # No digest config or no schedules
+
+    # Priority order (most frequent first)
+    priority = [
+        DigestSchedule.HOURLY,
+        DigestSchedule.EVERY_4H,
+        DigestSchedule.EVERY_6H,
+        DigestSchedule.EVERY_12H,
+        DigestSchedule.DAILY,
+        DigestSchedule.WEEKLY,
+        DigestSchedule.NONE,
+    ]
+
+    # Find first matching enabled schedule in priority order
+    enabled_schedules = {s.schedule for s in digest_config.schedules if s.enabled}
+
+    for sched in priority:
+        if sched in enabled_schedules:
+            return sched.value
+
+    # If no enabled schedules found, return empty (instant alerts only)
+    return ""
 
 
 async def process_stream_message(
@@ -199,6 +244,17 @@ async def process_stream_message(
         json.dumps(hr.trigger_annotations) if hr.trigger_annotations else ""
     )
 
+    # Prepare matched_profiles (Phase 2: for digest deduplication)
+    matched_profiles_json = ""
+    digest_schedule = ""
+    if resolved_profile:
+        matched_profiles_json = (
+            json.dumps(resolved_profile.matched_profile_ids)
+            if resolved_profile.matched_profile_ids
+            else ""
+        )
+        digest_schedule = get_primary_digest_schedule(resolved_profile.digest)
+
     upsert_message(
         engine,
         rid,
@@ -211,6 +267,8 @@ async def process_stream_message(
         triggers,
         sender_id,
         trigger_annotations_json,
+        matched_profiles_json,  # Phase 2: JSON array of profile IDs
+        digest_schedule,  # Phase 2: Primary schedule for this message
     )
 
     important = hr.important or (sem is not None and sem >= cfg.similarity_threshold)

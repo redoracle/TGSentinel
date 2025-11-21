@@ -68,7 +68,7 @@ channels:
       - security
     overrides:
       keywords_extra:
-        - Algorand
+        - marketing
       scoring_weights:
         security: 2.0
 
@@ -119,7 +119,7 @@ def test_profile_resolution_e2e(temp_profiles_config):
         vip_senders=[],
         profiles=["security"],
         overrides=ChannelOverrides(
-            keywords_extra=["Algorand"],
+            keywords_extra=["marketing"],
             scoring_weights={"security": 2.0},
         ),
     )
@@ -132,11 +132,11 @@ def test_profile_resolution_e2e(temp_profiles_config):
     assert "CVE" in resolved.security_keywords
     assert "vulnerability" in resolved.security_keywords
     assert "critical" in resolved.urgency_keywords
-    assert "Algorand" in resolved.keywords  # From override
+    assert "marketing" in resolved.keywords  # From override
     assert resolved.scoring_weights["security"] == 2.0  # Overridden
 
     # Test with actual message text
-    message_text = "CRITICAL: CVE-2024-1234 vulnerability found in Algorand. Urgent patch required!"
+    message_text = "CRITICAL: CVE-2024-1234 vulnerability found in marketing. Urgent patch required!"
 
     hr = run_heuristics(
         text=message_text,
@@ -188,7 +188,7 @@ def test_database_storage_with_annotations():
             trigger_annotations = {
                 "security": ["CVE", "vulnerability"],
                 "urgency": ["critical"],
-                "keywords": ["Algorand"],
+                "keywords": ["marketing"],
             }
             annotations_json = json.dumps(trigger_annotations)
 

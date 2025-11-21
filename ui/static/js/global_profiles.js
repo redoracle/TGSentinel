@@ -12,6 +12,8 @@ const globalProfileEndpoints = {
     delete: (id) => `/api/profiles/global/${id}`,
     validate: '/api/profiles/global/validate',
     usage: (id) => `/api/profiles/global/${id}/usage`,
+    getDigest: (id) => `/api/digest/profiles/${id}/config`,
+    updateDigest: (id) => `/api/digest/profiles/${id}/config`,
 };
 
 // State
@@ -90,12 +92,18 @@ function renderGlobalProfilesList() {
         <a href="#" class="list-group-item list-group-item-action ${selectedGlobalProfile?.id === profile.id ? 'active' : ''}"
            data-profile-id="${profile.id}">
             <div class="d-flex w-100 justify-content-between align-items-center">
-                <div>
+                <div style="flex: 1;">
                     <h6 class="mb-1">${escapeHtml(profile.name || profile.id)}</h6>
                     <small class="text-muted">${profile.id}</small>
                 </div>
-                <div>
+                <div class="d-flex gap-2 align-items-center">
                     <span class="badge bg-secondary">${countTotalKeywords(profile)} keywords</span>
+                    <button class="btn btn-sm btn-outline-primary digest-config-btn" 
+                            data-profile-id="${profile.id}" 
+                            title="Configure Digest Schedules"
+                            onclick="event.preventDefault(); event.stopPropagation(); showGlobalProfileDigestEditor('${profile.id}')">
+                        <i class="bi bi-calendar-week"></i>
+                    </button>
                 </div>
             </div>
         </a>
@@ -263,6 +271,11 @@ function populateGlobalProfileForm(profile) {
     if (detectDocs) detectDocs.checked = profile.detect_documents !== false;
     if (prioritizePinned) prioritizePinned.checked = profile.prioritize_pinned !== false;
     
+    // Populate digest configuration (if exists in profile)
+    if (profile.digest_config) {
+        populateDigestConfigInForm(profile.digest_config);
+    }
+    
     // Show delete button
     const deleteBtn = document.getElementById('btn-delete-global-profile');
     if (deleteBtn) deleteBtn.classList.remove('d-none');
@@ -352,6 +365,186 @@ function resetGlobalProfileForm() {
 }
 
 /**
+ * Extract digest configuration from form fields
+ * Returns null if no schedules are configured, otherwise returns digest config object
+ */
+function extractDigestConfigFromForm() {
+    const schedules = [];
+    
+    // Process all 3 possible schedules
+    for (let i = 1; i <= 3; i++) {
+        const scheduleType = document.getElementById(`digest-schedule-${i}-type`)?.value;
+        if (!scheduleType || scheduleType === '') {
+            continue; // Skip if no schedule selected
+        }
+        
+        const schedule = {
+            schedule: scheduleType,
+            enabled: true,
+        };
+        
+        // Optional overrides (only include if set)
+        const topNInput = document.getElementById(`digest-schedule-${i}-top-n`);
+        const minScoreInput = document.getElementById(`digest-schedule-${i}-min-score`);
+        
+        if (topNInput && topNInput.value && topNInput.value !== '') {
+            const topN = parseInt(topNInput.value, 10);
+            if (!isNaN(topN) && topN > 0 && topN <= 100) {
+                schedule.top_n = topN;
+            }
+        }
+        
+        if (minScoreInput && minScoreInput.value && minScoreInput.value !== '') {
+            const minScore = parseFloat(minScoreInput.value);
+            if (!isNaN(minScore) && minScore >= 0 && minScore <= 10) {
+                schedule.min_score = minScore;
+            }
+        }
+        
+        // Schedule-specific settings
+        if (scheduleType === 'daily') {
+            const dailyHourInput = document.getElementById(`digest-schedule-${i}-daily-hour`);
+            if (dailyHourInput && dailyHourInput.value && dailyHourInput.value !== '') {
+                const dailyHour = parseInt(dailyHourInput.value, 10);
+                if (!isNaN(dailyHour) && dailyHour >= 0 && dailyHour <= 23) {
+                    schedule.daily_hour = dailyHour;
+                }
+            }
+        } else if (scheduleType === 'weekly') {
+            const weeklyDayInput = document.getElementById(`digest-schedule-${i}-weekly-day`);
+            const weeklyHourInput = document.getElementById(`digest-schedule-${i}-weekly-hour`);
+            
+            if (weeklyDayInput && weeklyDayInput.value && weeklyDayInput.value !== '') {
+                const weeklyDay = parseInt(weeklyDayInput.value, 10);
+                if (!isNaN(weeklyDay) && weeklyDay >= 0 && weeklyDay <= 6) {
+                    schedule.weekly_day = weeklyDay;
+                }
+            }
+            
+            if (weeklyHourInput && weeklyHourInput.value && weeklyHourInput.value !== '') {
+                const weeklyHour = parseInt(weeklyHourInput.value, 10);
+                if (!isNaN(weeklyHour) && weeklyHour >= 0 && weeklyHour <= 23) {
+                    schedule.weekly_hour = weeklyHour;
+                }
+            }
+        }
+        
+        schedules.push(schedule);
+    }
+    
+    // If no schedules configured, return null
+    if (schedules.length === 0) {
+        return null;
+    }
+    
+    // Delivery settings
+    const modeSelect = document.getElementById('digest-mode');
+    const targetChannelInput = document.getElementById('digest-target-channel');
+    
+    const mode = (modeSelect && modeSelect.value) ? modeSelect.value : 'dm';
+    const targetChannel = (targetChannelInput && targetChannelInput.value && targetChannelInput.value.trim() !== '') 
+        ? targetChannelInput.value.trim() 
+        : null;
+    
+    return {
+        schedules: schedules,
+        mode: mode,
+        target_channel: targetChannel
+    };
+}
+
+/**
+ * Toggle schedule-specific fields visibility based on schedule type
+ * @param {number} scheduleNum - Schedule number (1-3)
+ * @param {string} scheduleType - Schedule type ('daily', 'weekly', etc.)
+ */
+function toggleScheduleSpecificFields(scheduleNum, scheduleType) {
+    const dailySettings = document.getElementById(`digest-schedule-${scheduleNum}-daily-settings`);
+    const weeklyDaySettings = document.getElementById(`digest-schedule-${scheduleNum}-weekly-settings`);
+    const weeklyHourSettings = document.getElementById(`digest-schedule-${scheduleNum}-weekly-hour-settings`);
+    
+    // Hide all first
+    if (dailySettings) dailySettings.classList.add('d-none');
+    if (weeklyDaySettings) weeklyDaySettings.classList.add('d-none');
+    if (weeklyHourSettings) weeklyHourSettings.classList.add('d-none');
+    
+    // Show relevant fields based on schedule type
+    if (scheduleType === 'daily' && dailySettings) {
+        dailySettings.classList.remove('d-none');
+    } else if (scheduleType === 'weekly') {
+        if (weeklyDaySettings) weeklyDaySettings.classList.remove('d-none');
+        if (weeklyHourSettings) weeklyHourSettings.classList.remove('d-none');
+    }
+}
+
+/**
+ * Populate digest configuration form fields from a digest config object
+ * @param {Object|null} digestConfig - Digest configuration object or null to clear
+ */
+function populateDigestConfigInForm(digestConfig) {
+    if (!digestConfig) {
+        // Clear all digest fields
+        for (let i = 1; i <= 3; i++) {
+            const typeSelect = document.getElementById(`digest-schedule-${i}-type`);
+            if (typeSelect) typeSelect.value = '';
+            toggleScheduleSpecificFields(i, '');
+        }
+        const modeSelect = document.getElementById('digest-mode');
+        const targetChannelInput = document.getElementById('digest-target-channel');
+        if (modeSelect) modeSelect.value = 'dm';
+        if (targetChannelInput) targetChannelInput.value = '';
+        return;
+    }
+    
+    // Populate schedules (up to 3)
+    const schedules = digestConfig.schedules || [];
+    for (let i = 0; i < 3; i++) {
+        const schedNum = i + 1;
+        const schedule = schedules[i];
+        
+        if (schedule) {
+            // Set schedule type
+            const typeSelect = document.getElementById(`digest-schedule-${schedNum}-type`);
+            if (typeSelect) typeSelect.value = schedule.schedule || '';
+            
+            // Set optional overrides
+            const topNInput = document.getElementById(`digest-schedule-${schedNum}-top-n`);
+            const minScoreInput = document.getElementById(`digest-schedule-${schedNum}-min-score`);
+            
+            if (topNInput) topNInput.value = schedule.top_n || '';
+            if (minScoreInput) minScoreInput.value = schedule.min_score || '';
+            
+            // Set schedule-specific fields
+            if (schedule.schedule === 'daily') {
+                const dailyHourInput = document.getElementById(`digest-schedule-${schedNum}-daily-hour`);
+                if (dailyHourInput) dailyHourInput.value = schedule.daily_hour !== undefined ? schedule.daily_hour : 8;
+            } else if (schedule.schedule === 'weekly') {
+                const weeklyDaySelect = document.getElementById(`digest-schedule-${schedNum}-weekly-day`);
+                const weeklyHourInput = document.getElementById(`digest-schedule-${schedNum}-weekly-hour`);
+                
+                if (weeklyDaySelect) weeklyDaySelect.value = schedule.weekly_day !== undefined ? schedule.weekly_day : 0;
+                if (weeklyHourInput) weeklyHourInput.value = schedule.weekly_hour !== undefined ? schedule.weekly_hour : 8;
+            }
+            
+            // Show/hide relevant fields
+            toggleScheduleSpecificFields(schedNum, schedule.schedule || '');
+        } else {
+            // Clear schedule
+            const typeSelect = document.getElementById(`digest-schedule-${schedNum}-type`);
+            if (typeSelect) typeSelect.value = '';
+            toggleScheduleSpecificFields(schedNum, '');
+        }
+    }
+    
+    // Populate delivery settings
+    const modeSelect = document.getElementById('digest-mode');
+    const targetChannelInput = document.getElementById('digest-target-channel');
+    
+    if (modeSelect) modeSelect.value = digestConfig.mode || 'dm';
+    if (targetChannelInput) targetChannelInput.value = digestConfig.target_channel || '';
+}
+
+/**
  * Save global profile (create or update)
  */
 async function saveGlobalProfile(event) {
@@ -388,6 +581,12 @@ async function saveGlobalProfile(event) {
         detect_documents: document.getElementById('global-detect-documents').checked,
         prioritize_pinned: document.getElementById('global-prioritize-pinned').checked,
     };
+    
+    // Extract digest configuration from form
+    const digestConfig = extractDigestConfigFromForm();
+    if (digestConfig) {
+        profileData.digest_config = digestConfig;
+    }
     
     try {
         let response;
@@ -634,3 +833,240 @@ if (typeof showToast === 'undefined') {
         alert(message);
     };
 }
+
+// ============================================================================
+// DIGEST CONFIGURATION MANAGEMENT
+// ============================================================================
+
+let currentDigestEditor = null;
+let currentDigestProfileId = null;
+
+/**
+ * Show digest configuration editor for a global profile
+ */
+async function showGlobalProfileDigestEditor(profileId) {
+    currentDigestProfileId = profileId;
+    
+    // Find profile name
+    const profile = globalProfiles.find(p => p.id === profileId);
+    const profileName = profile ? (profile.name || profileId) : profileId;
+    
+    // Create modal if it doesn't exist
+    let modal = document.getElementById('digest-config-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'digest-config-modal';
+        modal.className = 'modal fade';
+        modal.innerHTML = `
+            <div class="modal-dialog modal-xl">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            Configure Digest Schedules
+                            <br><small class="text-muted">Profile: <span id="digest-modal-profile-name">${escapeHtml(profileName)}</span></small>
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="digest-editor-container"></div>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    } else {
+        // Update profile name in existing modal
+        const nameSpan = document.getElementById('digest-modal-profile-name');
+        if (nameSpan) nameSpan.textContent = profileName;
+    }
+    
+    // Initialize digest editor
+    const container = document.getElementById('digest-editor-container');
+    if (!container) {
+        console.error('Digest editor container not found');
+        showToast('Failed to initialize digest editor: container not found', 'error');
+        return;
+    }
+    
+    // Create editor instance
+    try {
+        currentDigestEditor = new DigestScheduleEditor('digest-editor-container', {
+            maxSchedules: 3,
+            allowModeSelection: true,
+            onSave: async (config) => {
+                await saveGlobalProfileDigestConfig(currentDigestProfileId, config);
+            },
+            onCancel: () => {
+                const modalInstance = bootstrap.Modal.getInstance(modal);
+                if (modalInstance) modalInstance.hide();
+            }
+        });
+    } catch (error) {
+        console.error('Failed to create digest editor:', error);
+        showToast(`Failed to initialize digest editor: ${error.message}`, 'error');
+        return;
+    }
+    
+    // Load existing configuration
+    try {
+        const config = await fetchGlobalProfileDigestConfig(profileId);
+        if (config) {
+            currentDigestEditor.loadConfig(config);
+        }
+    } catch (error) {
+        console.error('Failed to load digest config:', error);
+        showToast('Failed to load digest configuration', 'error');
+    }
+    
+    // Show modal
+    const modalInstance = new bootstrap.Modal(modal);
+    modalInstance.show();
+}
+
+/**
+ * Fetch digest configuration for a global profile
+ */
+async function fetchGlobalProfileDigestConfig(profileId) {
+    try {
+        const response = await fetch(globalProfileEndpoints.getDigest(profileId));
+        
+        if (!response.ok) {
+            if (response.status === 404) {
+                // Profile exists but no digest config yet - return empty config
+                return {
+                    schedules: [],
+                    mode: 'dm',
+                    target_channel: '',
+                    top_n: 10,
+                    min_score: 5.0
+                };
+            }
+            
+            // Try to parse error message from response
+            let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+            try {
+                const errorData = await response.json();
+                if (errorData && errorData.message) {
+                    errorMessage = errorData.message;
+                }
+            } catch (jsonError) {
+                // If JSON parsing fails, try text
+                try {
+                    const errorText = await response.text();
+                    if (errorText && errorText.trim() !== '') {
+                        errorMessage = errorText.substring(0, 200);
+                    }
+                } catch (textError) {
+                    // Keep the HTTP status message
+                }
+            }
+            throw new Error(errorMessage);
+        }
+        
+        // Try to parse successful response as JSON
+        let data;
+        try {
+            data = await response.json();
+        } catch (jsonError) {
+            console.warn('Response is not valid JSON, using defaults:', jsonError);
+            // Return defaults if response is not JSON
+            return {
+                schedules: [],
+                mode: 'dm',
+                target_channel: '',
+                top_n: 10,
+                min_score: 5.0
+            };
+        }
+        
+        if (data && data.status === 'ok' && data.digest) {
+            return data.digest;
+        } else if (data && data.status === 'ok' && !data.digest) {
+            // No digest config - return defaults
+            return {
+                schedules: [],
+                mode: 'dm',
+                target_channel: '',
+                top_n: 10,
+                min_score: 5.0
+            };
+        } else {
+            throw new Error((data && data.message) || 'Failed to fetch digest config');
+        }
+    } catch (error) {
+        console.error('Error fetching digest config:', error);
+        throw error;
+    }
+}
+
+/**
+ * Save digest configuration for a global profile
+ */
+async function saveGlobalProfileDigestConfig(profileId, config) {
+    try {
+        const response = await fetch(globalProfileEndpoints.updateDigest(profileId), {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(config)
+        });
+        
+        if (!response.ok) {
+            // Try to parse error message from response
+            let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+            try {
+                const errorData = await response.json();
+                if (errorData && errorData.message) {
+                    errorMessage = errorData.message;
+                }
+            } catch (jsonError) {
+                // If JSON parsing fails, try text
+                try {
+                    const errorText = await response.text();
+                    if (errorText && errorText.trim() !== '') {
+                        errorMessage = errorText.substring(0, 200);
+                    }
+                } catch (textError) {
+                    // Keep the HTTP status message
+                }
+            }
+            throw new Error(errorMessage);
+        }
+        
+        // Try to parse successful response as JSON
+        let data;
+        try {
+            data = await response.json();
+        } catch (jsonError) {
+            console.warn('Response is not valid JSON, assuming success:', jsonError);
+            // Assume success if response is OK but not JSON
+            data = { status: 'ok' };
+        }
+        
+        if (data && data.status === 'ok') {
+            showToast('Digest configuration saved successfully', 'success');
+            
+            // Close modal
+            const modal = document.getElementById('digest-config-modal');
+            if (modal) {
+                const modalInstance = bootstrap.Modal.getInstance(modal);
+                if (modalInstance) modalInstance.hide();
+            }
+            
+            return true;
+        } else {
+            throw new Error((data && data.message) || 'Failed to save digest config');
+        }
+    } catch (error) {
+        console.error('Error saving digest config:', error);
+        const errorMessage = (error && error.message) || 'Unknown error occurred';
+        showToast(`Failed to save: ${errorMessage}`, 'error');
+        return false;
+    }
+}
+
+// Make functions globally accessible
+window.showGlobalProfileDigestEditor = showGlobalProfileDigestEditor;
+window.fetchGlobalProfileDigestConfig = fetchGlobalProfileDigestConfig;
+window.saveGlobalProfileDigestConfig = saveGlobalProfileDigestConfig;

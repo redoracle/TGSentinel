@@ -780,7 +780,7 @@ GET /api/jobs/{job_id}/logs?offset=N
 {
   "channel_123": {
     "id": "channel_123",
-    "name": "Algorand Dev",
+    "name": "marketing Dev",
     "type": "channel",
     "channel_id": 123,
     "enabled": true,
@@ -819,8 +819,8 @@ GET /api/jobs/{job_id}/logs?offset=N
 
 ```json
 {
-  "name": "algorand core development",
-  "description": "Technical discussions about Algorand protocol",
+  "name": "marketing core development",
+  "description": "Technical discussions about marketing protocol",
   "enabled": true,
 
   "positive_samples": ["Example message 1", "Example message 2"],
@@ -830,7 +830,7 @@ GET /api/jobs/{job_id}/logs?offset=N
   "weight": 1.0,
   "priority": "high",
 
-  "keywords": ["algorand", "consensus"],
+  "keywords": ["marketing", "consensus"],
   "channels": [123, 456],
 
   "created_at": "2025-11-13T...",
@@ -850,7 +850,7 @@ Test profiles against historical messages:
 {
   "status": "ok",
   "profile_id": "channel_123",
-  "profile_name": "Algorand Dev",
+  "profile_name": "marketing Dev",
   "test_date": "2025-11-13T...",
 
   "matches": [...],

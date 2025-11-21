@@ -127,10 +127,20 @@ def _mock_redis_for_auth(response_data, context_data=None):
     return mock_redis
 
 
+@pytest.fixture(scope="module")
+def app():
+    """Create the test app once per module to avoid repeated heavy setup."""
+    return _make_app()
+
+
+@pytest.fixture
+def client(app):
+    """Return a fresh test client for isolation across tests."""
+    return app.test_client()
+
+
 @pytest.mark.parametrize("missing_field", ["phone", None])
-def test_login_start_requires_phone(missing_field):
-    app = _make_app()
-    client = app.test_client()
+def test_login_start_requires_phone(missing_field, client):
     payload = {"phone": "+15550100"}
     if missing_field:
         payload.pop("phone")
@@ -153,10 +163,7 @@ def test_login_start_requires_phone(missing_field):
             assert data["status"] == "ok"
 
 
-def test_login_start_sends_code_and_stores_context():
-    app = _make_app()
-    client = app.test_client()
-
+def test_login_start_sends_code_and_stores_context(client):
     mock_redis = _mock_redis_for_auth(
         {"status": "ok", "phone_code_hash": "abc123", "timeout": 30}
     )
@@ -172,10 +179,7 @@ def test_login_start_sends_code_and_stores_context():
         assert stored["phone_code_hash"] == "abc123"
 
 
-def test_login_verify_410_when_context_missing():
-    app = _make_app()
-    client = app.test_client()
-
+def test_login_verify_410_when_context_missing(client):
     mock_r = MagicMock()
     mock_r.get.return_value = None
 
@@ -192,10 +196,7 @@ def test_login_verify_410_when_context_missing():
         mock_submit.assert_not_called()
 
 
-def test_login_verify_success_sets_session_and_clears_context():
-    app = _make_app()
-    client = app.test_client()
-
+def test_login_verify_success_sets_session_and_clears_context(client):
     mock_redis = _mock_redis_for_auth(
         {"status": "ok", "message": "Authenticated"}, {"phone_code_hash": "abc123"}
     )
@@ -218,10 +219,7 @@ def test_login_verify_success_sets_session_and_clears_context():
             assert sess.get("telegram_authenticated") is True
 
 
-def test_relogin_and_logout_ok():
-    app = _make_app()
-    client = app.test_client()
-
+def test_relogin_and_logout_ok(client):
     # Patch in blueprint module where function is used after injection
     with patch(
         "ui.routes.session._invalidate_session", return_value={"file_removed": True}
@@ -233,10 +231,7 @@ def test_relogin_and_logout_ok():
         assert inv.call_count == 2
 
 
-def test_login_resend_requires_existing_context():
-    app = _make_app()
-    client = app.test_client()
-
+def test_login_resend_requires_existing_context(client):
     mock_r = MagicMock()
     mock_r.get.return_value = None
 
@@ -245,10 +240,7 @@ def test_login_resend_requires_existing_context():
         assert resp.status_code == 410
 
 
-def test_login_resend_updates_context_via_sentinel():
-    app = _make_app()
-    client = app.test_client()
-
+def test_login_resend_updates_context_via_sentinel(client):
     mock_redis = _mock_redis_for_auth(
         {"status": "ok", "phone_code_hash": "newhash"}, {"phone_code_hash": "oldhash"}
     )

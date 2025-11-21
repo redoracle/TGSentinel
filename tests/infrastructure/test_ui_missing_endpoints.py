@@ -312,7 +312,7 @@ class TestProfilesImport:
             # Create valid YAML content
             yaml_content = """
 interests:
-  - topic: Algorand Development
+  - topic: marketing Development
     positive:
       - "Smart contract deployment"
       - "Governance participation"
@@ -500,7 +500,7 @@ class TestAnomalyDetection:
 
     def test_volume_spike_anomaly(self, client):
         """Test detection of high message volume."""
-        # Mock channel stats with one high-volume channel
+        # Mock channel stats with one high-volume channel and several normal channels
         mock_stats = [
             {
                 "chat_id": 1001,
@@ -511,7 +511,21 @@ class TestAnomalyDetection:
             },
             {
                 "chat_id": 1002,
-                "msg_count": 100,  # 10x the normal (avg will be 55, this is >3x)
+                "msg_count": 12,
+                "avg_score": 0.55,
+                "max_score": 0.85,
+                "alert_count": 3,
+            },
+            {
+                "chat_id": 1003,
+                "msg_count": 9,
+                "avg_score": 0.48,
+                "max_score": 0.75,
+                "alert_count": 1,
+            },
+            {
+                "chat_id": 2000,
+                "msg_count": 200,  # Significantly above 3x the average of other channels
                 "avg_score": 0.6,
                 "max_score": 0.9,
                 "alert_count": 5,
@@ -524,11 +538,11 @@ class TestAnomalyDetection:
             assert response.status_code == 200
             data = json.loads(response.data)
 
-            # Average message count is (10 + 100) / 2 = 55
-            # High Volume Channel has 100 messages, which is > 55 * 3 = 165? No!
-            # So we need 10 and 200 to trigger the anomaly
-            # Let's verify anomalies were calculated
-            assert "anomalies" in data
+            volume_anomalies = [
+                a for a in data["anomalies"] if a["type"] == "volume_spike"
+            ]
+            assert len(volume_anomalies) == 1
+            assert "High volume" in volume_anomalies[0]["signal"]
 
     def test_importance_spike_anomaly(self, client):
         """Test detection of high importance scores."""
@@ -544,6 +558,20 @@ class TestAnomalyDetection:
             {
                 "chat_id": 1002,
                 "msg_count": 10,
+                "avg_score": 0.25,
+                "max_score": 0.55,
+                "alert_count": 1,
+            },
+            {
+                "chat_id": 1003,
+                "msg_count": 12,
+                "avg_score": 0.3,
+                "max_score": 0.6,
+                "alert_count": 2,
+            },
+            {
+                "chat_id": 2000,
+                "msg_count": 10,
                 "avg_score": 0.9,  # Much higher than average
                 "max_score": 1.0,
                 "alert_count": 8,
@@ -556,12 +584,11 @@ class TestAnomalyDetection:
             assert response.status_code == 200
             data = json.loads(response.data)
 
-            # Average is (0.2 + 0.9) / 2 = 0.55
-            # High channel has 0.9, which is > 0.55 * 2 = 1.1? No!
-            # Need to adjust: avg = 0.3, high = 0.9 => 0.9 > 0.6? Yes
-            # Let's just verify response structure
-            assert "anomalies" in data
-            assert isinstance(data["anomalies"], list)
+            importance_anomalies = [
+                a for a in data["anomalies"] if a["type"] == "importance_spike"
+            ]
+            assert len(importance_anomalies) == 1
+            assert "High importance" in importance_anomalies[0]["signal"]
 
     def test_high_alert_rate_anomaly(self, client):
         """Test detection of high alert rate."""
@@ -591,7 +618,7 @@ class TestAnomalyDetection:
 class TestSocketIOLogStreaming:
     """Test Socket.IO log streaming functionality."""
 
-    def test_log_subscription(self, mock_init):
+    def test_log_subscription(self):
         """Test subscribing to log stream."""
         # Socket.IO testing requires the actual socketio instance
         # This is a placeholder that verifies the handler exists
@@ -600,7 +627,7 @@ class TestSocketIOLogStreaming:
         # Just verify the handler is callable
         assert callable(socket_subscribe_logs)
 
-    def test_broadcast_log_function(self, mock_init):
+    def test_broadcast_log_function(self):
         """Test the broadcast_log helper function."""
         from ui.app import broadcast_log
 

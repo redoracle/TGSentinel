@@ -1,0 +1,44 @@
+{# Alert Profiles Tab Content #}
+<section class="row g-4 mb-4">
+    <!-- Alert Profiles List (Left Column) -->
+    <div class="col-12 col-xl-4">
+        <article class="card alert-profiles-list-card" aria-labelledby="alert-profiles-list-heading">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="card-title mb-0" id="alert-profiles-list-heading">Alert Profiles</h2>
+                    <small class="text-muted"><span id="alert-profiles-count">0</span> profiles</small>
+                        </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-primary" type="button" id="btn-alert-bulk-actions" title="Bulk actions">
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M3 9.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/>
+                        </svg>
+                    </button>
+                    <button class="btn btn-sm btn-primary" type="button" id="btn-new-alert-profile">
+                        <svg width="16" height="16" fill="currentColor" class="bi bi-plus-lg" viewBox="0 0 16 16">
+                            <path fill-rule="evenodd" d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2Z"/>
+                        </svg>
+                        New
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <!-- Search/Filter Bar -->
+                <div class="p-3 border-bottom">
+                    <input type="text" class="form-control form-control-sm" id="alert-profiles-search" placeholder="🔍 Search profiles...">
+                </div>
+                <!-- Profiles List with virtualized scrolling -->
+                <div class="alert-profiles-list-container" id="alert-profiles-list-container">
+                    <div class="list-group list-group-flush" id="alert-profiles-list">
+                        <!-- Populated dynamically by alert_profiles.js -->
+                    </div>
+                </div>
+            </div>
+        </article>
+    </div>
+
+    <!-- Alert Profile Editor (Right Column) -->
+    <div class="col-12 col-xl-8">
+        {% include 'profiles/_alert_profile_form.html' %}
+    </div>
+</section>

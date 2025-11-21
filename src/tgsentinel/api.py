@@ -9,6 +9,7 @@ The API runs in a separate thread alongside the main sentinel worker.
 """
 
 import base64
+import fcntl
 import hashlib
 import json
 import logging
@@ -23,6 +24,7 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+import yaml
 from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
@@ -814,6 +816,986 @@ def create_api_app() -> Flask:
                 ),
                 500,
             )
+
+    @app.route("/api/digest/schedules", methods=["GET"])
+    def get_digest_schedules():
+        """Get all configured digest schedules across all profiles.
+
+        Query Parameters:
+            None
+
+        Returns:
+            JSON with all digest schedules and their status
+        """
+        if _config is None:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "data": None,
+                        "error": "Configuration not available",
+                    }
+                ),
+                503,
+            )
+
+        try:
+            from .config import ProfileDefinition
+
+            schedules_data = []
+
+            # Collect all unique schedules across all profiles
+            schedule_map = (
+                {}
+            )  # schedule_type -> {profiles: [], next_run: None, last_run: None}
+
+            # Check global profiles
+            for profile_id, profile in _config.global_profiles.items():
+                if not isinstance(profile, ProfileDefinition):
+                    continue
+                if not profile.digest or not profile.digest.schedules:
+                    continue
+
+                for sched_cfg in profile.digest.schedules:
+                    if not sched_cfg.enabled:
+                        continue
+
+                    sched_type = sched_cfg.schedule.value
+                    if sched_type not in schedule_map:
+                        schedule_map[sched_type] = {
+                            "schedule": sched_type,
+                            "enabled": True,
+                            "profiles": [],
+                            "next_run": None,
+                            "last_run": None,
+                        }
+
+                    if profile_id not in schedule_map[sched_type]["profiles"]:
+                        schedule_map[sched_type]["profiles"].append(profile_id)
+
+            # Fetch last_run times from Redis
+            if _redis_client:
+                try:
+                    from .redis_operations import RedisManager
+
+                    redis_mgr = RedisManager(_redis_client)
+                    schedule_times = redis_mgr.get_all_digest_schedule_times()
+                    for sched_type, last_run in schedule_times.items():
+                        if sched_type in schedule_map:
+                            schedule_map[sched_type]["last_run"] = last_run
+                except Exception as e:
+                    logger.warning(f"Failed to fetch schedule times from Redis: {e}")
+
+            schedules_data = list(schedule_map.values())
+
+            return (
+                jsonify(
+                    {
+                        "status": "ok",
+                        "data": {
+                            "schedules": schedules_data,
+                            "count": len(schedules_data),
+                        },
+                        "error": None,
+                    }
+                ),
+                200,
+            )
+
+        except Exception as e:
+            logger.error(f"[API] Failed to fetch digest schedules: {e}", exc_info=True)
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "data": None,
+                        "error": f"Failed to fetch digest schedules: {str(e)}",
+                    }
+                ),
+                500,
+            )
+
+    @app.route("/api/digest/schedules/<profile_id>", methods=["GET"])
+    def get_profile_digest_config(profile_id: str):
+        """Get digest configuration for a specific profile.
+
+        Path Parameters:
+            profile_id: Profile identifier
+
+        Returns:
+            JSON with profile's digest configuration
+        """
+        if _config is None:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "data": None,
+                        "error": "Configuration not available",
+                    }
+                ),
+                503,
+            )
+
+        try:
+            from .config import ProfileDefinition
+
+            # Look up profile
+            profile = _config.global_profiles.get(profile_id)
+            if not profile or not isinstance(profile, ProfileDefinition):
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "data": None,
+                            "error": f"Profile '{profile_id}' not found",
+                        }
+                    ),
+                    404,
+                )
+
+            # Extract digest configuration
+            digest_cfg = profile.digest
+            if not digest_cfg:
+                return (
+                    jsonify(
+                        {
+                            "status": "ok",
+                            "data": {
+                                "profile_id": profile_id,
+                                "schedules": [],
+                                "mode": "dm",
+                                "target_channel": None,
+                            },
+                            "error": None,
+                        }
+                    ),
+                    200,
+                )
+
+            # Serialize schedules
+            schedules_data = []
+            for sched_cfg in digest_cfg.schedules:
+                sched_data = {
+                    "schedule": sched_cfg.schedule.value,
+                    "enabled": sched_cfg.enabled,
+                }
+
+                # Add optional overrides if present
+                if sched_cfg.top_n is not None:
+                    sched_data["top_n"] = sched_cfg.top_n
+                if sched_cfg.min_score is not None:
+                    sched_data["min_score"] = sched_cfg.min_score
+
+                # Add schedule-specific settings
+                if sched_cfg.schedule.value == "daily":
+                    sched_data["daily_hour"] = sched_cfg.daily_hour
+                elif sched_cfg.schedule.value == "weekly":
+                    sched_data["weekly_day"] = sched_cfg.weekly_day
+                    sched_data["weekly_hour"] = sched_cfg.weekly_hour
+
+                schedules_data.append(sched_data)
+
+            response_data = {
+                "profile_id": profile_id,
+                "schedules": schedules_data,
+                "top_n": digest_cfg.top_n,
+                "min_score": digest_cfg.min_score,
+                "mode": digest_cfg.mode,
+                "target_channel": digest_cfg.target_channel,
+            }
+
+            return (
+                jsonify({"status": "ok", "data": response_data, "error": None}),
+                200,
+            )
+
+        except Exception as e:
+            logger.error(
+                f"[API] Failed to fetch digest config for {profile_id}: {e}",
+                exc_info=True,
+            )
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "data": None,
+                        "error": f"Failed to fetch digest config: {str(e)}",
+                    }
+                ),
+                500,
+            )
+
+    def validate_digest_config(data: dict) -> tuple[bool, str]:
+        """Validate digest configuration before saving.
+
+        Returns: (is_valid, error_message)
+        """
+        # 1. Max 3 schedules
+        schedules = data.get("schedules", [])
+        if len(schedules) > 3:
+            return False, "Maximum 3 schedules allowed per profile"
+
+        # 2. Valid schedule types
+        valid_schedules = {
+            "hourly",
+            "every_4h",
+            "every_6h",
+            "every_12h",
+            "daily",
+            "weekly",
+            "none",
+        }
+        for sched in schedules:
+            if sched.get("schedule") not in valid_schedules:
+                return False, f"Invalid schedule type: {sched.get('schedule')}"
+
+        # 3. Valid mode
+        mode = data.get("mode", "dm")
+        if mode not in {"dm", "channel", "both"}:
+            return False, f"Invalid mode: {mode}"
+
+        # 4. min_score range
+        min_score = data.get("min_score", 0.0)
+        if not (0.0 <= min_score <= 10.0):
+            return False, f"min_score must be between 0.0 and 10.0, got {min_score}"
+
+        # 5. Hour/day ranges
+        for sched in schedules:
+            daily_hour = sched.get("daily_hour", 8)
+            if not (0 <= daily_hour <= 23):
+                return False, f"daily_hour must be 0-23, got {daily_hour}"
+
+            weekly_hour = sched.get("weekly_hour", 8)
+            if not (0 <= weekly_hour <= 23):
+                return False, f"weekly_hour must be 0-23, got {weekly_hour}"
+
+            weekly_day = sched.get("weekly_day", 0)
+            if not (0 <= weekly_day <= 6):
+                return False, f"weekly_day must be 0-6, got {weekly_day}"
+
+        # 6. target_channel required if mode=channel or both
+        if mode in ("channel", "both") and not data.get("target_channel"):
+            return (
+                False,
+                'target_channel required when mode is "channel" or "both"',
+            )
+
+        return True, ""
+
+    @app.route("/api/config/profiles/<profile_id>/digest", methods=["GET", "PUT"])
+    def profile_digest_config(profile_id: str):
+        """Get or update digest configuration for a global profile.
+
+        GET returns current digest config (or null if not configured).
+        PUT updates digest config in config/profiles.yml.
+        """
+        global _config
+        if request.method == "GET":
+            # Get profile from current config
+            profile = _config.global_profiles.get(profile_id)
+            if not profile:
+                return (
+                    jsonify({"status": "error", "message": "Profile not found"}),
+                    404,
+                )
+
+            digest_dict = None
+            if profile.digest:
+                digest_dict = {
+                    "schedules": [
+                        {
+                            "schedule": s.schedule.value,
+                            "enabled": s.enabled,
+                            "min_score": s.min_score,
+                            "top_n": s.top_n,
+                            "daily_hour": s.daily_hour,
+                            "weekly_day": s.weekly_day,
+                            "weekly_hour": s.weekly_hour,
+                        }
+                        for s in profile.digest.schedules
+                    ],
+                    "mode": profile.digest.mode,
+                    "target_channel": profile.digest.target_channel,
+                    "top_n": profile.digest.top_n,
+                    "min_score": profile.digest.min_score,
+                }
+
+            return jsonify(
+                {"status": "ok", "profile_id": profile_id, "digest": digest_dict}
+            )
+
+        elif request.method == "PUT":
+            data = request.get_json()
+
+            # Validate request
+            if not data:
+                return (
+                    jsonify({"status": "error", "message": "No data provided"}),
+                    400,
+                )
+
+            # Validate digest config
+            is_valid, error_msg = validate_digest_config(data)
+            if not is_valid:
+                return jsonify({"status": "error", "message": error_msg}), 400
+
+            # Load config/profiles.yml
+            profiles_path = Path(_config.config_dir) / "profiles.yml"
+            if not profiles_path.exists():
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "profiles.yml not found",
+                        }
+                    ),
+                    500,
+                )
+
+            lock_fd = None
+            temp_file = None
+
+            try:
+                # Acquire exclusive file lock to prevent TOCTOU race
+                lock_fd = os.open(str(profiles_path), os.O_RDONLY)
+                fcntl.flock(lock_fd, fcntl.LOCK_EX)
+
+                # Read configuration while holding lock
+                with open(profiles_path, "r") as f:
+                    profiles_config = yaml.safe_load(f) or {}
+
+                # Find profile in YAML
+                if profile_id not in profiles_config.get("global_profiles", {}):
+                    return (
+                        jsonify({"status": "error", "message": "Profile not found"}),
+                        404,
+                    )
+
+                # Update digest section
+                profile_data = profiles_config["global_profiles"][profile_id]
+                profile_data["digest"] = data  # Replace entire digest config
+
+                # Write atomically: write to temp file, then rename
+                # Use same directory as target to ensure atomic rename
+                temp_fd, temp_path = tempfile.mkstemp(
+                    dir=profiles_path.parent,
+                    prefix=f".{profiles_path.name}.tmp.",
+                    suffix=".yml",
+                    text=True,
+                )
+                temp_file = temp_path
+
+                try:
+                    # Write to temp file
+                    with os.fdopen(temp_fd, "w") as f:
+                        yaml.safe_dump(
+                            profiles_config,
+                            f,
+                            default_flow_style=False,
+                            sort_keys=False,
+                        )
+
+                    # Atomic rename over original file
+                    os.replace(temp_path, profiles_path)
+                    temp_file = None  # Successfully renamed, no cleanup needed
+
+                except Exception as write_error:
+                    # Clean up temp file on write/rename failure
+                    if temp_file and os.path.exists(temp_file):
+                        try:
+                            os.unlink(temp_file)
+                        except Exception:
+                            pass
+                    raise write_error
+
+                logger.info(
+                    f"[API] Updated digest config for profile {profile_id}",
+                    extra={
+                        "profile_id": profile_id,
+                        "schedules": len(data.get("schedules", [])),
+                    },
+                )
+
+                # Reload configuration into memory
+                try:
+                    from tgsentinel.config import load_config
+
+                    _config = load_config()
+                    logger.info(
+                        f"[API] Reloaded configuration after digest update for {profile_id}"
+                    )
+                except Exception as reload_error:
+                    logger.error(
+                        f"[API] Failed to reload config after digest update: {reload_error}",
+                        exc_info=True,
+                    )
+                    # Non-fatal: config will reload on next restart
+
+                # Publish config change event via Redis for other workers
+                if _redis_client:
+                    try:
+                        from tgsentinel.redis_operations import RedisManager
+
+                        redis_mgr = RedisManager(_redis_client)
+                        redis_mgr.publish_config_event(
+                            event="profile_digest_updated",
+                            config_keys=[f"global_profiles.{profile_id}.digest"],
+                            profile_id=profile_id,
+                        )
+                    except Exception as redis_error:
+                        logger.warning(
+                            f"[API] Failed to publish config event to Redis: {redis_error}"
+                        )
+                        # Non-fatal: other workers will pick up on next reload
+
+                return jsonify(
+                    {
+                        "status": "ok",
+                        "profile_id": profile_id,
+                        "digest": data,
+                        "message": "Digest configuration updated successfully",
+                    }
+                )
+
+            except Exception as e:
+                logger.error(
+                    f"[API] Failed to update digest config for {profile_id}: {e}",
+                    exc_info=True,
+                )
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Failed to update configuration: {str(e)}",
+                        }
+                    ),
+                    500,
+                )
+
+            finally:
+                # Release file lock
+                if lock_fd is not None:
+                    try:
+                        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+                        os.close(lock_fd)
+                    except Exception as unlock_error:
+                        logger.warning(
+                            f"[API] Failed to release file lock: {unlock_error}"
+                        )
+
+                # Clean up temp file if it still exists (error case)
+                if temp_file and os.path.exists(temp_file):
+                    try:
+                        os.unlink(temp_file)
+                    except Exception as cleanup_error:
+                        logger.warning(
+                            f"[API] Failed to clean up temp file {temp_file}: {cleanup_error}"
+                        )
+
+        # Fallback for unexpected request methods
+        return jsonify({"status": "error", "message": "Method not allowed"}), 405
+
+    @app.route("/api/config/channels/<int:channel_id>/digest", methods=["GET", "PUT"])
+    def channel_digest_config(channel_id: int):
+        """Get or update digest configuration for a channel.
+
+        Supports both direct channel.digest configuration.
+        """
+        if request.method == "GET":
+            # Find channel in current config
+            channel = next((c for c in _config.channels if c.id == channel_id), None)
+            if not channel:
+                return (
+                    jsonify({"status": "error", "message": "Channel not found"}),
+                    404,
+                )
+
+            digest_dict = None
+            if channel.digest:
+                digest_dict = {
+                    "schedules": [
+                        {
+                            "schedule": s.schedule.value,
+                            "enabled": s.enabled,
+                            "min_score": s.min_score,
+                            "top_n": s.top_n,
+                            "daily_hour": s.daily_hour,
+                            "weekly_day": s.weekly_day,
+                            "weekly_hour": s.weekly_hour,
+                        }
+                        for s in channel.digest.schedules
+                    ],
+                    "mode": channel.digest.mode,
+                    "target_channel": channel.digest.target_channel,
+                    "top_n": channel.digest.top_n,
+                    "min_score": channel.digest.min_score,
+                }
+
+            return jsonify(
+                {"status": "ok", "channel_id": channel_id, "digest": digest_dict}
+            )
+
+        elif request.method == "PUT":
+            data = request.get_json()
+
+            if not data:
+                return (
+                    jsonify({"status": "error", "message": "No data provided"}),
+                    400,
+                )
+
+            # Validate digest config
+            is_valid, error_msg = validate_digest_config(data)
+            if not is_valid:
+                return jsonify({"status": "error", "message": error_msg}), 400
+
+            # Load config/tgsentinel.yml
+            config_path = Path(_config.config_dir) / "tgsentinel.yml"
+            if not config_path.exists():
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "tgsentinel.yml not found",
+                        }
+                    ),
+                    500,
+                )
+
+            try:
+                with open(config_path, "r") as f:
+                    tg_config = yaml.safe_load(f) or {}
+
+                # Find channel in YAML
+                channels = tg_config.get("channels", [])
+                channel_data = next(
+                    (c for c in channels if c.get("id") == channel_id), None
+                )
+
+                if not channel_data:
+                    return (
+                        jsonify({"status": "error", "message": "Channel not found"}),
+                        404,
+                    )
+
+                # Update digest section
+                channel_data["digest"] = data
+
+                # Write back to YAML
+                with open(config_path, "w") as f:
+                    yaml.safe_dump(
+                        tg_config, f, default_flow_style=False, sort_keys=False
+                    )
+
+                logger.info(
+                    f"[API] Updated digest config for channel {channel_id}",
+                    extra={
+                        "channel_id": channel_id,
+                        "schedules": len(data.get("schedules", [])),
+                    },
+                )
+
+                return jsonify(
+                    {
+                        "status": "ok",
+                        "channel_id": channel_id,
+                        "digest": data,
+                        "message": "Digest configuration updated successfully",
+                    }
+                )
+
+            except Exception as e:
+                logger.error(
+                    f"[API] Failed to update channel digest config for {channel_id}: {e}",
+                    exc_info=True,
+                )
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Failed to update configuration: {str(e)}",
+                        }
+                    ),
+                    500,
+                )
+
+        # Fallback for unexpected request methods
+        return jsonify({"status": "error", "message": "Method not allowed"}), 405
+
+    @app.route(
+        "/api/config/channels/<int:channel_id>/overrides/digest",
+        methods=["GET", "PUT"],
+    )
+    def channel_overrides_digest_config(channel_id: int):
+        """Get or update digest overrides for a channel.
+
+        Writes to config/tgsentinel.yml → channels[*].overrides.digest
+        """
+        if request.method == "GET":
+            channel = next((c for c in _config.channels if c.id == channel_id), None)
+            if not channel:
+                return (
+                    jsonify({"status": "error", "message": "Channel not found"}),
+                    404,
+                )
+
+            digest_dict = None
+            if channel.overrides and channel.overrides.digest:
+                digest_dict = {
+                    "schedules": [
+                        {
+                            "schedule": s.schedule.value,
+                            "enabled": s.enabled,
+                            "min_score": s.min_score,
+                            "top_n": s.top_n,
+                            "daily_hour": s.daily_hour,
+                            "weekly_day": s.weekly_day,
+                            "weekly_hour": s.weekly_hour,
+                        }
+                        for s in channel.overrides.digest.schedules
+                    ],
+                    "mode": channel.overrides.digest.mode,
+                    "target_channel": channel.overrides.digest.target_channel,
+                    "top_n": channel.overrides.digest.top_n,
+                    "min_score": channel.overrides.digest.min_score,
+                }
+
+            return jsonify(
+                {"status": "ok", "channel_id": channel_id, "digest": digest_dict}
+            )
+
+        elif request.method == "PUT":
+            data = request.get_json()
+
+            if not data:
+                return (
+                    jsonify({"status": "error", "message": "No data provided"}),
+                    400,
+                )
+
+            # Validate digest config
+            is_valid, error_msg = validate_digest_config(data)
+            if not is_valid:
+                return jsonify({"status": "error", "message": error_msg}), 400
+
+            # Load config/tgsentinel.yml
+            config_path = Path(_config.config_dir) / "tgsentinel.yml"
+            if not config_path.exists():
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "tgsentinel.yml not found",
+                        }
+                    ),
+                    500,
+                )
+
+            try:
+                with open(config_path, "r") as f:
+                    tg_config = yaml.safe_load(f) or {}
+
+                channels = tg_config.get("channels", [])
+                channel_data = next(
+                    (c for c in channels if c.get("id") == channel_id), None
+                )
+
+                if not channel_data:
+                    return (
+                        jsonify({"status": "error", "message": "Channel not found"}),
+                        404,
+                    )
+
+                # Ensure overrides section exists
+                if "overrides" not in channel_data:
+                    channel_data["overrides"] = {}
+
+                # Update digest in overrides
+                channel_data["overrides"]["digest"] = data
+
+                # Write back to YAML
+                with open(config_path, "w") as f:
+                    yaml.safe_dump(
+                        tg_config, f, default_flow_style=False, sort_keys=False
+                    )
+
+                logger.info(
+                    f"[API] Updated digest overrides for channel {channel_id}",
+                    extra={
+                        "channel_id": channel_id,
+                        "schedules": len(data.get("schedules", [])),
+                    },
+                )
+
+                return jsonify(
+                    {
+                        "status": "ok",
+                        "channel_id": channel_id,
+                        "digest": data,
+                        "message": "Digest overrides updated successfully",
+                    }
+                )
+
+            except Exception as e:
+                logger.error(
+                    f"[API] Failed to update channel digest overrides for {channel_id}: {e}",
+                    exc_info=True,
+                )
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Failed to update configuration: {str(e)}",
+                        }
+                    ),
+                    500,
+                )
+
+        # Fallback for unexpected request methods
+        return jsonify({"status": "error", "message": "Method not allowed"}), 405
+
+    @app.route("/api/config/users/<int:user_id>/digest", methods=["GET", "PUT"])
+    def user_digest_config(user_id: int):
+        """Get or update digest configuration for a monitored user."""
+        if request.method == "GET":
+            user = next((u for u in _config.users if u.id == user_id), None)
+            if not user:
+                return (
+                    jsonify({"status": "error", "message": "User not found"}),
+                    404,
+                )
+
+            digest_dict = None
+            if user.digest:
+                digest_dict = {
+                    "schedules": [
+                        {
+                            "schedule": s.schedule.value,
+                            "enabled": s.enabled,
+                            "min_score": s.min_score,
+                            "top_n": s.top_n,
+                            "daily_hour": s.daily_hour,
+                            "weekly_day": s.weekly_day,
+                            "weekly_hour": s.weekly_hour,
+                        }
+                        for s in user.digest.schedules
+                    ],
+                    "mode": user.digest.mode,
+                    "target_channel": user.digest.target_channel,
+                    "top_n": user.digest.top_n,
+                    "min_score": user.digest.min_score,
+                }
+
+            return jsonify({"status": "ok", "user_id": user_id, "digest": digest_dict})
+
+        elif request.method == "PUT":
+            data = request.get_json()
+
+            if not data:
+                return (
+                    jsonify({"status": "error", "message": "No data provided"}),
+                    400,
+                )
+
+            # Validate digest config
+            is_valid, error_msg = validate_digest_config(data)
+            if not is_valid:
+                return jsonify({"status": "error", "message": error_msg}), 400
+
+            # Load config/tgsentinel.yml
+            config_path = Path(_config.config_dir) / "tgsentinel.yml"
+            if not config_path.exists():
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "tgsentinel.yml not found",
+                        }
+                    ),
+                    500,
+                )
+
+            try:
+                with open(config_path, "r") as f:
+                    tg_config = yaml.safe_load(f) or {}
+
+                users = tg_config.get("monitored_users", [])
+                user_data = next((u for u in users if u.get("id") == user_id), None)
+
+                if not user_data:
+                    return (
+                        jsonify({"status": "error", "message": "User not found"}),
+                        404,
+                    )
+
+                # Update digest section
+                user_data["digest"] = data
+
+                # Write back to YAML
+                with open(config_path, "w") as f:
+                    yaml.safe_dump(
+                        tg_config, f, default_flow_style=False, sort_keys=False
+                    )
+
+                logger.info(
+                    f"[API] Updated digest config for user {user_id}",
+                    extra={
+                        "user_id": user_id,
+                        "schedules": len(data.get("schedules", [])),
+                    },
+                )
+
+                return jsonify(
+                    {
+                        "status": "ok",
+                        "user_id": user_id,
+                        "digest": data,
+                        "message": "Digest configuration updated successfully",
+                    }
+                )
+
+            except Exception as e:
+                logger.error(
+                    f"[API] Failed to update user digest config for {user_id}: {e}",
+                    exc_info=True,
+                )
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Failed to update configuration: {str(e)}",
+                        }
+                    ),
+                    500,
+                )
+
+        # Fallback for unexpected request methods
+        return jsonify({"status": "error", "message": "Method not allowed"}), 405
+
+    @app.route(
+        "/api/config/users/<int:user_id>/overrides/digest", methods=["GET", "PUT"]
+    )
+    def user_overrides_digest_config(user_id: int):
+        """Get or update digest overrides for a monitored user."""
+        if request.method == "GET":
+            user = next((u for u in _config.users if u.id == user_id), None)
+            if not user:
+                return (
+                    jsonify({"status": "error", "message": "User not found"}),
+                    404,
+                )
+
+            digest_dict = None
+            if user.overrides and user.overrides.digest:
+                digest_dict = {
+                    "schedules": [
+                        {
+                            "schedule": s.schedule.value,
+                            "enabled": s.enabled,
+                            "min_score": s.min_score,
+                            "top_n": s.top_n,
+                            "daily_hour": s.daily_hour,
+                            "weekly_day": s.weekly_day,
+                            "weekly_hour": s.weekly_hour,
+                        }
+                        for s in user.overrides.digest.schedules
+                    ],
+                    "mode": user.overrides.digest.mode,
+                    "target_channel": user.overrides.digest.target_channel,
+                    "top_n": user.overrides.digest.top_n,
+                    "min_score": user.overrides.digest.min_score,
+                }
+
+            return jsonify({"status": "ok", "user_id": user_id, "digest": digest_dict})
+
+        elif request.method == "PUT":
+            data = request.get_json()
+
+            if not data:
+                return (
+                    jsonify({"status": "error", "message": "No data provided"}),
+                    400,
+                )
+
+            # Validate digest config
+            is_valid, error_msg = validate_digest_config(data)
+            if not is_valid:
+                return jsonify({"status": "error", "message": error_msg}), 400
+
+            # Load config/tgsentinel.yml
+            config_path = Path(_config.config_dir) / "tgsentinel.yml"
+            if not config_path.exists():
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "tgsentinel.yml not found",
+                        }
+                    ),
+                    500,
+                )
+
+            try:
+                with open(config_path, "r") as f:
+                    tg_config = yaml.safe_load(f) or {}
+
+                users = tg_config.get("monitored_users", [])
+                user_data = next((u for u in users if u.get("id") == user_id), None)
+
+                if not user_data:
+                    return (
+                        jsonify({"status": "error", "message": "User not found"}),
+                        404,
+                    )
+
+                # Ensure overrides section exists
+                if "overrides" not in user_data:
+                    user_data["overrides"] = {}
+
+                # Update digest in overrides
+                user_data["overrides"]["digest"] = data
+
+                # Write back to YAML
+                with open(config_path, "w") as f:
+                    yaml.safe_dump(
+                        tg_config, f, default_flow_style=False, sort_keys=False
+                    )
+
+                logger.info(
+                    f"[API] Updated digest overrides for user {user_id}",
+                    extra={
+                        "user_id": user_id,
+                        "schedules": len(data.get("schedules", [])),
+                    },
+                )
+
+                return jsonify(
+                    {
+                        "status": "ok",
+                        "user_id": user_id,
+                        "digest": data,
+                        "message": "Digest overrides updated successfully",
+                    }
+                )
+
+            except Exception as e:
+                logger.error(
+                    f"[API] Failed to update user digest overrides for {user_id}: {e}",
+                    exc_info=True,
+                )
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Failed to update configuration: {str(e)}",
+                        }
+                    ),
+                    500,
+                )
+
+        # Fallback for unexpected request methods
+        return jsonify({"status": "error", "message": "Method not allowed"}), 405
 
     @app.route("/api/stats", methods=["GET"])
     def stats():
@@ -1942,6 +2924,582 @@ def create_api_app() -> Flask:
                 ),
                 500,
             )
+
+    @app.route("/api/profiles/interest/backtest", methods=["POST"])
+    def backtest_interest_profile():
+        """Backtest an interest profile using semantic scoring.
+
+        This endpoint runs in the Sentinel container where the embeddings model is loaded.
+        The UI should call this endpoint instead of loading the model itself.
+
+        Request body:
+            {
+                "profile_name": "my_profile",
+                "profile": {
+                    "threshold": 0.42,
+                    ...
+                },
+                "hours_back": 24,
+                "max_messages": 500
+            }
+
+        Returns:
+            {
+                "status": "ok",
+                "profile_name": "...",
+                "test_date": "...",
+                "parameters": {...},
+                "matches": [...],
+                "stats": {
+                    "total_messages": N,
+                    "matched_messages": M,
+                    "match_rate": X.X,
+                    "avg_score": X.XXX,
+                    "threshold": X.XX
+                }
+            }
+        """
+        try:
+            if not request.is_json:
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "Content-Type must be application/json",
+                        }
+                    ),
+                    400,
+                )
+
+            data = request.get_json()
+            profile_name = data.get("profile_name", "unnamed")
+            profile = data.get("profile", {})
+            hours_back = int(data.get("hours_back", 24))
+            max_messages = int(data.get("max_messages", 500))
+
+            # Validate parameters
+            if not (0 <= hours_back <= 168):  # Max 7 days
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "hours_back must be between 0 and 168",
+                        }
+                    ),
+                    400,
+                )
+
+            if not (1 <= max_messages <= 1000):
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "max_messages must be between 1 and 1000",
+                        }
+                    ),
+                    400,
+                )
+
+            # Import semantic module (only available in Sentinel container)
+            try:
+                from tgsentinel.semantic import _model, score_text
+
+                if _model is None:
+                    return (
+                        jsonify(
+                            {
+                                "status": "error",
+                                "message": "Semantic model not loaded in Sentinel container",
+                            }
+                        ),
+                        500,
+                    )
+            except ImportError as ie:
+                logger.error(f"[API] Semantic module import failed: {ie}")
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "Semantic module not available in Sentinel container",
+                        }
+                    ),
+                    500,
+                )
+
+            # Query messages from database
+            if not _engine:
+                return (
+                    jsonify({"status": "error", "message": "Database not initialized"}),
+                    500,
+                )
+
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=hours_back)
+            query = text(
+                """
+                SELECT msg_id, chat_id, chat_title, sender_name, message_text, 
+                       score, created_at
+                FROM messages
+                WHERE created_at >= :cutoff
+                ORDER BY created_at DESC
+                LIMIT :limit
+                """
+            )
+
+            with _engine.connect() as conn:
+                result = conn.execute(
+                    query, {"cutoff": cutoff.isoformat(), "limit": max_messages}
+                )
+                messages = [
+                    {
+                        "msg_id": row[0],
+                        "chat_id": row[1],
+                        "chat_title": row[2],
+                        "sender_name": row[3],
+                        "message_text": row[4],
+                        "score": row[5],
+                        "created_at": row[6],
+                    }
+                    for row in result
+                ]
+
+            # Score messages using semantic model
+            matches = []
+            threshold = profile.get("threshold", 0.42)
+
+            for msg in messages:
+                message_text = msg.get("message_text", "")
+                if not message_text:
+                    continue
+
+                # Score text with semantic model
+                score = score_text(message_text)
+                if score is None:
+                    continue
+
+                if score >= threshold:
+                    matches.append(
+                        {
+                            "message_id": msg["msg_id"],
+                            "chat_id": msg["chat_id"],
+                            "chat_title": msg["chat_title"],
+                            "sender_name": msg["sender_name"],
+                            "score": round(score, 3),
+                            "original_score": round(msg.get("score", 0.0), 2),
+                            "text_preview": message_text[:100]
+                            + ("..." if len(message_text) > 100 else ""),
+                            "timestamp": msg["created_at"],
+                        }
+                    )
+
+            # Calculate statistics
+            stats = {
+                "total_messages": len(messages),
+                "matched_messages": len(matches),
+                "match_rate": (
+                    round(len(matches) / len(messages) * 100, 1)
+                    if len(messages) > 0
+                    else 0
+                ),
+                "avg_score": (
+                    round(sum(m["score"] for m in matches) / len(matches), 3)
+                    if len(matches) > 0
+                    else 0
+                ),
+                "threshold": threshold,
+            }
+
+            result_data = {
+                "status": "ok",
+                "profile_name": profile_name,
+                "test_date": datetime.now(timezone.utc).isoformat(),
+                "parameters": {
+                    "hours_back": hours_back,
+                    "max_messages": max_messages,
+                },
+                "matches": matches[:50],  # Limit response size
+                "stats": stats,
+            }
+
+            logger.info(
+                f"[API] Backtest completed for interest profile {profile_name}: {stats}"
+            )
+            return jsonify(result_data)
+
+        except Exception as exc:
+            logger.error(
+                f"[API] Error backtesting interest profile: {exc}", exc_info=True
+            )
+            return (
+                jsonify({"status": "error", "message": str(exc)}),
+                500,
+            )
+
+    # ==================== UNIFIED PROFILE CRUD ENDPOINTS ====================
+    @app.route("/api/profiles/<profile_type>", methods=["GET"])
+    def get_profiles(profile_type):
+        """Get all profiles of a specific type (alert, global, or interest).
+
+        Args:
+            profile_type: One of 'alert', 'global', 'interest'
+
+        Returns:
+            JSON response with profiles dictionary
+        """
+        try:
+            if profile_type not in ("alert", "global", "interest"):
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Invalid profile type: {profile_type}. Must be 'alert', 'global', or 'interest'",
+                            "data": None,
+                        }
+                    ),
+                    400,
+                )
+
+            # Use config directory from environment or default to /app/config
+            config_dir = Path(os.getenv("CONFIG_DIR", "/app/config"))
+            profiles_path = config_dir / f"profiles_{profile_type}.yml"
+
+            if not profiles_path.exists():
+                logger.info(
+                    f"[API] No {profile_type} profiles file found at {profiles_path}, returning empty"
+                )
+                return jsonify({"status": "ok", "data": {}})
+
+            with open(profiles_path, "r", encoding="utf-8") as f:
+                profiles = yaml.safe_load(f) or {}
+
+            logger.info(f"[API] Loaded {len(profiles)} {profile_type} profiles")
+            return jsonify({"status": "ok", "data": profiles})
+
+        except Exception as exc:
+            logger.error(
+                f"[API] Error loading {profile_type} profiles: {exc}", exc_info=True
+            )
+            return jsonify({"status": "error", "message": str(exc), "data": None}), 500
+
+    @app.route("/api/profiles/<profile_type>/<profile_id>", methods=["GET"])
+    def get_profile(profile_type, profile_id):
+        """Get a single profile by ID and type.
+
+        Args:
+            profile_type: One of 'alert', 'global', 'interest'
+            profile_id: Profile identifier
+
+        Returns:
+            JSON response with profile data
+        """
+        try:
+            if profile_type not in ("alert", "global", "interest"):
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Invalid profile type: {profile_type}",
+                            "data": None,
+                        }
+                    ),
+                    400,
+                )
+
+            config_dir = Path(os.getenv("CONFIG_DIR", "/app/config"))
+            profiles_path = config_dir / f"profiles_{profile_type}.yml"
+
+            if not profiles_path.exists():
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Profile not found: {profile_id}",
+                            "data": None,
+                        }
+                    ),
+                    404,
+                )
+
+            with open(profiles_path, "r", encoding="utf-8") as f:
+                profiles = yaml.safe_load(f) or {}
+
+            if profile_id not in profiles:
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Profile not found: {profile_id}",
+                            "data": None,
+                        }
+                    ),
+                    404,
+                )
+
+            logger.info(f"[API] Retrieved {profile_type} profile: {profile_id}")
+            return jsonify({"status": "ok", "data": profiles[profile_id]})
+
+        except Exception as exc:
+            logger.error(
+                f"[API] Error getting {profile_type} profile {profile_id}: {exc}",
+                exc_info=True,
+            )
+            return jsonify({"status": "error", "message": str(exc), "data": None}), 500
+
+    @app.route("/api/profiles/<profile_type>", methods=["POST", "PUT"])
+    def save_profiles(profile_type):
+        """Save all profiles of a specific type (replaces entire file).
+
+        Args:
+            profile_type: One of 'alert', 'global', 'interest'
+
+        Request body:
+            Dictionary of profiles {profile_id: profile_data}
+
+        Returns:
+            JSON response with success status
+        """
+        try:
+            if profile_type not in ("alert", "global", "interest"):
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Invalid profile type: {profile_type}",
+                            "data": None,
+                        }
+                    ),
+                    400,
+                )
+
+            if not request.is_json:
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "Content-Type must be application/json",
+                            "data": None,
+                        }
+                    ),
+                    400,
+                )
+
+            profiles = request.get_json()
+            if not isinstance(profiles, dict):
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "Request body must be a dictionary of profiles",
+                            "data": None,
+                        }
+                    ),
+                    400,
+                )
+
+            config_dir = Path(os.getenv("CONFIG_DIR", "/app/config"))
+            config_dir.mkdir(parents=True, exist_ok=True)
+
+            profiles_path = config_dir / f"profiles_{profile_type}.yml"
+            temp_path = profiles_path.with_suffix(".yml.tmp")
+
+            # Write to temp file first for atomicity
+            with open(temp_path, "w", encoding="utf-8") as f:
+                yaml.safe_dump(
+                    profiles, f, default_flow_style=False, allow_unicode=True
+                )
+
+            # Atomic replace
+            temp_path.replace(profiles_path)
+
+            logger.info(
+                f"[API] Saved {len(profiles)} {profile_type} profiles to {profiles_path}"
+            )
+            return jsonify(
+                {
+                    "status": "ok",
+                    "message": f"Saved {len(profiles)} {profile_type} profiles",
+                    "data": {"count": len(profiles), "file": str(profiles_path)},
+                }
+            )
+
+        except Exception as exc:
+            logger.error(
+                f"[API] Error saving {profile_type} profiles: {exc}", exc_info=True
+            )
+            # Clean up temp file if it exists
+            try:
+                if temp_path.exists():
+                    temp_path.unlink()
+            except:
+                pass
+            return jsonify({"status": "error", "message": str(exc), "data": None}), 500
+
+    @app.route("/api/profiles/<profile_type>/<profile_id>/toggle", methods=["POST"])
+    def toggle_profile(profile_type, profile_id):
+        """Toggle the enabled status of a profile.
+
+        Args:
+            profile_type: One of 'alert', 'global', 'interest'
+            profile_id: Profile identifier
+
+        Returns:
+            JSON response with new enabled status
+        """
+        try:
+            if profile_type not in ("alert", "global", "interest"):
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Invalid profile type: {profile_type}",
+                            "data": None,
+                        }
+                    ),
+                    400,
+                )
+
+            config_dir = Path(os.getenv("CONFIG_DIR", "/app/config"))
+            profiles_path = config_dir / f"profiles_{profile_type}.yml"
+
+            if not profiles_path.exists():
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Profile not found: {profile_id}",
+                            "data": None,
+                        }
+                    ),
+                    404,
+                )
+
+            # Read current profiles
+            with open(profiles_path, "r", encoding="utf-8") as f:
+                profiles = yaml.safe_load(f) or {}
+
+            if profile_id not in profiles:
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Profile not found: {profile_id}",
+                            "data": None,
+                        }
+                    ),
+                    404,
+                )
+
+            # Toggle enabled status
+            current_status = profiles[profile_id].get("enabled", False)
+            new_status = not current_status
+            profiles[profile_id]["enabled"] = new_status
+
+            # Write atomically
+            temp_path = profiles_path.with_suffix(".yml.tmp")
+            with open(temp_path, "w", encoding="utf-8") as f:
+                yaml.safe_dump(
+                    profiles, f, default_flow_style=False, allow_unicode=True
+                )
+            temp_path.replace(profiles_path)
+
+            logger.info(
+                f"[API] Toggled {profile_type} profile {profile_id}: {current_status} → {new_status}"
+            )
+            return jsonify(
+                {
+                    "status": "ok",
+                    "message": f"Profile {profile_id} {'enabled' if new_status else 'disabled'}",
+                    "data": {"enabled": new_status},
+                }
+            )
+
+        except Exception as exc:
+            logger.error(
+                f"[API] Error toggling {profile_type} profile {profile_id}: {exc}",
+                exc_info=True,
+            )
+            return jsonify({"status": "error", "message": str(exc), "data": None}), 500
+
+    @app.route("/api/profiles/<profile_type>/<profile_id>", methods=["DELETE"])
+    def delete_profile(profile_type, profile_id):
+        """Delete a profile by ID and type.
+
+        Args:
+            profile_type: One of 'alert', 'global', 'interest'
+            profile_id: Profile identifier
+
+        Returns:
+            JSON response with success status
+        """
+        try:
+            if profile_type not in ("alert", "global", "interest"):
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Invalid profile type: {profile_type}",
+                            "data": None,
+                        }
+                    ),
+                    400,
+                )
+
+            config_dir = Path(os.getenv("CONFIG_DIR", "/app/config"))
+            profiles_path = config_dir / f"profiles_{profile_type}.yml"
+
+            if not profiles_path.exists():
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Profile not found: {profile_id}",
+                            "data": None,
+                        }
+                    ),
+                    404,
+                )
+
+            # Read current profiles
+            with open(profiles_path, "r", encoding="utf-8") as f:
+                profiles = yaml.safe_load(f) or {}
+
+            if profile_id not in profiles:
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Profile not found: {profile_id}",
+                            "data": None,
+                        }
+                    ),
+                    404,
+                )
+
+            # Delete profile
+            del profiles[profile_id]
+
+            # Write atomically
+            temp_path = profiles_path.with_suffix(".yml.tmp")
+            with open(temp_path, "w", encoding="utf-8") as f:
+                yaml.safe_dump(
+                    profiles, f, default_flow_style=False, allow_unicode=True
+                )
+            temp_path.replace(profiles_path)
+
+            logger.info(f"[API] Deleted {profile_type} profile: {profile_id}")
+            return jsonify(
+                {
+                    "status": "ok",
+                    "message": f"Profile {profile_id} deleted",
+                    "data": None,
+                }
+            )
+
+        except Exception as exc:
+            logger.error(
+                f"[API] Error deleting {profile_type} profile {profile_id}: {exc}",
+                exc_info=True,
+            )
+            return jsonify({"status": "error", "message": str(exc), "data": None}), 500
 
     @app.errorhandler(404)
     def not_found(e):

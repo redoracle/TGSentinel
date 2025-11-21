@@ -1,0 +1,72 @@
+{# Interest Profiles Tab Content #}
+<section class="row g-4 mb-4">
+    <!-- Interest Profiles List (Left Column) -->
+    <div class="col-12 col-xl-4">
+        <article class="card alert-profiles-list-card" aria-labelledby="interest-profiles-list-heading">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="card-title mb-0" id="interest-profiles-list-heading">Interest Profiles</h2>
+                    <small class="text-muted"><span id="interest-profiles-count">0</span> profiles</small>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-primary" type="button" id="btn-interest-bulk-actions" title="Bulk actions">
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M3 9.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/>
+                        </svg>
+                    </button>
+                    <button class="btn btn-sm btn-primary" type="button" id="btn-new-interest-profile">
+                        <svg width="16" height="16" fill="currentColor" class="bi bi-plus-lg" viewBox="0 0 16 16">
+                            <path fill-rule="evenodd" d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2Z"/>
+                        </svg>
+                        New
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <!-- Search/Filter Bar -->
+                <div class="p-3 border-bottom">
+                    <input type="text" class="form-control form-control-sm" id="interest-profiles-search" placeholder="🔍 Search profiles...">
+                </div>
+                <!-- Profiles List -->
+                <div class="interest-profiles-list-container" id="interest-profiles-list-container">
+                    <div class="list-group list-group-flush" id="interest-profiles-list">
+                        <!-- Populated dynamically by interest_profiles.js -->
+                    </div>
+                </div>
+            </div>
+        </article>
+    </div>
+
+    <!-- Interest Profile Editor (Right Column) -->
+    <div class="col-12 col-xl-8">
+        <article class="card h-100" aria-labelledby="interest-profile-editor-heading">
+            <div class="card-header">
+                <div>
+                    <h2 class="card-title mb-0" id="interest-profile-editor-heading">Interest Profile Editor</h2>
+                    <small class="text-muted">Create and refine semantic interest profiles</small>
+                </div>
+            </div>
+            <div class="card-body">
+                {% include 'profiles/_interest_profile_form.html' %}
+            </div>
+        </article>
+    </div>
+</section>
+
+{# Similarity Tester Component #}
+<div class="row g-3 mt-0">
+    <div class="col-12">
+        <article class="card h-100" aria-labelledby="profile-tester-heading">
+            <div class="card-header">
+                <h3 class="card-title mb-0" id="profile-tester-heading">Similarity Tester</h3>
+                <small class="text-muted">Test how similar messages are to your profile's training samples</small>
+            </div>
+            <div class="card-body">
+                {# Similarity tester form - keep inline for now #}
+                <div class="alert alert-info">
+                    <strong>Note:</strong> Similarity tester component - extract if needed separately
+                </div>
+            </div>
+        </article>
+    </div>
+</div>

@@ -1,220 +1,239 @@
 """Profile management service for TG Sentinel UI.
 
-This module handles CRUD operations for both interest profiles (YAML-based),
-alert profiles (JSON-based), and global profiles (profiles.yml).
-Provides thread-safe file operations with atomic writes and file locking.
+This module handles CRUD operations for all profile types (interest, alert, global)
+by proxying to the Sentinel API endpoints. The Sentinel container owns the persistent
+config volume where profiles are stored as YAML files.
+
+All file operations are delegated to the Sentinel API to maintain single source of truth.
 """
 
-import fcntl
-import json
 import logging
 import os
-import tempfile
-import threading
 from pathlib import Path
 from typing import Any, Dict, List
 
-import yaml
+import requests
 
 logger = logging.getLogger(__name__)
 
 
-class ProfileService:
-    """Service for managing interest and alert profiles with thread-safe file I/O."""
+# Profile ID prefixes for different profile types
+# Alert profiles: 1000-1999
+# Global profiles: 2000-2999
+# Interest profiles: 3000-3999
+ALERT_PROFILE_ID_PREFIX = 1000
+GLOBAL_PROFILE_ID_PREFIX = 2000
+INTEREST_PROFILE_ID_PREFIX = 3000
 
-    def __init__(self, data_dir: Path | None = None):
-        """Initialize profile service with data directory.
+
+class ProfileService:
+    """Service for managing profiles via Sentinel API endpoints."""
+
+    def __init__(self, sentinel_api_base_url: str = None):
+        """Initialize profile service with Sentinel API base URL.
 
         Args:
-            data_dir: Directory for profile storage. Defaults to ../data from ui module.
+            sentinel_api_base_url: Base URL for Sentinel API.
+                                  Defaults to env var or http://sentinel:8080/api
         """
-        if data_dir is None:
-            # Default to <repo>/data directory
-            data_dir = Path(__file__).parent.parent.parent / "data"
-
-        self.data_dir = Path(data_dir)
-        self.config_dir = self.data_dir.parent / "config"
-        self.profiles_file = self.data_dir / "profiles.yml"
-        self.profiles_file_legacy = (
-            self.data_dir / "profiles.json"
-        )  # Legacy filename for migration
-        self.alert_profiles_file = self.data_dir / "alert_profiles.json"
-        self.global_profiles_file = self.config_dir / "profiles.yml"
-        self.tgsentinel_config = self.config_dir / "tgsentinel.yml"
-
-        # Thread-safe locks for file operations
-        self._profiles_lock = threading.Lock()
-        self._alert_profiles_lock = threading.Lock()
-        self._global_profiles_lock = threading.Lock()
-
-        # Migrate from old profiles.json to profiles.yml if needed
-        self._migrate_profiles_file()
-
-        logger.debug(
-            "ProfileService initialized: profiles=%s, alert_profiles=%s, global_profiles=%s",
-            self.profiles_file,
-            self.alert_profiles_file,
-            self.global_profiles_file,
+        if sentinel_api_base_url is None:
+            sentinel_api_base_url = os.getenv(
+                "SENTINEL_API_BASE_URL", "http://sentinel:8080/api"
+            )
+        self.sentinel_api_base_url = sentinel_api_base_url.rstrip("/")
+        logger.info(
+            f"ProfileService initialized with Sentinel API: {self.sentinel_api_base_url}"
         )
 
-    def _migrate_profiles_file(self) -> None:
-        """Migrate profiles from old profiles.json to profiles.yml if needed.
+    def _get_profile_type(self, profile_id: int | str) -> str:
+        """Determine profile type from ID.
 
-        If profiles.yml doesn't exist but profiles.json does, load the JSON file
-        and save it as YAML to preserve existing data.
-        """
-        try:
-            # If new file exists, no migration needed
-            if self.profiles_file.exists():
-                logger.debug("Profiles file already exists: %s", self.profiles_file)
-                return
-
-            # Check if legacy file exists
-            if not self.profiles_file_legacy.exists():
-                logger.debug("No legacy profiles file to migrate")
-                return
-
-            # Load from legacy JSON file
-            logger.info(
-                "Migrating profiles from %s to %s",
-                self.profiles_file_legacy,
-                self.profiles_file,
-            )
-
-            with open(self.profiles_file_legacy, "r", encoding="utf-8") as f:
-                # Legacy file was named .json but actually contained YAML
-                profiles = yaml.safe_load(f) or {}
-
-            # Save to new YAML file
-            if profiles:
-                self.profiles_file.parent.mkdir(parents=True, exist_ok=True)
-                with open(self.profiles_file, "w", encoding="utf-8") as f:
-                    yaml.safe_dump(
-                        profiles, f, default_flow_style=False, sort_keys=True
-                    )
-                logger.info(
-                    "Successfully migrated %d profile(s) from %s to %s",
-                    len(profiles),
-                    self.profiles_file_legacy,
-                    self.profiles_file,
-                )
-
-                # Optionally rename old file to .bak for safety
-                backup_path = self.profiles_file_legacy.with_suffix(".json.bak")
-                self.profiles_file_legacy.rename(backup_path)
-                logger.info("Renamed legacy file to %s", backup_path)
-            else:
-                logger.info("Legacy profiles file was empty, no migration needed")
-
-        except Exception as exc:
-            logger.error(
-                "Failed to migrate profiles from %s to %s: %s",
-                self.profiles_file_legacy,
-                self.profiles_file,
-                exc,
-                exc_info=True,
-            )
-
-    # =========================================================================
-    # Interest Profiles (YAML-based)
-    # =========================================================================
-
-    def load_profiles(self) -> Dict[str, Any]:
-        """Load all interest profiles from disk with file locking.
+        Args:
+            profile_id: Profile identifier (numeric ID or name)
 
         Returns:
-            Dictionary of profiles, empty dict if file doesn't exist or on error.
+            Profile type: 'alert', 'global', or 'interest'
         """
         try:
-            if not self.profiles_file.exists():
-                logger.debug("Profiles file does not exist: %s", self.profiles_file)
+            numeric_id = int(profile_id)
+            if 1000 <= numeric_id < 2000:
+                return "alert"
+            elif 2000 <= numeric_id < 3000:
+                return "global"
+            elif 3000 <= numeric_id < 4000:
+                return "interest"
+        except (ValueError, TypeError):
+            # Non-numeric IDs are interest profiles (named profiles)
+            return "interest"
+
+        # Default to interest for unknown ranges
+        return "interest"
+
+        # ==================== INTEREST PROFILES ====================
+
+        logger.debug(
+            "ProfileService initialized: alert=%s, global=%s, interest=%s",
+            self.alert_profiles_file,
+            self.global_profiles_file,
+            self.interest_profiles_file,
+        )
+
+    def _migrate_to_unified_storage(self) -> None:
+        """Migrate profiles from legacy storage to unified YAML structure.
+
+        Migrates:
+        - data/profiles.yml (or profiles.json) -> config/profiles_interest.yml
+        - data/alert_profiles.json -> config/profiles_alert.yml
+        - Preserves config/profiles.yml as config/profiles_global.yml
+        """
+        try:
+            # Migrate Interest Profiles
+            if not self.interest_profiles_file.exists():
+                # Check for legacy interest profiles file
+                legacy_interest = None
+                if self.profiles_file_legacy.exists():
+                    logger.info(
+                        "Migrating interest profiles from %s", self.profiles_file_legacy
+                    )
+                    with open(self.profiles_file_legacy, "r", encoding="utf-8") as f:
+                        legacy_interest = yaml.safe_load(f) or {}
+
+                if legacy_interest:
+                    with open(self.interest_profiles_file, "w", encoding="utf-8") as f:
+                        yaml.safe_dump(
+                            legacy_interest,
+                            f,
+                            default_flow_style=False,
+                            sort_keys=False,
+                        )
+                    logger.info("Migrated %d interest profiles", len(legacy_interest))
+                else:
+                    # Create empty file
+                    with open(self.interest_profiles_file, "w", encoding="utf-8") as f:
+                        yaml.safe_dump({}, f)
+                    logger.debug("Created empty interest profiles file")
+
+            # Migrate Alert Profiles
+            if not self.alert_profiles_file.exists():
+                if self.alert_profiles_file_legacy.exists():
+                    logger.info(
+                        "Migrating alert profiles from %s",
+                        self.alert_profiles_file_legacy,
+                    )
+                    with open(
+                        self.alert_profiles_file_legacy, "r", encoding="utf-8"
+                    ) as f:
+                        legacy_alert = json.load(f)
+
+                    with open(self.alert_profiles_file, "w", encoding="utf-8") as f:
+                        yaml.safe_dump(
+                            legacy_alert, f, default_flow_style=False, sort_keys=False
+                        )
+                    logger.info("Migrated %d alert profiles", len(legacy_alert))
+                else:
+                    with open(self.alert_profiles_file, "w", encoding="utf-8") as f:
+                        yaml.safe_dump({}, f)
+                    logger.debug("Created empty alert profiles file")
+
+            # Create Global Profiles file if it doesn't exist
+            if not self.global_profiles_file.exists():
+                with open(self.global_profiles_file, "w", encoding="utf-8") as f:
+                    yaml.safe_dump({}, f)
+                logger.debug("Created empty global profiles file")
+
+        except Exception as exc:
+            logger.error("Failed to migrate profiles: %s", exc, exc_info=True)
+
+    # ═══════════════════════════════════════════════════════════════════
+    # Interest Profile Methods
+    # ═══════════════════════════════════════════════════════════════════
+
+    def _generate_next_id(self, prefix: int, existing_profiles: Dict[int, Any]) -> int:
+        """Generate the next available ID with the given prefix.
+
+        Args:
+            prefix: Base prefix (1000, 2000, or 3000)
+            existing_profiles: Dictionary of existing profiles keyed by integer ID
+
+        Returns:
+            Next available ID in the range [prefix, prefix+999]
+        """
+        if not existing_profiles:
+            return prefix
+
+        # Find all IDs in this prefix range
+        range_ids = [
+            pid
+            for pid in existing_profiles.keys()
+            if isinstance(pid, int) and prefix <= pid < prefix + 1000
+        ]
+
+        if not range_ids:
+            return prefix
+
+        # Return max + 1
+        return max(range_ids) + 1
+
+    # ==================== INTEREST PROFILES ====================
+
+    def load_profiles(self) -> Dict[str, Any]:
+        """Load interest profiles from Sentinel API.
+
+        Returns:
+            Dictionary mapping profile names to profile data.
+        """
+        try:
+            url = f"{self.sentinel_api_base_url}/profiles/interest"
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+
+            data = response.json()
+            if data.get("status") == "ok":
+                profiles = data.get("data", {})
+                logger.debug(
+                    f"Loaded {len(profiles)} interest profiles from Sentinel API"
+                )
+                return profiles
+            else:
+                logger.error(f"Failed to load interest profiles: {data.get('message')}")
                 return {}
 
-            # Open file and acquire shared lock for reading
-            with open(self.profiles_file, "r", encoding="utf-8") as f:
-                # Acquire shared (read) lock to prevent reading partial writes
-                fcntl.flock(f.fileno(), fcntl.LOCK_SH)
-                try:
-                    data = yaml.safe_load(f) or {}
-                    logger.debug(
-                        "Loaded %d profile(s) from %s", len(data), self.profiles_file
-                    )
-                    return data
-                finally:
-                    # Release shared lock
-                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        except requests.exceptions.RequestException as exc:
+            logger.error(f"Error loading interest profiles from Sentinel API: {exc}")
+            return {}
         except Exception as exc:
-            logger.error("Failed to load profiles from %s: %s", self.profiles_file, exc)
+            logger.error(f"Unexpected error loading interest profiles: {exc}")
             return {}
 
     def save_profiles(self, profiles: Dict[str, Any]) -> bool:
-        """Save all interest profiles to disk with atomic write and file locking.
+        """Save interest profiles via Sentinel API.
 
         Args:
-            profiles: Dictionary of profiles to save.
+            profiles: Dictionary mapping profile names to profile data.
 
         Returns:
             True on success, False on error.
         """
         try:
-            # Ensure data directory exists
-            self.profiles_file.parent.mkdir(parents=True, exist_ok=True)
+            url = f"{self.sentinel_api_base_url}/profiles/interest"
+            response = requests.post(url, json=profiles, timeout=10)
+            response.raise_for_status()
 
-            # Open target file and acquire exclusive lock for inter-process safety
-            # Create the file if it doesn't exist
-            target_fd = os.open(
-                str(self.profiles_file), os.O_CREAT | os.O_WRONLY, 0o644
-            )
+            data = response.json()
+            if data.get("status") == "ok":
+                logger.debug(
+                    f"Saved {len(profiles)} interest profiles via Sentinel API"
+                )
+                return True
+            else:
+                logger.error(f"Failed to save interest profiles: {data.get('message')}")
+                return False
 
-            try:
-                # Acquire exclusive lock on target file
-                fcntl.flock(target_fd, fcntl.LOCK_EX)
-
-                try:
-                    # Create temp file in same directory for atomic rename
-                    temp_fd, temp_path = tempfile.mkstemp(
-                        dir=self.profiles_file.parent,
-                        prefix=".profiles_",
-                        suffix=".tmp",
-                    )
-
-                    try:
-                        # Write to temp file with flush + fsync
-                        with os.fdopen(temp_fd, "w", encoding="utf-8") as temp_f:
-                            yaml.safe_dump(
-                                profiles,
-                                temp_f,
-                                default_flow_style=False,
-                                sort_keys=True,
-                            )
-                            temp_f.flush()
-                            os.fsync(temp_f.fileno())
-
-                        # Atomic replace: os.replace is guaranteed atomic on POSIX
-                        os.replace(temp_path, str(self.profiles_file))
-                        logger.debug(
-                            "Saved %d profile(s) to %s",
-                            len(profiles),
-                            self.profiles_file,
-                        )
-                        return True
-
-                    except Exception:
-                        # Clean up temp file on error
-                        if os.path.exists(temp_path):
-                            os.unlink(temp_path)
-                        raise
-
-                finally:
-                    # Release lock on target file
-                    fcntl.flock(target_fd, fcntl.LOCK_UN)
-
-            finally:
-                # Close target file descriptor
-                os.close(target_fd)
-
+        except requests.exceptions.RequestException as exc:
+            logger.error(f"Error saving interest profiles to Sentinel API: {exc}")
+            return False
         except Exception as exc:
-            logger.error("Failed to save profiles to %s: %s", self.profiles_file, exc)
+            logger.error(f"Unexpected error saving interest profiles: {exc}")
             return False
 
     def get_profile(self, name: str) -> Dict[str, Any] | None:
@@ -226,28 +245,55 @@ class ProfileService:
         Returns:
             Profile dictionary or None if not found.
         """
-        with self._profiles_lock:
-            profiles = self.load_profiles()
-            return profiles.get(name)
+        try:
+            url = f"{self.sentinel_api_base_url}/profiles/interest/{name}"
+            response = requests.get(url, timeout=10)
+
+            if response.status_code == 404:
+                return None
+
+            response.raise_for_status()
+            data = response.json()
+
+            if data.get("status") == "ok":
+                return data.get("data")
+            else:
+                logger.error(f"Failed to get profile {name}: {data.get('message')}")
+                return None
+
+        except requests.exceptions.RequestException as exc:
+            logger.error(
+                f"Error getting interest profile {name} from Sentinel API: {exc}"
+            )
+            return None
+        except Exception as exc:
+            logger.error(f"Unexpected error getting interest profile {name}: {exc}")
+            return None
 
     def upsert_profile(self, profile_dict: Dict[str, Any]) -> bool:
         """Insert or update an interest profile.
 
         Args:
-            profile_dict: Profile data with 'name' key.
+            profile_dict: Profile data with 'id' and 'name' keys.
 
         Returns:
-            True on success, False on error or missing name.
+            True on success, False on error or missing required fields.
         """
+        profile_id = profile_dict.get("id")
         name = profile_dict.get("name", "").strip()
+
         if not name:
             logger.warning("Cannot upsert profile without a name")
             return False
 
-        with self._profiles_lock:
-            profiles = self.load_profiles()
-            profiles[name] = profile_dict
-            return self.save_profiles(profiles)
+        if not profile_id:
+            logger.warning("Cannot upsert profile without an ID")
+            return False
+
+        profiles = self.load_profiles()
+        # Use string ID as key for consistency with Sentinel API
+        profiles[str(profile_id)] = profile_dict
+        return self.save_profiles(profiles)
 
     def delete_profile(self, name: str) -> bool:
         """Delete an interest profile by name.
@@ -258,135 +304,164 @@ class ProfileService:
         Returns:
             True if deleted or didn't exist, False on error.
         """
-        with self._profiles_lock:
-            profiles = self.load_profiles()
-            if name in profiles:
-                del profiles[name]
-                return self.save_profiles(profiles)
-            # Not found is not an error for deletion
-            return True
-
-    # =========================================================================
-    # Global Profiles (from config/profiles.yml)
-    # =========================================================================
-
-    def load_global_profiles(self) -> Dict[str, Any]:
-        """Load global profiles from config/profiles.yml with file locking.
-
-        Returns:
-            Dictionary containing 'profiles' key with profile definitions,
-            empty dict if file doesn't exist or on error.
-        """
         try:
-            if not self.global_profiles_file.exists():
-                logger.debug(
-                    "Global profiles file does not exist: %s", self.global_profiles_file
-                )
-                return {"profiles": {}}
+            url = f"{self.sentinel_api_base_url}/profiles/interest/{name}"
+            response = requests.delete(url, timeout=10)
 
-            # Open file and acquire shared lock for reading
-            with open(self.global_profiles_file, "r", encoding="utf-8") as f:
-                # Acquire shared (read) lock to prevent reading partial writes
-                fcntl.flock(f.fileno(), fcntl.LOCK_SH)
-                try:
-                    data = yaml.safe_load(f) or {}
-                    profiles = data.get("profiles", {})
-                    logger.debug(
-                        "Loaded %d global profile(s) from %s",
-                        len(profiles),
-                        self.global_profiles_file,
-                    )
-                    return data
-                finally:
-                    # Release shared lock
-                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-        except Exception as exc:
+            if response.status_code == 404:
+                return True  # Not found is not an error for deletion
+
+            response.raise_for_status()
+            data = response.json()
+
+            if data.get("status") == "ok":
+                logger.debug(f"Deleted interest profile: {name}")
+                return True
+            else:
+                logger.error(f"Failed to delete profile {name}: {data.get('message')}")
+                return False
+
+        except requests.exceptions.RequestException as exc:
             logger.error(
-                "Failed to load global profiles from %s: %s",
-                self.global_profiles_file,
-                exc,
+                f"Error deleting interest profile {name} from Sentinel API: {exc}"
             )
-            return {"profiles": {}}
+            return False
+        except Exception as exc:
+            logger.error(f"Unexpected error deleting interest profile {name}: {exc}")
+            return False
 
-    def save_global_profiles(self, data: Dict[str, Any]) -> bool:
-        """Save global profiles to config/profiles.yml with atomic write and file locking.
+    def toggle_interest_profile(self, profile_id: int) -> bool:
+        """Toggle interest profile enabled/disabled state via Sentinel API.
 
         Args:
-            data: Dictionary containing 'profiles' key with profile definitions.
+            profile_id: Interest profile ID to toggle (3000-3999)
 
         Returns:
             True on success, False on error.
         """
         try:
-            # Ensure config directory exists
-            self.global_profiles_file.parent.mkdir(parents=True, exist_ok=True)
+            url = f"{self.sentinel_api_base_url}/profiles/interest/{profile_id}/toggle"
+            response = requests.post(url, timeout=10)
+            response.raise_for_status()
 
-            # Open target file and acquire exclusive lock for inter-process safety
-            # Create the file if it doesn't exist
-            target_fd = os.open(
-                str(self.global_profiles_file), os.O_CREAT | os.O_WRONLY, 0o644
+            data = response.json()
+            if data.get("status") == "ok":
+                enabled = data.get("data", {}).get("enabled", False)
+                logger.debug(
+                    f"Toggled interest profile {profile_id}: enabled={enabled}"
+                )
+                return True
+            else:
+                logger.error(
+                    f"Failed to toggle interest profile {profile_id}: {data.get('message')}"
+                )
+                return False
+
+        except requests.exceptions.RequestException as exc:
+            logger.error(
+                f"Error toggling interest profile {profile_id} via Sentinel API: {exc}"
             )
-
-            try:
-                # Acquire exclusive lock on target file
-                fcntl.flock(target_fd, fcntl.LOCK_EX)
-
-                try:
-                    # Create temp file in same directory for atomic rename
-                    temp_fd, temp_path = tempfile.mkstemp(
-                        dir=self.global_profiles_file.parent,
-                        prefix=".profiles_",
-                        suffix=".tmp",
-                    )
-
-                    try:
-                        # Write to temp file with flush + fsync
-                        with os.fdopen(temp_fd, "w", encoding="utf-8") as temp_f:
-                            # Add header comment
-                            temp_f.write("# TG Sentinel - Global Profile Definitions\n")
-                            temp_f.write(
-                                "# Two-Layer Architecture: Define reusable profiles here, bind them to channels/users in tgsentinel.yml\n\n"
-                            )
-                            yaml.safe_dump(
-                                data,
-                                temp_f,
-                                default_flow_style=False,
-                                sort_keys=True,
-                                allow_unicode=True,
-                            )
-                            temp_f.flush()
-                            os.fsync(temp_f.fileno())
-
-                        # Atomic replace: os.replace is guaranteed atomic on POSIX
-                        os.replace(temp_path, str(self.global_profiles_file))
-                        profiles_count = len(data.get("profiles", {}))
-                        logger.debug(
-                            "Saved %d global profile(s) to %s",
-                            profiles_count,
-                            self.global_profiles_file,
-                        )
-                        return True
-
-                    except Exception:
-                        # Clean up temp file on error
-                        if os.path.exists(temp_path):
-                            os.unlink(temp_path)
-                        raise
-
-                finally:
-                    # Release lock on target file
-                    fcntl.flock(target_fd, fcntl.LOCK_UN)
-
-            finally:
-                # Close target file descriptor
-                os.close(target_fd)
-
+            return False
         except Exception as exc:
             logger.error(
-                "Failed to save global profiles to %s: %s",
-                self.global_profiles_file,
-                exc,
+                f"Unexpected error toggling interest profile {profile_id}: {exc}"
             )
+            return False
+
+    # ==================== GLOBAL PROFILES ====================
+
+    def toggle_global_profile(self, profile_id: int) -> bool:
+        """Toggle global profile enabled/disabled state via Sentinel API.
+
+        Args:
+            profile_id: Global profile ID to toggle (2000-2999)
+
+        Returns:
+            True on success, False on error.
+        """
+        try:
+            url = f"{self.sentinel_api_base_url}/profiles/global/{profile_id}/toggle"
+            response = requests.post(url, timeout=10)
+            response.raise_for_status()
+
+            data = response.json()
+            if data.get("status") == "ok":
+                enabled = data.get("data", {}).get("enabled", False)
+                logger.debug(f"Toggled global profile {profile_id}: enabled={enabled}")
+                return True
+            else:
+                logger.error(
+                    f"Failed to toggle global profile {profile_id}: {data.get('message')}"
+                )
+                return False
+
+        except requests.exceptions.RequestException as exc:
+            logger.error(
+                f"Error toggling global profile {profile_id} via Sentinel API: {exc}"
+            )
+            return False
+        except Exception as exc:
+            logger.error(
+                f"Unexpected error toggling global profile {profile_id}: {exc}"
+            )
+            return False
+
+    def load_global_profiles(self) -> Dict[str, Any]:
+        """Load global profiles from Sentinel API.
+
+        Returns:
+            Dictionary containing global profile definitions.
+        """
+        try:
+            url = f"{self.sentinel_api_base_url}/profiles/global"
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+
+            data = response.json()
+            if data.get("status") == "ok":
+                profiles = data.get("data", {})
+                logger.debug(
+                    f"Loaded {len(profiles)} global profiles from Sentinel API"
+                )
+                return profiles
+            else:
+                logger.error(f"Failed to load global profiles: {data.get('message')}")
+                return {}
+
+        except requests.exceptions.RequestException as exc:
+            logger.error(f"Error loading global profiles from Sentinel API: {exc}")
+            return {}
+        except Exception as exc:
+            logger.error(f"Unexpected error loading global profiles: {exc}")
+            return {}
+
+    def save_global_profiles(self, profiles: Dict[str, Any]) -> bool:
+        """Save global profiles via Sentinel API.
+
+        Args:
+            profiles: Dictionary containing profile definitions.
+
+        Returns:
+            True on success, False on error.
+        """
+        try:
+            url = f"{self.sentinel_api_base_url}/profiles/global"
+            response = requests.post(url, json=profiles, timeout=10)
+            response.raise_for_status()
+
+            data = response.json()
+            if data.get("status") == "ok":
+                logger.debug(f"Saved {len(profiles)} global profiles via Sentinel API")
+                return True
+            else:
+                logger.error(f"Failed to save global profiles: {data.get('message')}")
+                return False
+
+        except requests.exceptions.RequestException as exc:
+            logger.error(f"Error saving global profiles to Sentinel API: {exc}")
+            return False
+        except Exception as exc:
+            logger.error(f"Unexpected error saving global profiles: {exc}")
             return False
 
     def list_global_profiles(self) -> List[Dict[str, Any]]:
@@ -395,128 +470,159 @@ class ProfileService:
         Returns:
             List of profile dictionaries with id and name keys.
         """
-        with self._global_profiles_lock:
-            data = self.load_global_profiles()
-            profiles = data.get("profiles", {})
-            return [
-                {
-                    "id": profile_id,
-                    "name": profile_data.get("name", profile_id),
-                    **profile_data,
-                }
-                for profile_id, profile_data in profiles.items()
-            ]
+        profiles = self.load_global_profiles()
+        return [
+            {
+                "id": int(profile_id),
+                "name": profile_data.get("name", str(profile_id)),
+                **profile_data,
+            }
+            for profile_id, profile_data in profiles.items()
+        ]
 
-    def get_global_profile(self, profile_id: str) -> Dict[str, Any] | None:
+    def get_global_profile(self, profile_id: int) -> Dict[str, Any] | None:
         """Get a single global profile by ID.
 
         Args:
-            profile_id: Profile ID (key in profiles.yml).
+            profile_id: Profile ID (integer in 2000-2999 range).
 
         Returns:
             Profile dictionary or None if not found.
         """
-        with self._global_profiles_lock:
-            data = self.load_global_profiles()
-            profiles = data.get("profiles", {})
-            profile_data = profiles.get(profile_id)
-            if profile_data:
-                return {"id": profile_id, **profile_data}
+        try:
+            profile_id = int(profile_id)  # Ensure integer
+            url = f"{self.sentinel_api_base_url}/profiles/global/{profile_id}"
+            response = requests.get(url, timeout=10)
+
+            if response.status_code == 404:
+                return None
+
+            response.raise_for_status()
+            data = response.json()
+
+            if data.get("status") == "ok":
+                profile_data = data.get("data")
+                if profile_data:
+                    return {"id": profile_id, **profile_data}
             return None
 
-    def create_global_profile(
-        self, profile_id: str, profile_data: Dict[str, Any]
-    ) -> bool:
-        """Create a new global profile.
+        except requests.exceptions.RequestException as exc:
+            logger.error(
+                f"Error getting global profile {profile_id} from Sentinel API: {exc}"
+            )
+            return None
+        except Exception as exc:
+            logger.error(f"Unexpected error getting global profile {profile_id}: {exc}")
+            return None
+
+    def create_global_profile(self, profile_data: Dict[str, Any]) -> int | None:
+        """Create a new global profile with auto-generated ID.
 
         Args:
-            profile_id: Unique profile ID.
             profile_data: Profile configuration (keywords, weights, etc.).
 
         Returns:
-            True on success, False if profile already exists or on error.
+            Generated profile ID on success, None on error.
         """
-        if not profile_id or not profile_id.strip():
-            logger.warning("Cannot create global profile without an ID")
-            return False
+        profiles = self.load_global_profiles()
 
-        with self._global_profiles_lock:
-            data = self.load_global_profiles()
-            profiles = data.get("profiles", {})
+        # Convert string keys to integers for ID generation
+        int_profiles = {int(k): v for k, v in profiles.items() if k.isdigit()}
 
-            if profile_id in profiles:
-                logger.warning(
-                    "Global profile '%s' already exists, use update instead", profile_id
-                )
-                return False
+        # Generate new ID
+        profile_id = self._generate_next_id(GLOBAL_PROFILE_ID_PREFIX, int_profiles)
 
-            profiles[profile_id] = profile_data
-            data["profiles"] = profiles
-            return self.save_global_profiles(data)
+        # Store with string key (YAML requirement) but integer ID in data
+        profile_data["id"] = profile_id
+        profiles[str(profile_id)] = profile_data
+
+        if self.save_global_profiles(profiles):
+            logger.info(f"Created global profile with ID: {profile_id}")
+            return profile_id
+        return None
 
     def update_global_profile(
-        self, profile_id: str, profile_data: Dict[str, Any]
+        self, profile_id: int, profile_data: Dict[str, Any]
     ) -> bool:
         """Update an existing global profile.
 
         Args:
-            profile_id: Profile ID to update.
+            profile_id: Profile ID to update (integer in 2000-2999 range).
             profile_data: New profile configuration.
 
         Returns:
             True on success, False if profile doesn't exist or on error.
         """
-        with self._global_profiles_lock:
-            data = self.load_global_profiles()
-            profiles = data.get("profiles", {})
+        profile_id = int(profile_id)  # Ensure integer
+        profiles = self.load_global_profiles()
 
-            if profile_id not in profiles:
-                logger.warning(
-                    "Global profile '%s' not found, use create instead", profile_id
-                )
-                return False
+        if str(profile_id) not in profiles:
+            logger.warning(
+                "Global profile '%s' not found, use create instead", profile_id
+            )
+            return False
 
-            profiles[profile_id] = profile_data
-            data["profiles"] = profiles
-            return self.save_global_profiles(data)
+        profile_data["id"] = profile_id
+        profiles[str(profile_id)] = profile_data
+        return self.save_global_profiles(profiles)
 
     def upsert_global_profile(
-        self, profile_id: str, profile_data: Dict[str, Any]
+        self, profile_id: int, profile_data: Dict[str, Any]
     ) -> bool:
         """Insert or update a global profile.
 
         Args:
-            profile_id: Profile ID.
+            profile_id: Profile ID (integer in 2000-2999 range).
             profile_data: Profile configuration.
 
         Returns:
             True on success, False on error.
         """
-        with self._global_profiles_lock:
-            data = self.load_global_profiles()
-            profiles = data.get("profiles", {})
-            profiles[profile_id] = profile_data
-            data["profiles"] = profiles
-            return self.save_global_profiles(data)
+        profile_id = int(profile_id)  # Ensure integer
+        profiles = self.load_global_profiles()
+        profile_data["id"] = profile_id
+        profiles[str(profile_id)] = profile_data
+        return self.save_global_profiles(profiles)
 
-    def delete_global_profile(self, profile_id: str) -> bool:
+    def delete_global_profile(self, profile_id: int) -> bool:
         """Delete a global profile by ID.
 
         Args:
-            profile_id: Profile ID to delete.
+            profile_id: Profile ID to delete (integer in 2000-2999 range).
 
         Returns:
             True if deleted or didn't exist, False on error.
         """
-        with self._global_profiles_lock:
-            data = self.load_global_profiles()
-            profiles = data.get("profiles", {})
-            if profile_id in profiles:
-                del profiles[profile_id]
-                data["profiles"] = profiles
-                return self.save_global_profiles(data)
-            # Not found is not an error for deletion
-            return True
+        try:
+            profile_id = int(profile_id)  # Ensure integer
+            url = f"{self.sentinel_api_base_url}/profiles/global/{profile_id}"
+            response = requests.delete(url, timeout=10)
+
+            if response.status_code == 404:
+                return True  # Not found is not an error for deletion
+
+            response.raise_for_status()
+            data = response.json()
+
+            if data.get("status") == "ok":
+                logger.debug(f"Deleted global profile: {profile_id}")
+                return True
+            else:
+                logger.error(
+                    f"Failed to delete global profile {profile_id}: {data.get('message')}"
+                )
+                return False
+
+        except requests.exceptions.RequestException as exc:
+            logger.error(
+                f"Error deleting global profile {profile_id} from Sentinel API: {exc}"
+            )
+            return False
+        except Exception as exc:
+            logger.error(
+                f"Unexpected error deleting global profile {profile_id}: {exc}"
+            )
+            return False
 
     def validate_global_profile(self, profile_data: Dict[str, Any]) -> Dict[str, Any]:
         """Validate global profile structure and return validation result.
@@ -619,117 +725,106 @@ class ProfileService:
 
         return usage
 
-    # =========================================================================
-    # Alert Profiles (JSON-based)
-    # =========================================================================
+    # ==================== ALERT PROFILES (via Sentinel API) ====================
 
     def load_alert_profiles(self) -> Dict[str, Any]:
-        """Load alert profiles from JSON file with file locking.
+        """Load alert profiles from Sentinel API.
 
         Returns:
-            Dictionary of alert profiles, empty dict if file doesn't exist or on error.
+            Dictionary of alert profiles {profile_id: profile_data}, empty dict on error.
         """
         try:
-            if not self.alert_profiles_file.exists():
-                logger.debug(
-                    "Alert profiles file does not exist: %s", self.alert_profiles_file
-                )
+            url = f"{self.sentinel_api_base_url}/profiles/alert"
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+
+            data = response.json()
+            if data.get("status") == "ok":
+                profiles = data.get("data", {})
+                logger.debug(f"Loaded {len(profiles)} alert profiles from Sentinel API")
+                return profiles
+            else:
+                logger.error(f"Failed to load alert profiles: {data.get('message')}")
                 return {}
 
-            # Open file and acquire shared lock for reading
-            with open(self.alert_profiles_file, "r", encoding="utf-8") as f:
-                # Acquire shared (read) lock to prevent reading partial writes
-                fcntl.flock(f.fileno(), fcntl.LOCK_SH)
-                try:
-                    data = json.load(f)
-                    logger.debug("Loaded %d alert profile(s)", len(data))
-                    return data
-                finally:
-                    # Release shared lock
-                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        except requests.exceptions.RequestException as exc:
+            logger.error(f"Error loading alert profiles from Sentinel API: {exc}")
+            return {}
         except Exception as exc:
-            logger.error("Failed to load alert profiles: %s", exc)
+            logger.error(f"Unexpected error loading alert profiles: {exc}")
             return {}
 
     def save_alert_profiles(self, profiles: Dict[str, Any]) -> bool:
-        """Save alert profiles to JSON file with atomic write and file locking.
+        """Save alert profiles via Sentinel API.
 
         Args:
-            profiles: Dictionary of alert profiles to save.
+            profiles: Dictionary of alert profiles {profile_id: profile_data}.
 
         Returns:
             True on success, False on error.
         """
         try:
-            # Ensure data directory exists
-            self.alert_profiles_file.parent.mkdir(parents=True, exist_ok=True)
+            url = f"{self.sentinel_api_base_url}/profiles/alert"
+            response = requests.post(url, json=profiles, timeout=10)
+            response.raise_for_status()
 
-            # Open target file and acquire exclusive lock for inter-process safety
-            # Create the file if it doesn't exist
-            target_fd = os.open(
-                str(self.alert_profiles_file), os.O_CREAT | os.O_WRONLY, 0o644
-            )
+            data = response.json()
+            if data.get("status") == "ok":
+                logger.debug(f"Saved {len(profiles)} alert profiles via Sentinel API")
+                return True
+            else:
+                logger.error(f"Failed to save alert profiles: {data.get('message')}")
+                return False
 
-            try:
-                # Acquire exclusive lock on target file
-                fcntl.flock(target_fd, fcntl.LOCK_EX)
-
-                try:
-                    # Create temp file in same directory for atomic rename
-                    temp_fd, temp_path = tempfile.mkstemp(
-                        dir=self.alert_profiles_file.parent,
-                        prefix=".alert_profiles_",
-                        suffix=".tmp",
-                    )
-
-                    try:
-                        # Write to temp file with flush + fsync
-                        with os.fdopen(temp_fd, "w", encoding="utf-8") as temp_f:
-                            json.dump(profiles, temp_f, indent=2, sort_keys=True)
-                            temp_f.flush()
-                            os.fsync(temp_f.fileno())
-
-                        # Atomic replace: os.replace is guaranteed atomic on POSIX
-                        os.replace(temp_path, str(self.alert_profiles_file))
-                        logger.debug("Saved %d alert profile(s)", len(profiles))
-                        return True
-
-                    except Exception:
-                        # Clean up temp file on error
-                        if os.path.exists(temp_path):
-                            os.unlink(temp_path)
-                        raise
-
-                finally:
-                    # Release lock on target file
-                    fcntl.flock(target_fd, fcntl.LOCK_UN)
-
-            finally:
-                # Close target file descriptor
-                os.close(target_fd)
-
+        except requests.exceptions.RequestException as exc:
+            logger.error(f"Error saving alert profiles to Sentinel API: {exc}")
+            return False
         except Exception as exc:
-            logger.error("Failed to save alert profiles: %s", exc)
+            logger.error(f"Unexpected error saving alert profiles: {exc}")
             return False
 
-    def get_alert_profile(self, name: str) -> Dict[str, Any] | None:
-        """Get a single alert profile by name.
+    def get_alert_profile(self, profile_id: int) -> Dict[str, Any] | None:
+        """Get a single alert profile by ID via Sentinel API.
 
         Args:
-            name: Profile name.
+            profile_id: Profile ID (integer in 1000-1999 range).
 
         Returns:
             Alert profile dictionary or None if not found.
         """
-        with self._alert_profiles_lock:
-            profiles = self.load_alert_profiles()
-            return profiles.get(name)
+        try:
+            profile_id = int(profile_id)  # Ensure integer
+            url = f"{self.sentinel_api_base_url}/profiles/alert/{profile_id}"
+            response = requests.get(url, timeout=10)
+
+            if response.status_code == 404:
+                return None
+
+            response.raise_for_status()
+            data = response.json()
+
+            if data.get("status") == "ok":
+                return data.get("data")
+            else:
+                logger.error(
+                    f"Failed to get alert profile {profile_id}: {data.get('message')}"
+                )
+                return None
+
+        except requests.exceptions.RequestException as exc:
+            logger.error(
+                f"Error getting alert profile {profile_id} from Sentinel API: {exc}"
+            )
+            return None
+        except Exception as exc:
+            logger.error(f"Unexpected error getting alert profile {profile_id}: {exc}")
+            return None
 
     def upsert_alert_profile(self, profile_dict: Dict[str, Any]) -> bool:
-        """Insert or update an alert profile.
+        """Insert or update an alert profile via Sentinel API.
 
         Args:
-            profile_dict: Profile data with 'name' key.
+            profile_dict: Profile data with 'name' key and optional 'id'.
 
         Returns:
             True on success, False on error or missing name.
@@ -739,26 +834,96 @@ class ProfileService:
             logger.warning("Cannot upsert alert profile without a name")
             return False
 
-        with self._alert_profiles_lock:
-            profiles = self.load_alert_profiles()
-            profiles[name] = profile_dict
-            return self.save_alert_profiles(profiles)
+        profiles = self.load_alert_profiles()
 
-    def delete_alert_profile(self, name: str) -> bool:
-        """Delete an alert profile by name.
+        # Get or generate integer ID
+        profile_id = profile_dict.get("id")
+        if profile_id is None:
+            # New profile - generate ID
+            profile_id = self._generate_next_id(ALERT_PROFILE_ID_PREFIX, profiles)
+            profile_dict["id"] = profile_id
+            logger.info(f"Generated alert profile ID: {profile_id}")
+        else:
+            # Ensure ID is integer
+            profile_id = int(profile_id)
+            profile_dict["id"] = profile_id
+
+        # Key by integer ID for consistent lookups
+        profiles[profile_id] = profile_dict
+        return self.save_alert_profiles(profiles)
+
+    def delete_alert_profile(self, profile_id: int) -> bool:
+        """Delete an alert profile by ID via Sentinel API.
 
         Args:
-            name: Profile name to delete.
+            profile_id: Profile ID to delete (integer in 1000-1999 range).
 
         Returns:
             True if deleted or didn't exist, False on error.
         """
-        with self._alert_profiles_lock:
-            profiles = self.load_alert_profiles()
-            if name in profiles:
-                del profiles[name]
-                return self.save_alert_profiles(profiles)
-            return True
+        try:
+            profile_id = int(profile_id)  # Ensure integer
+            url = f"{self.sentinel_api_base_url}/profiles/alert/{profile_id}"
+            response = requests.delete(url, timeout=10)
+
+            if response.status_code == 404:
+                return True  # Not found is not an error for deletion
+
+            response.raise_for_status()
+            data = response.json()
+
+            if data.get("status") == "ok":
+                logger.debug(f"Deleted alert profile: {profile_id}")
+                return True
+            else:
+                logger.error(
+                    f"Failed to delete alert profile {profile_id}: {data.get('message')}"
+                )
+                return False
+
+        except requests.exceptions.RequestException as exc:
+            logger.error(
+                f"Error deleting alert profile {profile_id} from Sentinel API: {exc}"
+            )
+            return False
+        except Exception as exc:
+            logger.error(f"Unexpected error deleting alert profile {profile_id}: {exc}")
+            return False
+
+    def toggle_alert_profile(self, profile_id: int) -> bool:
+        """Toggle the enabled status of an alert profile via Sentinel API.
+
+        Args:
+            profile_id: Profile ID to toggle (integer in 1000-1999 range).
+
+        Returns:
+            True on success, False on error.
+        """
+        try:
+            profile_id = int(profile_id)  # Ensure integer
+            url = f"{self.sentinel_api_base_url}/profiles/alert/{profile_id}/toggle"
+            response = requests.post(url, timeout=10)
+            response.raise_for_status()
+
+            data = response.json()
+            if data.get("status") == "ok":
+                new_status = data.get("data", {}).get("enabled", False)
+                logger.info(f"Toggled alert profile {profile_id}: enabled={new_status}")
+                return True
+            else:
+                logger.error(
+                    f"Failed to toggle alert profile {profile_id}: {data.get('message')}"
+                )
+                return False
+
+        except requests.exceptions.RequestException as exc:
+            logger.error(
+                f"Error toggling alert profile {profile_id} via Sentinel API: {exc}"
+            )
+            return False
+        except Exception as exc:
+            logger.error(f"Unexpected error toggling alert profile {profile_id}: {exc}")
+            return False
 
     # =========================================================================
     # Alert Profile Synchronization
@@ -827,6 +992,13 @@ class ProfileService:
                     channel["rate_limit_per_hour"] = profile.get(
                         "rate_limit_per_hour", 10
                     )
+
+                    # Sync digest configuration if present
+                    if "digest_config" in profile:
+                        channel["digest"] = profile["digest_config"]
+                    elif "digest" not in channel:
+                        # Clear digest if profile doesn't have one
+                        channel.pop("digest", None)
 
             # Write back to config with file locking
             # Open target file and acquire exclusive lock for inter-process safety
@@ -899,15 +1071,15 @@ def get_profile_service() -> ProfileService:
     return _profile_service
 
 
-def init_profile_service(data_dir: Path | None = None) -> ProfileService:
+def init_profile_service(sentinel_api_base_url: str = None) -> ProfileService:
     """Initialize the global ProfileService instance.
 
     Args:
-        data_dir: Optional data directory override.
+        sentinel_api_base_url: Sentinel API base URL. If None, uses environment variable.
 
     Returns:
         ProfileService instance.
     """
     global _profile_service
-    _profile_service = ProfileService(data_dir)
+    _profile_service = ProfileService(sentinel_api_base_url)
     return _profile_service

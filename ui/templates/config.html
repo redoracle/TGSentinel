@@ -598,7 +598,7 @@
                         <select multiple class="form-select" id="edit-channel-profiles" name="profiles" size="5">
                             <!-- Populated dynamically -->
                         </select>
-                        <small class="form-text text-muted">Select one or more global profiles to apply to this channel</small>
+                        <small class="form-text text-muted">Select one or more profiles (Alert/Interest) to apply to this channel</small>
                     </div>
                     
                     <div class="accordion mb-3" id="channelOverridesAccordion">
@@ -693,7 +693,7 @@
                         <select multiple class="form-select" id="edit-user-profiles" name="profiles" size="5">
                             <!-- Populated dynamically -->
                         </select>
-                        <small class="form-text text-muted">Select one or more global profiles to apply to this user</small>
+                        <small class="form-text text-muted">Select one or more profiles (Alert/Interest) to apply to this user</small>
                     </div>
                     
                     <div class="accordion mb-3" id="userOverridesAccordion">
@@ -1663,12 +1663,16 @@
         if (channelsTab && usersTab) {
             channelsTab.addEventListener("shown.bs.tab", () => {
                 btnAddSelectedChannels.classList.remove("d-none");
+                btnAddSelectedChannels.disabled = false;
                 btnAddSelectedUsers.classList.add("d-none");
+                btnAddSelectedUsers.disabled = true;
             });
             
             usersTab.addEventListener("shown.bs.tab", async () => {
                 btnAddSelectedChannels.classList.add("d-none");
+                btnAddSelectedChannels.disabled = true;
                 btnAddSelectedUsers.classList.remove("d-none");
+                btnAddSelectedUsers.disabled = false;
                 
                 // Always reset error state when showing tab
                 document.getElementById("users-error").classList.add("d-none");
@@ -1828,7 +1832,10 @@
         
         // Handle checkbox changes
         document.getElementById("channels-checkboxes")?.addEventListener("change", () => {
-            updateApplyButtonState();
+            const channelsTabActive = document.getElementById("channels-tab")?.classList.contains("active");
+            if (channelsTabActive) {
+                updateApplyButtonState();
+            }
         });
         
         // Handle add/remove selected channels
@@ -2472,6 +2479,9 @@
     function initializeUserHandlers() {
         // Handle checkbox changes for users
         document.getElementById("users-checkboxes")?.addEventListener("change", () => {
+            const usersTabActive = document.getElementById("users-tab")?.classList.contains("active");
+            if (!usersTabActive) return; // Only update if users tab is active
+            
             // Check if any changes were made (checked non-existing or unchecked existing)
             const checkboxes = document.querySelectorAll("#users-checkboxes input[type='checkbox']");
             let hasChanges = false;
@@ -2483,7 +2493,11 @@
                     hasChanges = true;
                 }
             });
-            document.getElementById("btn-add-selected-users").disabled = !hasChanges;
+            
+            const btnAddSelectedUsers = document.getElementById("btn-add-selected-users");
+            if (btnAddSelectedUsers && !btnAddSelectedUsers.classList.contains("d-none")) {
+                btnAddSelectedUsers.disabled = !hasChanges;
+            }
         });
         
         // Handle Select All Users button
@@ -2895,18 +2909,33 @@
     let globalProfiles = [];
     
     /**
-     * Load global profiles from API
+     * Load profiles (Alert + Interest) for channel/user binding
+     * Replaces legacy "global profiles" system
      */
     async function loadGlobalProfiles() {
         try {
-            const response = await fetch("/api/profiles/global/list");
-            if (!response.ok) throw new Error("Failed to load profiles");
-            const data = await response.json();
-            globalProfiles = data.profiles || [];
+            // Load both Alert and Interest profiles
+            const [alertResponse, interestResponse] = await Promise.all([
+                fetch("/api/profiles/alert/list"),
+                fetch("/api/profiles/interest/list")
+            ]);
+            
+            if (!alertResponse.ok || !interestResponse.ok) {
+                throw new Error("Failed to load profiles");
+            }
+            
+            const alertData = await alertResponse.json();
+            const interestData = await interestResponse.json();
+            
+            const alertProfiles = alertData.profiles || [];
+            const interestProfiles = interestData.profiles || [];
+            
+            // Combine both types of profiles
+            globalProfiles = [...alertProfiles, ...interestProfiles];
             return globalProfiles;
         } catch (error) {
-            console.error("Failed to load global profiles:", error);
-            showToast("Failed to load global profiles", "error");
+            console.error("Failed to load profiles:", error);
+            // Don't show toast - this is called on page load and might fail if not logged in
             return [];
         }
     }
@@ -3325,9 +3354,9 @@
     // CONSOLIDATED DOM INITIALIZATION
     // ============================================================================
     document.addEventListener("DOMContentLoaded", () => {
-        // Pre-load global profiles for instant validation (eager loading)
+        // Load profiles (Alert + Interest) for channel/user binding
         loadGlobalProfiles().catch(err => {
-            console.error("Failed to pre-load global profiles:", err);
+            console.error("Failed to pre-load profiles:", err);
             // Non-critical - profiles will be loaded on-demand if this fails
         });
         

@@ -308,7 +308,7 @@ Configuration:
 ```yaml
 channels:
   - id: 12345
-    name: "Algorand Dev"
+    name: "marketing Dev"
     release_keywords:
       - "v1."
       - "new release"
@@ -489,7 +489,7 @@ curl -X POST http://localhost:5001/api/profiles/alert/backtest \
 ```json
 {
   "status": "ok",
-  "profile_name": "Algorand Dev",
+  "profile_name": "marketing Dev",
   "stats": {
     "total_messages": 87,
     "matched_messages": 15,
@@ -504,7 +504,7 @@ curl -X POST http://localhost:5001/api/profiles/alert/backtest \
   ],
   "matches": [
     {
-      "chat_title": "Algorand Dev",
+      "chat_title": "marketing Dev",
       "score": 3.2,
       "triggers": ["keywords:urgent,CVE", "security"],
       "text_preview": "Critical vulnerability found in...",
@@ -537,7 +537,7 @@ curl -X POST http://localhost:5001/api/profiles/alert/upsert \
   -H "Content-Type: application/json" \
   -d '{
     "id": "channel_-100123456789",
-    "name": "Algorand Dev",
+    "name": "marketing Dev",
     "type": "channel",
     "channel_id": -100123456789,
     "enabled": true,
@@ -588,7 +588,7 @@ Interest profiles use semantic/AI-based matching for global topic detection acro
 curl -X POST http://localhost:5001/api/profiles/interest/backtest \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "algorand core development",
+    "name": "marketing core development",
     "hours_back": 24,
     "max_messages": 100
   }' | jq

@@ -488,7 +488,7 @@ API_HASH = ...
 SESSION = "tgsentinel.session"
 client = TelegramClient(SESSION, API_ID, API_HASH)
 
-IMPORTANT = re.compile(r"(algorand|security|release|CVE)", re.I)
+IMPORTANT = re.compile(r"(marketing|security|release|CVE)", re.I)
 VIP = {12345, 67890}
 
 def important(m):

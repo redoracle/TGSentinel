@@ -148,7 +148,60 @@ class RedisManager:
             return json.loads(str(raw))
         except Exception as exc:
             self.log.warning("Failed to get %s credentials: %s", source, exc)
+
+    def set_digest_schedule_time(
+        self, schedule: str, timestamp: str, ttl: int = 86400 * 7
+    ) -> None:
+        """Store the last run time for a digest schedule.
+
+        Args:
+            schedule: Schedule name (e.g., 'hourly', 'daily')
+            timestamp: ISO format timestamp
+            ttl: Time-to-live in seconds (default: 7 days)
+        """
+        try:
+            key = f"tgsentinel:digest:last_run:{schedule}"
+            self.redis.setex(key, ttl, timestamp)
+            self.log.debug("Stored last run time for %s schedule", schedule)
+        except Exception as exc:
+            self.log.warning(
+                "Failed to store digest schedule time for %s: %s", schedule, exc
+            )
+
+    def get_digest_schedule_time(self, schedule: str) -> Optional[str]:
+        """Retrieve the last run time for a digest schedule.
+
+        Args:
+            schedule: Schedule name (e.g., 'hourly', 'daily')
+
+        Returns:
+            ISO format timestamp or None if not found
+        """
+        try:
+            key = f"tgsentinel:digest:last_run:{schedule}"
+            raw = self.redis.get(key)
+            if not raw:
+                return None
+            if isinstance(raw, bytes):
+                return raw.decode()
+            return str(raw)
+        except Exception as exc:
+            self.log.warning(
+                "Failed to get digest schedule time for %s: %s", schedule, exc
+            )
             return None
+
+    def get_all_digest_schedule_times(self) -> Dict[str, Optional[str]]:
+        """Retrieve all digest schedule last run times.
+
+        Returns:
+            Dictionary mapping schedule name to ISO timestamp (or None)
+        """
+        schedules = ["hourly", "every_4h", "every_6h", "every_12h", "daily", "weekly"]
+        result = {}
+        for schedule in schedules:
+            result[schedule] = self.get_digest_schedule_time(schedule)
+        return result
 
     def publish_login_progress(
         self, stage: str, percent: int, message: str, ttl: Optional[int] = 300

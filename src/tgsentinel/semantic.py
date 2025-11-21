@@ -39,13 +39,9 @@ def _try_import_model():
         return None
 
 
-# Preload model at module import time (container boot) if EMBEDDINGS_MODEL is set
-# This ensures the model is loaded once and reused across all authentications
-if os.getenv("EMBEDDINGS_MODEL"):
-    log.info("[SEMANTIC] Preloading embeddings model at container startup...")
-    _try_import_model()
-else:
-    log.info("[SEMANTIC] EMBEDDINGS_MODEL not set, semantic scoring disabled")
+# NOTE: Model loading is deferred until explicitly called from main.py
+# This ensures logging is configured before model loading messages appear
+# The _try_import_model() function should be called after setup_logging()
 
 
 def load_interests(interests: List[str]):

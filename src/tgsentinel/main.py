@@ -57,6 +57,30 @@ async def _run():
     # Initialize build info metric at startup
     initialize_build_info()
 
+    # Import and initialize semantic model AFTER logging is set up
+    # This ensures we see the model loading logs
+    try:
+        embeddings_model = os.getenv("EMBEDDINGS_MODEL")
+        if embeddings_model:
+            log.info(f"[STARTUP] Loading semantic embeddings model: {embeddings_model}")
+            from .semantic import _model as semantic_model
+            from .semantic import _try_import_model
+
+            _try_import_model()  # Trigger model load with logging now configured
+            # Check result
+            from .semantic import _model
+
+            if _model is not None:
+                log.info("[STARTUP] ✓ Semantic embeddings model loaded and ready")
+            else:
+                log.warning("[STARTUP] ⚠ Semantic model configured but failed to load")
+        else:
+            log.info("[STARTUP] Semantic scoring disabled (EMBEDDINGS_MODEL not set)")
+    except Exception as e:
+        log.warning(
+            f"[STARTUP] Could not initialize semantic model: {e}", exc_info=True
+        )
+
     cfg = load_config()
     engine = init_db(cfg.db_uri)
 
