@@ -168,10 +168,11 @@ class WorkerOrchestrator:
         while True:
             await asyncio.sleep(600)  # Every 10 minutes
             if self.authorized_check():
-                self.redis_mgr.publish_worker_status(
-                    authorized=True, status="authorized", ttl=3600
+                # Use atomic TTL refresh to prevent TOCTOU races
+                # This preserves current status (e.g., "ready") without overwriting concurrent updates
+                await asyncio.to_thread(
+                    self.redis_mgr.refresh_worker_status_ttl, ttl=3600
                 )
-                log.debug("[HEARTBEAT] Worker status refreshed in Redis")
 
     async def database_cleanup_worker(self) -> None:
         """Periodic database cleanup to enforce retention policy."""

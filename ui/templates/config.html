@@ -13,7 +13,7 @@
                 </div>
             </button>
             <div class="d-flex gap-2">
-                <a href="/docs#telegram-config" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                <a href="/docs#telegram-config" class="btn btn-outline-primary btn-sm" title="View Telegram settings documentation" target="_blank" rel="noopener">
                     <i class="bi bi-info-circle"></i>
                 </a>
                 <button class="btn btn-outline-primary btn-sm" type="button" id="btn-reauth">Reauthenticate</button>
@@ -58,7 +58,7 @@
                 </div>
             </button>
             <div class="d-flex gap-2">
-                <a href="/docs#alerts-config" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                <a href="/docs#alerts-config" class="btn btn-outline-primary btn-sm" title="View alert configuration documentation" target="_blank" rel="noopener">
                     <i class="bi bi-info-circle"></i>
                 </a>
                 <button class="btn btn-primary btn-sm" type="button" id="btn-save-alerts">
@@ -120,7 +120,7 @@
                 </div>
             </button>
             <div class="d-flex gap-2">
-                <a href="/docs#scoring-config" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                <a href="/docs#scoring-config" class="btn btn-outline-primary btn-sm" title="View scoring configuration documentation" target="_blank" rel="noopener">
                     <i class="bi bi-info-circle"></i>
                 </a>
                 <button class="btn btn-primary btn-sm" type="button" id="btn-save-scoring">
@@ -207,7 +207,7 @@
                 </div>
             </button>
             <div class="d-flex gap-2">
-                <a href="/docs#channels-api" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                <a href="/docs#channels-api" class="btn btn-outline-primary btn-sm" title="View channels management documentation" target="_blank" rel="noopener">
                     <i class="bi bi-info-circle"></i>
                 </a>
                 <button class="btn btn-primary btn-sm" type="button" id="btn-add-channels" data-bs-toggle="modal" data-bs-target="#addChannelsModal">
@@ -259,7 +259,7 @@
                                        type="checkbox" 
                                        id="channel-enabled-{{ loop.index0 }}" 
                                        data-chat-id="{{ channel.chat_id }}"
-                                       {% if channel.enabled is not defined or channel.enabled %}checked{% endif %}>
+                                       {% if channel.get('enabled', True) %}checked{% endif %}>
                                 <label class="form-check-label visually-hidden" for="channel-enabled-{{ loop.index0 }}">Toggle {{ channel.name }}</label>
                             </div>
                         </td>
@@ -302,7 +302,7 @@
                 </div>
             </button>
             <div class="d-flex gap-2">
-                <a href="/docs#users-api" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                <a href="/docs#users-api" class="btn btn-outline-primary btn-sm" title="View users management documentation" target="_blank" rel="noopener">
                     <i class="bi bi-info-circle"></i>
                 </a>
                 <button class="btn btn-primary btn-sm" type="button" id="btn-add-users" data-bs-toggle="modal" data-bs-target="#addChannelsModal">
@@ -347,7 +347,7 @@
                                            type="checkbox" 
                                            id="user-enabled-{{ loop.index0 }}" 
                                            data-user-id="{{ user.id }}"
-                                           {% if user.enabled is not defined or user.enabled %}checked{% endif %}>
+                                           {% if user.get('enabled', True) %}checked{% endif %}>
                                     <label class="form-check-label visually-hidden" for="user-enabled-{{ loop.index0 }}">Toggle {{ user.name }}</label>
                                 </div>
                             </td>
@@ -390,7 +390,7 @@
                     <small class="text-muted">Infrastructure and runtime options</small>
                 </div>
             </button>
-            <a href="/docs#system-config" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+            <a href="/docs#system-config" class="btn btn-outline-primary btn-sm" title="View system settings documentation" target="_blank" rel="noopener">
                 <i class="bi bi-info-circle"></i>
             </a>
         </div>

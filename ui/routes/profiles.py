@@ -793,9 +793,6 @@ def backtest_interest_profile():
 
         # Call Sentinel API for semantic scoring (model runs in Sentinel container)
         try:
-            sentinel_url = os.getenv(
-                "SENTINEL_API_BASE_URL", "http://sentinel:8080/api"
-            )
             backtest_url = f"{sentinel_url}/profiles/interest/backtest"
 
             payload = {

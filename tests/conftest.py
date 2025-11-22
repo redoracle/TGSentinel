@@ -410,6 +410,36 @@ def client(app):
 
 
 @pytest.fixture
+def client_authenticated(app, mock_redis):
+    """Create authenticated Flask test client with session and worker status."""
+    # Inject mock Redis client into the Flask app's module before creating test client
+    # This ensures all Redis calls during tests use the mock instead of a real connection
+    import ui.app as flask_app_module
+
+    # Store original redis_client to restore after test
+    original_redis_client = flask_app_module.redis_client
+
+    # Inject mock Redis client into the app module
+    flask_app_module.redis_client = mock_redis
+
+    # Set up Redis mock to return authorized worker status
+    mock_redis.get.return_value = b'{"authorized": true, "status": "authorized"}'
+
+    client = app.test_client()
+
+    # Set up authenticated session
+    with client.session_transaction() as sess:
+        sess["telegram_session"] = "/app/data/test.session"
+        sess["user_id"] = 123456789
+        sess["ui_has_been_unlocked"] = True
+
+    yield client
+
+    # Restore original redis_client after test
+    flask_app_module.redis_client = original_redis_client
+
+
+@pytest.fixture
 def mock_init():
     """Mock initialization to avoid external dependencies."""
     with (

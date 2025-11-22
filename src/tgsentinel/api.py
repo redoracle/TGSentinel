@@ -2682,8 +2682,9 @@ def create_api_app() -> Flask:
                 "database_uri": getattr(
                     cfg, "db_uri", "sqlite:////app/data/sentinel.db"
                 ),  # Legacy compatibility
-                "embeddings_model": getattr(
-                    cfg, "embeddings_model", "all-MiniLM-L6-v2"
+                "embeddings_model": os.getenv(
+                    "EMBEDDINGS_MODEL",
+                    getattr(cfg, "embeddings_model", "all-MiniLM-L6-v2"),
                 ),
                 "similarity_threshold": getattr(cfg, "similarity_threshold", 0.7),
             }
@@ -3192,7 +3193,7 @@ def create_api_app() -> Flask:
                 "score": 0.XXX,
                 "interpretation": "...",
                 "profile_id": "...",
-                "model": "all-MiniLM-L6-v2"
+                "model": "<actual model name from EMBEDDINGS_MODEL>"
             }
         """
         try:
@@ -3258,19 +3259,15 @@ def create_api_app() -> Flask:
                     500,
                 )
 
-            # Try to find profile in loaded profiles
+            # Try to find profile in loaded profiles using public attribute
             profile = None
-            profiles_dict = getattr(_config, "_global_profiles", {})
+            profiles_dict = _config.global_profiles
 
             if profile_id in profiles_dict:
                 profile = profiles_dict[profile_id]
             else:
-                # Try loading from YAML files directly
-                import os
-
-                config_dir = os.path.dirname(getattr(_config, "_config_path", "config"))
-                if not config_dir:
-                    config_dir = "config"
+                # Try loading from YAML files directly as fallback
+                config_dir = _config.get_config_dir()
 
                 interest_path = os.path.join(config_dir, "profiles_interest.yml")
                 if os.path.exists(interest_path):
@@ -3342,13 +3339,16 @@ def create_api_app() -> Flask:
                 f"[API] Similarity test for profile '{profile_id}': score={score:.3f}"
             )
 
+            # Get actual model name from environment or fallback to default
+            model_name = os.getenv("EMBEDDINGS_MODEL", "all-MiniLM-L6-v2")
+
             return jsonify(
                 {
                     "status": "ok",
                     "score": round(score, 3),
                     "interpretation": interpretation,
                     "profile_id": profile_id,
-                    "model": "all-MiniLM-L6-v2",
+                    "model": model_name,
                     "num_positive_samples": len(positive_samples),
                     "sample_length": len(sample),
                 }

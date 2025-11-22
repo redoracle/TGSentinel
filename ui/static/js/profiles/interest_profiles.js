@@ -765,8 +765,6 @@
                     scoreBarEl.classList.add("bg-info");
                 } else if (clampedScore < 0.70) {
                     scoreBarEl.classList.add("bg-primary");
-                } else if (clampedScore < 0.85) {
-                    scoreBarEl.classList.add("bg-success");
                 } else {
                     scoreBarEl.classList.add("bg-success");
                 }

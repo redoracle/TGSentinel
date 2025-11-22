@@ -70,6 +70,7 @@
                                 <a class="nav-link" href="#webhooks">Webhooks</a>
                                 <a class="nav-link" href="#system">System</a>
                                 <a class="nav-link" href="#examples">Examples</a>
+                                <a class="nav-link" href="#tools">Tools</a>
                             </nav>
                         </div>
                         <div class="docs-nav-list" data-docs-nav="yaml">
@@ -85,9 +86,34 @@
                             <nav class="nav flex-column nav-pills" aria-label="User manual navigation">
                                 <a class="nav-link active" href="#manual-overview">Overview</a>
                                 <a class="nav-link" href="#manual-getting-started">Getting Started</a>
-                                <a class="nav-link" href="#manual-configuration">Configuration</a>
-                                <a class="nav-link" href="#manual-monitoring">Monitoring</a>
-                                <a class="nav-link" href="#manual-alerts">Alerts</a>
+                                <a class="nav-link" href="#manual-profiles">Profile Management</a>
+                                <a class="nav-link ms-3" href="#alert-profiles">Alert Profiles</a>
+                                <a class="nav-link ms-3" href="#interest-profiles">Interest Profiles</a>
+                                <a class="nav-link ms-3" href="#detection-settings">Detection Settings</a>
+                                <a class="nav-link ms-3" href="#profile-scope">Profile Scope</a>
+                                <a class="nav-link ms-3" href="#digest-api">Digest Schedules</a>
+                                <a class="nav-link" href="#alerts-api">Alerts & Notifications</a>
+                                <a class="nav-link" href="#configuration">Configuration/Settings</a>
+                                <a class="nav-link ms-3" href="#telegram-config">Telegram Settings</a>
+                                <a class="nav-link ms-3" href="#alerts-config">Alert Configuration</a>
+                                <a class="nav-link ms-3" href="#scoring-config">Scoring Configuration</a>
+                                <a class="nav-link ms-3" href="#channels-api">Channels Management</a>
+                                <a class="nav-link ms-3" href="#users-api">Users Management</a>
+                                <a class="nav-link ms-3" href="#system-config">System Settings</a>
+                                <a class="nav-link" href="#analytics">Analytics & Insights</a>
+                                <a class="nav-link ms-3" href="#performance-metrics">Performance Metrics</a>
+                                <a class="nav-link ms-3" href="#resource-metrics">Resource Monitoring</a>
+                                <a class="nav-link ms-3" href="#keyword-heatmap">Keyword Heatmap</a>
+                                <a class="nav-link ms-3" href="#channel-impact">Channel Impact</a>
+                                <a class="nav-link" href="#developer">Developer & Integrations</a>
+                                <a class="nav-link ms-3" href="#integration-settings">Integration Settings</a>
+                                <a class="nav-link ms-3" href="#webhooks-api">Webhooks</a>
+                                <a class="nav-link ms-3" href="#integration-console">Integration Console</a>
+                                <a class="nav-link" href="#console">Console & Maintenance</a>
+                                <a class="nav-link ms-3" href="#console-logs">Log Viewer</a>
+                                <a class="nav-link ms-3" href="#console-commands">System Commands</a>
+                                <a class="nav-link ms-3" href="#maintenance">Maintenance Tools</a>
+                                <a class="nav-link ms-3" href="#diagnostics">Diagnostics</a>
                                 <a class="nav-link" href="#manual-troubleshooting">Troubleshooting</a>
                             </nav>
                         </div>
@@ -1746,6 +1772,395 @@ curl -X GET {{ api_base_url }}/api/analytics/metrics
             </code></pre>
         </section>
 
+        <!-- Tools -->
+        <section id="tools" class="mb-5">
+            <h2 class="section-header">Developer Tools</h2>
+            <p class="lead">TG Sentinel includes utility scripts in the <code>./tools</code> directory for development, testing, session management, and maintenance tasks.</p>
+            
+            <div class="alert alert-info">
+                <strong>Location:</strong> All tools are located in <code>./tools/</code> directory<br>
+                <strong>Usage:</strong> Run from project root: <code>python tools/&lt;script_name&gt;.py</code><br>
+                <strong>Documentation:</strong> Full reference in <code>./tools/README.md</code>
+            </div>
+
+            <!-- Session Management Tools -->
+            <h3 class="mt-4">Session Management</h3>
+            
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4 class="card-title mb-0"><i class="bi bi-key"></i> generate_session.py</h4>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">Generate a portable Telegram session file that can be uploaded to TG Sentinel UI for authentication without SMS codes.</p>
+                    
+                    <h5>Usage</h5>
+                    <pre class="code-block"><code class="language-bash">python tools/generate_session.py --phone +1234567890</code></pre>
+                    
+                    <h5>Features</h5>
+                    <ul>
+                        <li>Interactive authentication flow (SMS code + optional 2FA)</li>
+                        <li>Generates valid Telethon session files</li>
+                        <li>Verifies session integrity before saving</li>
+                        <li>Creates portable files that work across installations</li>
+                        <li>No rate limit impact (uses your own credentials)</li>
+                    </ul>
+                    
+                    <h5>Options</h5>
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Option</th>
+                                <th>Description</th>
+                                <th>Default</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>--phone</code></td>
+                                <td>Phone number in international format (required)</td>
+                                <td>-</td>
+                            </tr>
+                            <tr>
+                                <td><code>--output</code></td>
+                                <td>Output path for session file</td>
+                                <td><code>./tgsentinel_upload.session</code></td>
+                            </tr>
+                            <tr>
+                                <td><code>--api-id</code></td>
+                                <td>Telegram API ID</td>
+                                <td><code>TG_API_ID</code> env var</td>
+                            </tr>
+                            <tr>
+                                <td><code>--api-hash</code></td>
+                                <td>Telegram API hash</td>
+                                <td><code>TG_API_HASH</code> env var</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    
+                    <h5>Example Workflow</h5>
+                    <pre class="code-block"><code class="language-bash"># 1. Generate session file
+python tools/generate_session.py --phone +1234567890
+
+# 2. Enter SMS code when prompted
+# 3. Enter 2FA password if enabled
+# 4. Session saved to: ./tgsentinel_upload.session
+
+# 5. Upload to TG Sentinel:
+#    - Open UI → Authenticate Telegram Session
+#    - Click "Upload Session" tab
+#    - Select the .session file
+#    - Click "Upload & Restore"</code></pre>
+                    
+                    <h5>Benefits</h5>
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <div class="alert alert-success mb-0">
+                                <i class="bi bi-check-circle"></i> Avoid SMS code rate limits
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="alert alert-success mb-0">
+                                <i class="bi bi-check-circle"></i> Quick account switching
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="alert alert-success mb-0">
+                                <i class="bi bi-check-circle"></i> Backup/restore capability
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="alert alert-success mb-0">
+                                <i class="bi bi-check-circle"></i> Development/testing environments
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-warning mt-3">
+                        <strong><i class="bi bi-shield-lock"></i> Security Notes:</strong>
+                        <ul class="mb-0">
+                            <li>Session files contain your authorization key</li>
+                            <li>Keep them secure (treat like passwords)</li>
+                            <li>Don't share or commit to version control</li>
+                            <li>Add <code>*.session</code> to <code>.gitignore</code></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4 class="card-title mb-0"><i class="bi bi-speedometer2"></i> check_rate_limit.py</h4>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">Check current Telegram rate limit status for authentication operations.</p>
+                    
+                    <h5>Usage</h5>
+                    <pre class="code-block"><code class="language-bash">python tools/check_rate_limit.py</code></pre>
+                    
+                    <h5>Output Information</h5>
+                    <ul>
+                        <li>Worker authorization status</li>
+                        <li>Active rate limits per action (send_code, resend_code, sign_in)</li>
+                        <li>Time remaining until rate limits expire</li>
+                        <li>Redis TTL information</li>
+                    </ul>
+                    
+                    <h5>Example Output</h5>
+                    <pre class="code-block"><code class="language-bash">Worker Status:
+  Authorized: True
+  Status: authorized
+  Timestamp: 2025-11-15 10:30:45
+
+Rate Limits:
+  send_code: 49585 seconds remaining (~13.8 hours)
+    Expires: 2025-11-16 00:06:30
+
+No other rate limits active</code></pre>
+                </div>
+            </div>
+
+            <!-- Testing & Development Tools -->
+            <h3 class="mt-4">Testing & Development</h3>
+            
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4 class="card-title mb-0"><i class="bi bi-play-circle"></i> run_tests.py</h4>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">Run the full test suite with coverage reporting.</p>
+                    <pre class="code-block"><code class="language-bash">python tools/run_tests.py</code></pre>
+                    <p class="mb-0">Executes all unit tests, integration tests, and contract tests with detailed coverage metrics.</p>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4 class="card-title mb-0"><i class="bi bi-database"></i> simulate_populate_history.py</h4>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">Populate Redis with historical messages from monitored channels.</p>
+                    
+                    <h5>Usage</h5>
+                    <pre class="code-block"><code class="language-bash">python tools/simulate_populate_history.py [--limit 100] [--channel-id CHANNEL_ID]</code></pre>
+                    
+                    <h5>Description</h5>
+                    <p>Fetches the latest messages from configured Telegram channels and populates Redis as if they were just received. Useful for testing the importance scoring, semantic analysis, and alert generation systems.</p>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4 class="card-title mb-0"><i class="bi bi-inbox"></i> simulate_digest_from_history.py</h4>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">Simulate digest generation using historical messages that were populated into Redis.</p>
+                    
+                    <h5>Usage</h5>
+                    <pre class="code-block"><code class="language-bash">python tools/simulate_digest_from_history.py [--hours 24] [--top-n 10] [--limit 500]</code></pre>
+                    
+                    <h5>Description</h5>
+                    <p>Reads recent entries from the configured Redis stream, scores them with the same heuristics used by the worker (but without sending per-message alerts), writes important ones into the DB as alerted, and finally composes and sends a digest.</p>
+                    
+                    <h5>Typical Flow</h5>
+                    <ol>
+                        <li>Run <code>simulate_populate_history.py</code> to seed the Redis stream from Telegram history</li>
+                        <li>Run this script to score + mark messages and send a digest</li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4 class="card-title mb-0"><i class="bi bi-envelope"></i> simulate_digest.py</h4>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">Test script to trigger digest delivery immediately with test messages.</p>
+                    
+                    <h5>Usage</h5>
+                    <pre class="code-block"><code class="language-bash">python tools/simulate_digest.py</code></pre>
+                    
+                    <h5>Description</h5>
+                    <p>Creates test messages in the database and immediately sends a digest. Useful for testing the digest delivery mechanism without waiting for real messages.</p>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4 class="card-title mb-0"><i class="bi bi-chat-dots"></i> simulate_live_feed.py</h4>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">Simulate a live Telegram feed between two accounts.</p>
+                    
+                    <h5>Usage</h5>
+                    <pre class="code-block"><code class="language-bash">python tools/simulate_live_feed.py \
+    --session-a ./my_dutch.session \
+    --session-b ./temp_test.session \
+    --api-id 123456 \
+    --api-hash abcdef0123456789abcdef0123456789 \
+    --direction a-to-b \
+    --interval 5 \
+    --count 20</code></pre>
+                    
+                    <h5>Using a text file of messages</h5>
+                    <pre class="code-block"><code class="language-bash">python tools/simulate_live_feed.py \
+    --session-a ./helper.session \
+    --session-b ./client.session \
+    --messages-file ./messages.txt \
+    --direction a-to-b \
+    --interval 10</code></pre>
+                    
+                    <h5>Description</h5>
+                    <p>Given two Telethon session files for two different Telegram accounts, this script will make one or both accounts send messages at a fixed interval. Useful for testing TG Sentinel's ingestion using real Telegram traffic.</p>
+                    
+                    <h5>Options</h5>
+                    <ul>
+                        <li><code>--session-a</code> / <code>--session-b</code>: Path to session files</li>
+                        <li><code>--api-id</code> / <code>--api-hash</code>: Telegram API credentials (or use <code>TG_API_ID</code>/<code>TG_API_HASH</code> env vars)</li>
+                        <li><code>--direction</code>: Message direction (<code>a-to-b</code>, <code>b-to-a</code>, or <code>both</code>)</li>
+                        <li><code>--interval</code>: Seconds between messages</li>
+                        <li><code>--count</code>: Number of messages to send</li>
+                        <li><code>--messages-file</code>: Optional text file with messages (one per line)</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Code Quality Tools -->
+            <h3 class="mt-4">Code Quality & Formatting</h3>
+            
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4 class="card-title mb-0"><i class="bi bi-code-slash"></i> format.sh</h4>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">Format Python code using black and isort.</p>
+                    <pre class="code-block"><code class="language-bash">bash tools/format.sh</code></pre>
+                    <p class="mb-0">Automatically formats all Python files according to project standards.</p>
+                </div>
+            </div>
+
+            <!-- Migration Tools -->
+            <h3 class="mt-4">Migration & Maintenance</h3>
+            
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4 class="card-title mb-0"><i class="bi bi-arrow-repeat"></i> migrate_profiles.py</h4>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">Migration script to convert old-style keywords to two-layer profiles.</p>
+                    
+                    <h5>Usage</h5>
+                    <pre class="code-block"><code class="language-bash"># Dry run (preview changes)
+python tools/migrate_profiles.py --config config/tgsentinel.yml --dry-run
+
+# Apply changes
+python tools/migrate_profiles.py --config config/tgsentinel.yml --apply</code></pre>
+                    
+                    <h5>What It Does</h5>
+                    <ol>
+                        <li>Analyzes existing keywords in all channels/users</li>
+                        <li>Groups them into logical profiles (security, releases, opportunities, etc.)</li>
+                        <li>Generates profiles.yml with global profiles</li>
+                        <li>Updates tgsentinel.yml to bind profiles instead of duplicating keywords</li>
+                        <li>Creates backups before making changes</li>
+                    </ol>
+                    
+                    <p class="mb-0">Use when upgrading TG Sentinel versions that include profile schema changes.</p>
+                </div>
+            </div>
+
+            <!-- Getting Started with Tools -->
+            <h3 class="mt-4">Getting Started</h3>
+            
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4 class="card-title mb-0"><i class="bi bi-info-circle"></i> Getting API Credentials</h4>
+                </div>
+                <div class="card-body">
+                    <p>To use <code>generate_session.py</code>, you need Telegram API credentials:</p>
+                    <ol>
+                        <li>Go to <a href="https://my.telegram.org/apps" target="_blank" rel="noopener">https://my.telegram.org/apps</a></li>
+                        <li>Log in with your phone number</li>
+                        <li>Click "API development tools"</li>
+                        <li>Create an app (or use existing)</li>
+                        <li>Copy the <code>api_id</code> and <code>api_hash</code></li>
+                    </ol>
+                    
+                    <h5>Set as environment variables:</h5>
+                    <pre class="code-block"><code class="language-bash">export TG_API_ID=12345678
+export TG_API_HASH=abcdef1234567890abcdef1234567890</code></pre>
+                    
+                    <h5>Or provide via command line:</h5>
+                    <pre class="code-block"><code class="language-bash">python tools/generate_session.py \
+  --phone +1234567890 \
+  --api-id 12345678 \
+  --api-hash abcdef1234567890abcdef1234567890</code></pre>
+                </div>
+            </div>
+
+            <!-- Best Practices -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4 class="card-title mb-0"><i class="bi bi-lightbulb"></i> Tips & Best Practices</h4>
+                </div>
+                <div class="card-body">
+                    <h5>Backup Your Session</h5>
+                    <pre class="code-block"><code class="language-bash"># Generate and backup
+python tools/generate_session.py --phone +1234567890 --output backup.session
+cp backup.session ~/safe-location/</code></pre>
+                    
+                    <h5>Test Before Upload</h5>
+                    <p>The script automatically verifies the session file after creation. Look for:</p>
+                    <pre class="code-block"><code class="language-bash">✓ Session file is valid and can be uploaded to TG Sentinel</code></pre>
+                    
+                    <h5>Multiple Accounts</h5>
+                    <pre class="code-block"><code class="language-bash"># Account 1
+python tools/generate_session.py --phone +1111111111 --output account1.session
+
+# Account 2
+python tools/generate_session.py --phone +2222222222 --output account2.session</code></pre>
+                    <p>Then upload whichever account you want to use in TG Sentinel.</p>
+                    
+                    <h5>Recommended Storage Location</h5>
+                    <p>Store session files outside the repository:</p>
+                    <pre class="code-block"><code class="language-bash">python tools/generate_session.py \
+  --phone +1234567890 \
+  --output ~/Documents/telegram_sessions/tgsentinel.session</code></pre>
+                </div>
+            </div>
+
+            <!-- Troubleshooting -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4 class="card-title mb-0"><i class="bi bi-question-circle"></i> Common Issues</h4>
+                </div>
+                <div class="card-body">
+                    <h5>telethon is not installed</h5>
+                    <pre class="code-block"><code class="language-bash">pip install telethon</code></pre>
+                    
+                    <h5>API ID and API Hash are required</h5>
+                    <p>Set <code>TG_API_ID</code> and <code>TG_API_HASH</code> environment variables, or provide via <code>--api-id</code> and <code>--api-hash</code> flags.</p>
+                    
+                    <h5>SessionPasswordNeededError</h5>
+                    <p>This means 2FA is enabled. The script will automatically prompt for your 2FA password.</p>
+                    
+                    <h5>Session file verification failed</h5>
+                    <ul>
+                        <li>The session may not have been saved properly</li>
+                        <li>Try running the script again</li>
+                        <li>Check file permissions in the output directory</li>
+                    </ul>
+                    
+                    <h5>Rate limit exceeded</h5>
+                    <ul>
+                        <li>Use an existing session file if available</li>
+                        <li>Wait for the rate limit to expire (check with <code>check_rate_limit.py</code>)</li>
+                        <li>Use a different phone number for testing</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
         <div class="alert alert-secondary">
             <strong>Need Help?</strong> For issues or questions, check the <a href="https://github.com/redoracle/TGSentinel" target="_blank" rel="noopener noreferrer">GitHub repository</a> or open an issue.
         </div>
@@ -1905,33 +2320,1223 @@ volumes:
                 <h1 class="section-header">User Manual Overview</h1>
                 <p class="lead">Welcome to the TG Sentinel User Manual. This comprehensive guide will help you get started with monitoring Telegram channels, configuring alerts, and managing your workflow.</p>
                 <div class="alert alert-info">
-                    <strong>Note:</strong> This manual is currently under development. Check back soon for detailed guides and tutorials.
+                    <strong>Quick Navigation:</strong> Use the sidebar to jump to specific topics, or scroll through to learn about TG Sentinel's features step-by-step.
+                    <br><br>
+                    TG Sentinel is a privacy-preserving Telegram monitoring system that intelligently filters messages from channels, groups, and chats using keyword-based heuristics and semantic scoring. It provides powerful monitoring, customizable alerting, and strict privacy safeguards to help you stay informed without information overload. Use the sidebar navigation to jump directly to topics of interest, or follow the sections step-by-step to learn the complete workflow.
                 </div>
             </section>
 
             <section id="manual-getting-started" class="mb-5">
                 <h2 class="section-header">Getting Started</h2>
-                <p>Content coming soon...</p>
+                <p class="lead">TG Sentinel is a privacy-preserving Telegram monitoring system that intelligently filters messages using keyword-based and semantic scoring.</p>
+                
+                <h3 class="mt-4">Quick Start Steps</h3>
+                <ol>
+                    <li><strong>Session Setup:</strong> Upload your Telegram session file to connect to your account</li>
+                    <li><strong>Configure Monitoring:</strong> Select channels and groups to monitor in the Settings page</li>
+                    <li><strong>Create Profiles:</strong> Define Alert and Interest profiles to filter important messages</li>
+                    <li><strong>Review Alerts:</strong> Check the Alerts page for filtered messages that match your criteria</li>
+                </ol>
+
+                <div class="alert alert-warning mt-3">
+                    <strong>Privacy Note:</strong> Your Telegram session is stored locally and never shared. All message processing happens on your device.
+                </div>
             </section>
 
-            <section id="manual-configuration" class="mb-5">
-                <h2 class="section-header">Configuration</h2>
-                <p>Content coming soon...</p>
+            <section id="manual-profiles" class="mb-5">
+                <h2 class="section-header">Profile Management</h2>
+                <p class="lead">Profiles are the core of TG Sentinel's filtering system. They define what messages are important to you and how they should be detected.</p>
+                
+                <p>There are two types of profiles available:</p>
+                <ul>
+                    <li><strong>Alert Profiles:</strong> Keyword-based detection using pattern matching</li>
+                    <li><strong>Interest Profiles:</strong> Semantic detection using AI to understand message meaning</li>
+                </ul>
             </section>
 
-            <section id="manual-monitoring" class="mb-5">
-                <h2 class="section-header">Monitoring</h2>
-                <p>Content coming soon...</p>
+            <section id="alert-profiles" class="mb-5">
+                <h2 class="section-header">Alert Profiles</h2>
+                <p class="lead">Alert Profiles use keyword-based detection to identify important messages based on specific terms and patterns.</p>
+                
+                <h3 class="mt-4">Keyword Categories</h3>
+                <p>Alert profiles organize keywords into eight categories, each with different priority levels:</p>
+                
+                <div class="row g-3 mt-2">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">🔴 Critical Keywords</h5>
+                                <p class="card-text">Highest priority terms that trigger immediate alerts. Examples: exploit, breach, hack, zero-day</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">🔒 Security Keywords</h5>
+                                <p class="card-text">Security-related terms. Examples: vulnerability, attack, malicious, phishing</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">⏰ Urgency Keywords</h5>
+                                <p class="card-text">Time-sensitive indicators. Examples: urgent, asap, critical, immediate</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">💰 Financial Keywords</h5>
+                                <p class="card-text">Market and financial terms. Examples: price, trading, pump, dump</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">⚙️ Technical Keywords</h5>
+                                <p class="card-text">Development and tech terms. Examples: update, upgrade, release, fork</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">🎯 Project Keywords</h5>
+                                <p class="card-text">Project-specific terms. Examples: roadmap, milestone, governance</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">👥 Community Keywords</h5>
+                                <p class="card-text">Community engagement terms. Examples: announcement, airdrop, vote, AMA</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">📰 General Keywords</h5>
+                                <p class="card-text">General interest terms. Examples: news, update, important, alert</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="mt-4">How Keyword Detection Works</h3>
+                <p>When a message arrives, TG Sentinel:</p>
+                <ol>
+                    <li>Checks if any keywords match (case-insensitive)</li>
+                    <li>Calculates a score based on keyword category and frequency</li>
+                    <li>Applies multipliers for VIP senders or special patterns</li>
+                    <li>Triggers an alert if the score exceeds the minimum threshold</li>
+                </ol>
+
+                <h3 class="mt-4">Best Practices</h3>
+                <ul>
+                    <li>Use comma-separated values for multiple keywords</li>
+                    <li>Combine related terms in the same category</li>
+                    <li>Start with broad terms and refine based on results</li>
+                    <li>Use the Backtest feature to test your keywords against historical messages</li>
+                </ul>
             </section>
 
-            <section id="manual-alerts" class="mb-5">
-                <h2 class="section-header">Alerts</h2>
-                <p>Content coming soon...</p>
+            <section id="interest-profiles" class="mb-5">
+                <h2 class="section-header">Interest Profiles</h2>
+                <p class="lead">Interest Profiles use semantic AI to understand the meaning of messages, not just keywords. This allows for more intelligent filtering based on topics and concepts.</p>
+                
+                <h3 class="mt-4">How Semantic Detection Works</h3>
+                <p>Interest profiles are powered by the <strong>all-MiniLM-L6-v2</strong> sentence transformer model, which:</p>
+                <ul>
+                    <li>Converts messages into numerical vectors representing their meaning</li>
+                    <li>Compares new messages against your positive examples</li>
+                    <li>Assigns similarity scores from 0.00 (completely different) to 1.00 (nearly identical)</li>
+                    <li>Triggers alerts when similarity exceeds your threshold</li>
+                </ul>
+
+                <h3 class="mt-4">Creating an Interest Profile</h3>
+                <ol>
+                    <li><strong>Topic Name:</strong> Give your profile a descriptive name (e.g., "blockchain security advisories")</li>
+                    <li><strong>Positive Examples:</strong> Paste 5-10 messages that represent what you want to detect (one per line)</li>
+                    <li><strong>Negative Examples (Optional):</strong> Add examples of what should NOT match to refine accuracy</li>
+                    <li><strong>Threshold:</strong> Set similarity threshold (default 0.42). Lower = more matches, higher = stricter filtering</li>
+                </ol>
+
+                <h3 class="mt-4">Advanced Configuration</h3>
+                <div class="card mt-3">
+                    <div class="card-body">
+                        <h5>Configuration Options</h5>
+                        <ul>
+                            <li><strong>Similarity Threshold:</strong> Range 0.0-1.0, controls how closely messages must match</li>
+                            <li><strong>Profile Weight:</strong> Multiplier for this profile's importance (0-10)</li>
+                            <li><strong>Priority:</strong> Low, Normal, High, or Critical alert priority</li>
+                            <li><strong>Keywords:</strong> Optional keywords to boost scoring for specific terms</li>
+                            <li><strong>Tags:</strong> Organizational labels for filtering and grouping profiles</li>
+                            <li><strong>Always Notify:</strong> Bypass other filters and always alert on matches</li>
+                            <li><strong>Include in Digest:</strong> Whether matches appear in scheduled digests</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <h3 class="mt-4">Interpreting Similarity Scores</h3>
+                <ul>
+                    <li><strong>0.00 - 0.30:</strong> Very different from profile interests</li>
+                    <li><strong>0.30 - 0.50:</strong> Somewhat related</li>
+                    <li><strong>0.50 - 0.70:</strong> Moderately similar</li>
+                    <li><strong>0.70 - 0.85:</strong> Highly similar</li>
+                    <li><strong>0.85 - 1.00:</strong> Very closely matches profile</li>
+                </ul>
+
+                <h3 class="mt-4">Best Practices</h3>
+                <ul>
+                    <li>Provide diverse positive examples that cover different aspects of your interest</li>
+                    <li>Start with a threshold of 0.42 and adjust based on results</li>
+                    <li>Use negative examples to exclude common false positives</li>
+                    <li>Test your profile using the Backtest feature before activating</li>
+                    <li>Combine with keyword boosting for hybrid detection</li>
+                </ul>
+            </section>
+
+            <section id="detection-settings" class="mb-5">
+                <h2 class="section-header">Detection Settings</h2>
+                <p class="lead">Fine-tune how alert profiles detect and filter messages with these advanced settings.</p>
+                
+                <h3 class="mt-4">Core Settings</h3>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Setting</th>
+                                <th>Description</th>
+                                <th>Example</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Minimum Score</strong></td>
+                                <td>Threshold for triggering alerts (0-10 scale)</td>
+                                <td>Set to 5.0 for medium sensitivity</td>
+                            </tr>
+                            <tr>
+                                <td><strong>VIP Senders</strong></td>
+                                <td>Always alert from these users, regardless of score</td>
+                                <td>@vitalik, @satoshi</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Excluded Users</strong></td>
+                                <td>Never alert from these users (blacklist)</td>
+                                <td>@spammer, @bot_account</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h3 class="mt-4">Detection Toggles</h3>
+                <div class="row g-3 mt-2">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">❓ Detect Questions</h5>
+                                <p class="card-text">Boost score for messages containing question marks or interrogative patterns</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">@️ Detect Mentions</h5>
+                                <p class="card-text">Boost score for messages mentioning specific users or @everyone tags</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">🔗 Detect Links</h5>
+                                <p class="card-text">Boost score for messages containing URLs or external links</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">📤 Only Forwards</h5>
+                                <p class="card-text">Only alert on forwarded messages (ignores original posts)</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="mt-4">Score Calculation</h3>
+                <p>The final alert score is calculated using:</p>
+                <pre><code>Final Score = Base Score + Category Bonuses + Pattern Multipliers
+
+Where:
+- Base Score: Match frequency × keyword priority
+- Category Bonuses: Question (+2), Mention (+3), Link (+1)
+- Pattern Multipliers: VIP sender (×2), Multiple keywords (×1.5)</code></pre>
+            </section>
+
+            <section id="profile-scope" class="mb-5">
+                <h2 class="section-header">Profile Scope (Apply Profile To)</h2>
+                <p class="lead">Control which channels, groups, and users a profile monitors. This allows targeted filtering and prevents alert overload.</p>
+                
+                <h3 class="mt-4">How Profile Scope Works</h3>
+                <p>By default, profiles apply to <strong>all monitored entities</strong> configured in your Settings. However, you can restrict profiles to specific sources:</p>
+
+                <h3 class="mt-4">Selecting Entities</h3>
+                <ol>
+                    <li>Click the <strong>+ ADD</strong> button in the "Apply Profile To" section</li>
+                    <li>A modal opens showing all your monitored channels and users</li>
+                    <li>Check the boxes next to channels/users where this profile should be active</li>
+                    <li>Click <strong>Confirm Selection</strong> to save</li>
+                </ol>
+
+                <h3 class="mt-4">Entity Types</h3>
+                <div class="row g-3 mt-2">
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">📢 Channels</h5>
+                                <p class="card-text">Public broadcast channels (one-way communication)</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">👥 Groups</h5>
+                                <p class="card-text">Group chats with multiple participants</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">💬 Users</h5>
+                                <p class="card-text">Direct messages from individual users</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="mt-4">Use Cases</h3>
+                <ul>
+                    <li><strong>Topic-Specific Monitoring:</strong> Apply crypto profiles only to blockchain channels</li>
+                    <li><strong>Noise Reduction:</strong> Exclude meme groups from serious alert profiles</li>
+                    <li><strong>VIP Tracking:</strong> Create profiles that only monitor specific influential users</li>
+                    <li><strong>Language Separation:</strong> Apply language-specific profiles to corresponding channels</li>
+                </ul>
+
+                <div class="alert alert-info mt-3">
+                    <strong>Tip:</strong> Leave the scope empty for general-purpose profiles that should monitor everything. Use scoping for specialized profiles.
+                </div>
+            </section>
+
+            <section id="digest-api" class="mb-5">
+                <h2 class="section-header">Digest Schedules</h2>
+                <p class="lead">Instead of instant alerts for every message, digest schedules batch messages and send summaries at regular intervals.</p>
+                
+                <h3 class="mt-4">Why Use Digests?</h3>
+                <ul>
+                    <li><strong>Reduce Alert Fatigue:</strong> Batch low-priority messages into periodic summaries</li>
+                    <li><strong>Focus Time:</strong> Receive alerts only at specific times of day</li>
+                    <li><strong>Prioritization:</strong> Separate urgent alerts from routine updates</li>
+                    <li><strong>Context:</strong> See multiple related messages together for better understanding</li>
+                </ul>
+
+                <h3 class="mt-4">Schedule Types</h3>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Schedule</th>
+                                <th>Frequency</th>
+                                <th>Best For</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>⏰ Hourly</td>
+                                <td>Every 60 minutes</td>
+                                <td>Active channels with frequent updates</td>
+                            </tr>
+                            <tr>
+                                <td>🕓 Every 4 Hours</td>
+                                <td>6 times per day</td>
+                                <td>Medium-priority monitoring</td>
+                            </tr>
+                            <tr>
+                                <td>🕕 Every 6 Hours</td>
+                                <td>4 times per day</td>
+                                <td>Low-priority channels</td>
+                            </tr>
+                            <tr>
+                                <td>🕛 Every 12 Hours</td>
+                                <td>Twice per day</td>
+                                <td>Background monitoring</td>
+                            </tr>
+                            <tr>
+                                <td>📅 Daily</td>
+                                <td>Once per day at specified hour (UTC)</td>
+                                <td>Daily summaries, morning briefings</td>
+                            </tr>
+                            <tr>
+                                <td>📊 Weekly</td>
+                                <td>Once per week on specified day/hour (UTC)</td>
+                                <td>Weekly roundups, low-traffic channels</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h3 class="mt-4">Configuring Digest Schedules</h3>
+                <p>Each profile supports up to <strong>3 independent schedules</strong>. For example:</p>
+                <ul>
+                    <li><strong>Schedule 1:</strong> Hourly digest, top 10 messages, min score 7.0 (most urgent)</li>
+                    <li><strong>Schedule 2:</strong> Every 6 hours, top 20 messages, min score 5.0 (medium priority)</li>
+                    <li><strong>Schedule 3:</strong> Daily at 8:00 UTC, top 30 messages, min score 3.0 (comprehensive review)</li>
+                </ul>
+
+                <h3 class="mt-4">Schedule Parameters</h3>
+                <div class="card mt-3">
+                    <div class="card-body">
+                        <h5>Configuration Options</h5>
+                        <ul>
+                            <li><strong>Schedule Type:</strong> Choose frequency (hourly, daily, weekly, etc.)</li>
+                            <li><strong>Top N Messages:</strong> Maximum messages to include (1-100)</li>
+                            <li><strong>Min Score:</strong> Minimum alert score threshold (0-10)</li>
+                            <li><strong>Daily Hour:</strong> Hour of day for daily digests (0-23 UTC)</li>
+                            <li><strong>Weekly Day:</strong> Day of week for weekly digests (Monday-Sunday)</li>
+                            <li><strong>Weekly Hour:</strong> Hour of day for weekly digests (0-23 UTC)</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <h3 class="mt-4">Delivery Settings</h3>
+                <p>Control where digests are sent:</p>
+                <ul>
+                    <li><strong>💬 DM Only:</strong> Send to your Saved Messages (private)</li>
+                    <li><strong>📢 Channel Only:</strong> Post to a specified channel</li>
+                    <li><strong>🔄 Both DM & Channel:</strong> Send to both destinations</li>
+                </ul>
+
+                <h3 class="mt-4">Best Practices</h3>
+                <ul>
+                    <li>Use instant alerts (Schedule 1 = None) for critical profiles</li>
+                    <li>Set different score thresholds for each schedule (high to low)</li>
+                    <li>Adjust "Top N" based on channel volume</li>
+                    <li>Schedule daily digests during your focus time (e.g., 8:00 AM)</li>
+                    <li>Use weekly digests for low-priority background monitoring</li>
+                </ul>
+
+                <div class="alert alert-warning mt-3">
+                    <strong>Note:</strong> All times are in UTC. Convert to your local timezone when scheduling.
+                </div>
+            </section>
+
+            <section id="alerts-api" class="mb-5">
+                <h2 class="section-header">Alerts & Notifications</h2>
+                <p class="lead">The Alerts page is your central hub for reviewing filtered messages that match your configured profiles.</p>
+                
+                <h3 class="mt-4">Alert Feed</h3>
+                <p>The main alert feed displays messages that triggered your Alert or Interest profiles, sorted by score and timestamp.</p>
+                
+                <h4 class="mt-3">Alert Card Information</h4>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Field</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Score Badge</strong></td>
+                                <td>Numeric score (0-10) with color coding: red (critical), orange (high), yellow (medium), green (low)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Channel/User</strong></td>
+                                <td>Source of the message with avatar icon</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Sender Name</strong></td>
+                                <td>Original message author</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Message Text</strong></td>
+                                <td>Full message content with keyword highlighting</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Matched Profiles</strong></td>
+                                <td>List of profiles that triggered this alert</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Timestamp</strong></td>
+                                <td>When the message was sent</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h3 class="mt-4">Filtering & Search</h3>
+                <ul>
+                    <li><strong>Text Search:</strong> Filter alerts by keyword, sender, or channel name</li>
+                    <li><strong>Score Range:</strong> Show only alerts within specific score ranges</li>
+                    <li><strong>Date Range:</strong> Filter by time period (today, last 7 days, custom)</li>
+                    <li><strong>Profile Filter:</strong> View alerts from specific profiles only</li>
+                    <li><strong>Channel Filter:</strong> Show alerts from particular channels</li>
+                </ul>
+
+                <h3 class="mt-4">Alert Actions</h3>
+                <div class="row g-3 mt-2">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">👍 Mark Relevant</h5>
+                                <p class="card-text">Confirm this alert was useful (helps improve profile accuracy)</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">👎 Mark Irrelevant</h5>
+                                <p class="card-text">Flag false positives (trains the system to reduce noise)</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">🔗 Open in Telegram</h5>
+                                <p class="card-text">Jump directly to the message in Telegram app</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">🗑️ Dismiss</h5>
+                                <p class="card-text">Remove from alert feed without providing feedback</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="mt-4">Bulk Operations</h3>
+                <p>Select multiple alerts to perform batch actions:</p>
+                <ul>
+                    <li>Mark all as relevant/irrelevant</li>
+                    <li>Dismiss multiple alerts at once</li>
+                    <li>Export selected alerts as JSON</li>
+                </ul>
+            </section>
+
+            <section id="configuration" class="mb-5">
+                <h2 class="section-header">Configuration / Settings</h2>
+                <p class="lead">The Configuration page (Settings) allows you to fine-tune TG Sentinel's behavior and manage monitoring sources.</p>
+            </section>
+
+            <section id="telegram-config" class="mb-5">
+                <h3 class="section-header">Telegram Settings</h3>
+                <p>Core Telegram API and session configuration.</p>
+                
+                <h4 class="mt-3">Session Management</h4>
+                <ul>
+                    <li><strong>Session Upload:</strong> Upload your Telegram .session file to authenticate</li>
+                    <li><strong>Session Status:</strong> View connection status and account information</li>
+                    <li><strong>Logout:</strong> Disconnect and clear session data</li>
+                </ul>
+
+                <h4 class="mt-3">API Configuration</h4>
+                <div class="alert alert-warning">
+                    <strong>Required:</strong> You need API credentials from <a href="https://my.telegram.org/apps" target="_blank" rel="noopener" class="alert-link">my.telegram.org/apps</a>
+                </div>
+                <ul>
+                    <li><strong>API ID:</strong> Your Telegram API application ID</li>
+                    <li><strong>API Hash:</strong> Your Telegram API application hash</li>
+                    <li><strong>Phone Number:</strong> Account phone number for session generation</li>
+                </ul>
+            </section>
+
+            <section id="alerts-config" class="mb-5">
+                <h3 class="section-header">Alert Configuration</h3>
+                <p>Control how and when alerts are triggered and delivered.</p>
+                
+                <h4 class="mt-3">Delivery Options</h4>
+                <ul>
+                    <li><strong>Real-time Notifications:</strong> Enable/disable instant alerts</li>
+                    <li><strong>Notification Sound:</strong> Customize alert sounds</li>
+                    <li><strong>Desktop Notifications:</strong> Browser notifications for urgent alerts</li>
+                    <li><strong>Saved Messages:</strong> Automatically send alerts to Telegram Saved Messages</li>
+                </ul>
+
+                <h4 class="mt-3">Alert Thresholds</h4>
+                <ul>
+                    <li><strong>Global Minimum Score:</strong> Universal threshold below which messages are ignored</li>
+                    <li><strong>Rate Limiting:</strong> Max alerts per hour/day to prevent spam</li>
+                    <li><strong>Cooldown Period:</strong> Silence alerts from same source for specified time</li>
+                </ul>
+            </section>
+
+            <section id="scoring-config" class="mb-5">
+                <h3 class="section-header">Scoring Configuration</h3>
+                <p>Fine-tune the scoring algorithm that determines message importance.</p>
+                
+                <h4 class="mt-3">Keyword Weights</h4>
+                <p>Adjust multipliers for different keyword categories:</p>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Category</th>
+                                <th>Default Weight</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Critical</td>
+                                <td>5.0</td>
+                                <td>Highest priority multiplier</td>
+                            </tr>
+                            <tr>
+                                <td>Security</td>
+                                <td>4.0</td>
+                                <td>Security-related terms</td>
+                            </tr>
+                            <tr>
+                                <td>Urgency</td>
+                                <td>3.5</td>
+                                <td>Time-sensitive indicators</td>
+                            </tr>
+                            <tr>
+                                <td>Financial</td>
+                                <td>3.0</td>
+                                <td>Market and trading terms</td>
+                            </tr>
+                            <tr>
+                                <td>Technical</td>
+                                <td>2.5</td>
+                                <td>Development and tech</td>
+                            </tr>
+                            <tr>
+                                <td>Project</td>
+                                <td>2.0</td>
+                                <td>Project-specific terms</td>
+                            </tr>
+                            <tr>
+                                <td>Community</td>
+                                <td>1.5</td>
+                                <td>Community engagement</td>
+                            </tr>
+                            <tr>
+                                <td>General</td>
+                                <td>1.0</td>
+                                <td>General interest terms</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h4 class="mt-3">Pattern Multipliers</h4>
+                <ul>
+                    <li><strong>Questions:</strong> Messages containing question marks</li>
+                    <li><strong>Mentions:</strong> Messages with @username mentions</li>
+                    <li><strong>Links:</strong> Messages containing URLs</li>
+                    <li><strong>Forwards:</strong> Forwarded message boost/penalty</li>
+                    <li><strong>VIP Senders:</strong> Multiplier for priority users</li>
+                </ul>
+            </section>
+
+            <section id="channels-api" class="mb-5">
+                <h3 class="section-header">Channels Management</h3>
+                <p>Monitor public Telegram channels and manage their settings.</p>
+                
+                <h4 class="mt-3">Adding Channels</h4>
+                <ol>
+                    <li>Click <strong>+ Add Channel</strong></li>
+                    <li>Enter channel username (e.g., @channelname) or invite link</li>
+                    <li>TG Sentinel will join and begin monitoring</li>
+                    <li>Configure per-channel settings (filters, mute times, priority)</li>
+                </ol>
+
+                <h4 class="mt-3">Channel Settings</h4>
+                <ul>
+                    <li><strong>Monitoring Status:</strong> Enable/disable monitoring per channel</li>
+                    <li><strong>Profile Override:</strong> Apply specific profiles to this channel</li>
+                    <li><strong>Score Threshold:</strong> Custom minimum score for this channel</li>
+                    <li><strong>Mute Schedule:</strong> Silence alerts during specific hours</li>
+                    <li><strong>Language Filter:</strong> Skip messages in certain languages</li>
+                </ul>
+
+                <h4 class="mt-3">Bulk Actions</h4>
+                <ul>
+                    <li>Enable/disable monitoring for multiple channels</li>
+                    <li>Apply profile templates to channel groups</li>
+                    <li>Export channel list as JSON</li>
+                </ul>
+            </section>
+
+            <section id="users-api" class="mb-5">
+                <h3 class="section-header">Users Management</h3>
+                <p>Monitor direct messages and private conversations.</p>
+                
+                <h4 class="mt-3">Adding Users</h4>
+                <ol>
+                    <li>Click <strong>+ Add User</strong></li>
+                    <li>Enter username (e.g., @username) or phone number</li>
+                    <li>Set monitoring preferences for this user</li>
+                </ol>
+
+                <h4 class="mt-3">User Categories</h4>
+                <div class="row g-3 mt-2">
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">⭐ VIP Users</h5>
+                                <p class="card-text">Always alert, regardless of content</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">👥 Regular Users</h5>
+                                <p class="card-text">Normal profile-based filtering</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">🚫 Blocked Users</h5>
+                                <p class="card-text">Never alert from these users</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="system-config" class="mb-5">
+                <h3 class="section-header">System Settings</h3>
+                <p>Global application settings and performance tuning.</p>
+                
+                <h4 class="mt-3">Performance Options</h4>
+                <ul>
+                    <li><strong>Message Retention:</strong> How long to keep messages in database (days)</li>
+                    <li><strong>Cache Size:</strong> Redis cache limits for avatars and metadata</li>
+                    <li><strong>Batch Size:</strong> Number of messages to process simultaneously</li>
+                    <li><strong>Polling Interval:</strong> How often to check for new messages (seconds)</li>
+                </ul>
+
+                <h4 class="mt-3">Privacy & Security</h4>
+                <ul>
+                    <li><strong>UI Lock Password:</strong> Password-protect the web interface</li>
+                    <li><strong>Session Encryption:</strong> Encrypt session file at rest</li>
+                    <li><strong>Log Level:</strong> Control verbosity (DEBUG, INFO, WARNING, ERROR)</li>
+                    <li><strong>Anonymize Logs:</strong> Remove sensitive data from logs</li>
+                </ul>
+
+                <h4 class="mt-3">Data Management</h4>
+                <ul>
+                    <li><strong>Auto-vacuum:</strong> Automatic database optimization</li>
+                    <li><strong>Backup Schedule:</strong> Automated session backups</li>
+                    <li><strong>Export Format:</strong> Default format for data exports (JSON, CSV)</li>
+                </ul>
+            </section>
+
+            <section id="analytics" class="mb-5">
+                <h2 class="section-header">Analytics & Insights</h2>
+                <p class="lead">Visualize and analyze your monitoring data with comprehensive metrics and charts.</p>
+            </section>
+
+            <section id="performance-metrics" class="mb-5">
+                <h3 class="section-header">Performance Metrics</h3>
+                <p>Track system performance and message processing efficiency.</p>
+                
+                <h4 class="mt-3">Key Metrics</h4>
+                <div class="row g-3 mt-2">
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">📊 Messages/Hour</h5>
+                                <p class="card-text">Ingestion rate</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">⚡ Processing Time</h5>
+                                <p class="card-text">Avg latency per message</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">🎯 Alert Rate</h5>
+                                <p class="card-text">% of messages alerted</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">✅ Accuracy</h5>
+                                <p class="card-text">Relevant vs false positives</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h4 class="mt-4">Time-Series Charts</h4>
+                <ul>
+                    <li><strong>Message Volume:</strong> Incoming messages over time</li>
+                    <li><strong>Alert Triggers:</strong> Alert frequency by hour/day/week</li>
+                    <li><strong>Score Distribution:</strong> Histogram of message scores</li>
+                    <li><strong>Processing Latency:</strong> Performance over time</li>
+                </ul>
+            </section>
+
+            <section id="resource-metrics" class="mb-5">
+                <h3 class="section-header">Resource Monitoring</h3>
+                <p>Monitor system resource usage and identify bottlenecks.</p>
+                
+                <h4 class="mt-3">Resource Graphs</h4>
+                <ul>
+                    <li><strong>CPU Usage:</strong> Real-time CPU utilization</li>
+                    <li><strong>Memory:</strong> RAM consumption by component</li>
+                    <li><strong>Database Size:</strong> SQLite file size and growth rate</li>
+                    <li><strong>Redis Cache:</strong> Cache hit rate and memory usage</li>
+                    <li><strong>Network:</strong> Telegram API bandwidth usage</li>
+                </ul>
+
+                <h4 class="mt-3">Health Indicators</h4>
+                <div class="alert alert-success">
+                    <strong>🟢 Healthy:</strong> All systems operational, performance within normal range
+                </div>
+                <div class="alert alert-warning">
+                    <strong>🟡 Warning:</strong> Resource usage elevated, may impact performance
+                </div>
+                <div class="alert alert-danger">
+                    <strong>🔴 Critical:</strong> System resources exhausted, immediate action required
+                </div>
+            </section>
+
+            <section id="keyword-heatmap" class="mb-5">
+                <h3 class="section-header">Keyword Heatmap</h3>
+                <p>Visualize keyword frequency and effectiveness across all monitored channels.</p>
+                
+                <h4 class="mt-3">Heatmap Features</h4>
+                <ul>
+                    <li><strong>Word Cloud:</strong> Visual representation of most frequent keywords</li>
+                    <li><strong>Trend Analysis:</strong> Track keyword popularity over time</li>
+                    <li><strong>Category Breakdown:</strong> Keywords grouped by profile category</li>
+                    <li><strong>Effectiveness Score:</strong> Which keywords trigger the most relevant alerts</li>
+                </ul>
+
+                <h4 class="mt-3">Using the Heatmap</h4>
+                <ol>
+                    <li>Identify overused keywords that generate noise</li>
+                    <li>Discover emerging terms to add to profiles</li>
+                    <li>Optimize keyword lists based on actual performance</li>
+                    <li>Compare keyword effectiveness across channels</li>
+                </ol>
+            </section>
+
+            <section id="channel-impact" class="mb-5">
+                <h3 class="section-header">Channel Impact Analysis</h3>
+                <p>Evaluate which channels provide the most valuable alerts.</p>
+                
+                <h4 class="mt-3">Impact Metrics</h4>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Metric</th>
+                                <th>Description</th>
+                                <th>Interpretation</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Alert Volume</strong></td>
+                                <td>Total alerts triggered</td>
+                                <td>Raw activity level</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Relevance Rate</strong></td>
+                                <td>% of alerts marked relevant</td>
+                                <td>Quality indicator</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Avg Score</strong></td>
+                                <td>Mean alert score</td>
+                                <td>Overall importance</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Signal/Noise</strong></td>
+                                <td>Useful vs total messages</td>
+                                <td>Efficiency metric</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h4 class="mt-3">Recommendations</h4>
+                <p>Based on impact analysis, TG Sentinel suggests:</p>
+                <ul>
+                    <li>Channels to prioritize (high relevance, high value)</li>
+                    <li>Channels to reconfigure (high volume, low relevance)</li>
+                    <li>Channels to unmonitor (low signal/noise ratio)</li>
+                </ul>
+            </section>
+
+            <section id="developer" class="mb-5">
+                <h2 class="section-header">Developer & Integrations</h2>
+                <p class="lead">Extend TG Sentinel with custom integrations, webhooks, and API access.</p>
+            </section>
+
+            <section id="integration-settings" class="mb-5">
+                <h3 class="section-header">Integration Settings</h3>
+                <p>Configure external services and API connections.</p>
+                
+                <h4 class="mt-3">Available Integrations</h4>
+                <ul>
+                    <li><strong>Slack:</strong> Send alerts to Slack channels</li>
+                    <li><strong>Discord:</strong> Forward alerts to Discord webhooks</li>
+                    <li><strong>Email:</strong> Email alerts via SMTP</li>
+                    <li><strong>Custom Webhooks:</strong> HTTP POST to any endpoint</li>
+                    <li><strong>Database Export:</strong> Sync to external databases</li>
+                </ul>
+
+                <h4 class="mt-3">API Access</h4>
+                <div class="alert alert-info">
+                    <strong>API Base URL:</strong> <code>http://localhost:5001/api</code>
+                </div>
+                <ul>
+                    <li><strong>Authentication:</strong> API key or session token</li>
+                    <li><strong>Rate Limits:</strong> 100 requests/minute per key</li>
+                    <li><strong>Documentation:</strong> OpenAPI/Swagger available at <code>/docs</code></li>
+                </ul>
+            </section>
+
+            <section id="webhooks-api" class="mb-5">
+                <h3 class="section-header">Webhooks</h3>
+                <p>Real-time event notifications via HTTP callbacks.</p>
+                
+                <h4 class="mt-3">Webhook Events</h4>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Event</th>
+                                <th>Trigger</th>
+                                <th>Payload</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>alert.triggered</code></td>
+                                <td>New alert created</td>
+                                <td>Full alert data</td>
+                            </tr>
+                            <tr>
+                                <td><code>message.ingested</code></td>
+                                <td>Message processed</td>
+                                <td>Message + scores</td>
+                            </tr>
+                            <tr>
+                                <td><code>profile.updated</code></td>
+                                <td>Profile modified</td>
+                                <td>Profile config</td>
+                            </tr>
+                            <tr>
+                                <td><code>channel.added</code></td>
+                                <td>New channel monitored</td>
+                                <td>Channel metadata</td>
+                            </tr>
+                            <tr>
+                                <td><code>digest.sent</code></td>
+                                <td>Digest delivered</td>
+                                <td>Digest summary</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h4 class="mt-3">Webhook Configuration</h4>
+                <pre><code class="language-json">{
+  "url": "https://your-endpoint.com/webhook",
+  "events": ["alert.triggered", "message.ingested"],
+  "secret": "your-webhook-secret",
+  "retry": {
+    "max_attempts": 3,
+    "backoff": "exponential"
+  }
+}</code></pre>
+
+                <h4 class="mt-3">Security</h4>
+                <ul>
+                    <li><strong>HMAC Signatures:</strong> Verify webhook authenticity with SHA256</li>
+                    <li><strong>IP Allowlist:</strong> Restrict webhook sources</li>
+                    <li><strong>TLS Required:</strong> HTTPS only for webhook endpoints</li>
+                </ul>
+            </section>
+
+            <section id="integration-console" class="mb-5">
+                <h3 class="section-header">Integration Console</h3>
+                <p>Test and debug integrations in real-time.</p>
+                
+                <h4 class="mt-3">Console Features</h4>
+                <ul>
+                    <li><strong>Live Logs:</strong> Watch integration events as they happen</li>
+                    <li><strong>Webhook Tester:</strong> Send test payloads to verify configuration</li>
+                    <li><strong>API Explorer:</strong> Interactive API documentation and testing</li>
+                    <li><strong>Error Inspector:</strong> Debug failed webhook deliveries</li>
+                </ul>
+
+                <h4 class="mt-3">Testing Webhooks</h4>
+                <ol>
+                    <li>Create a webhook configuration</li>
+                    <li>Click <strong>Send Test Event</strong></li>
+                    <li>Select event type and customize payload</li>
+                    <li>Review response status and delivery logs</li>
+                </ol>
+            </section>
+
+            <section id="console" class="mb-5">
+                <h2 class="section-header">Console & Maintenance</h2>
+                <p class="lead">System administration, maintenance tools, and diagnostic utilities.</p>
+            </section>
+
+            <section id="console-logs" class="mb-5">
+                <h3 class="section-header">Log Viewer</h3>
+                <p>Real-time log streaming and historical log analysis.</p>
+                
+                <h4 class="mt-3">Log Levels</h4>
+                <ul>
+                    <li><strong>🔴 ERROR:</strong> Critical failures requiring attention</li>
+                    <li><strong>🟡 WARNING:</strong> Potential issues or degraded performance</li>
+                    <li><strong>🔵 INFO:</strong> General operational messages</li>
+                    <li><strong>⚪ DEBUG:</strong> Detailed diagnostic information</li>
+                </ul>
+
+                <h4 class="mt-3">Log Filtering</h4>
+                <ul>
+                    <li>Filter by log level (ERROR, WARNING, INFO, DEBUG)</li>
+                    <li>Search by keyword or regex pattern</li>
+                    <li>Filter by component (Sentinel, UI, Redis)</li>
+                    <li>Time range selection</li>
+                </ul>
+
+                <h4 class="mt-3">Log Actions</h4>
+                <ul>
+                    <li><strong>Download Logs:</strong> Export as text file</li>
+                    <li><strong>Clear Display:</strong> Clear current view (doesn't delete files)</li>
+                    <li><strong>Pause/Resume:</strong> Stop/start live streaming</li>
+                </ul>
+            </section>
+
+            <section id="console-commands" class="mb-5">
+                <h3 class="section-header">System Commands</h3>
+                <p>Administrative commands for system management.</p>
+                
+                <h4 class="mt-3">Available Commands</h4>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Command</th>
+                                <th>Description</th>
+                                <th>Caution Level</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Clear Cache</strong></td>
+                                <td>Clear Redis cache (streams, avatars, metadata)</td>
+                                <td>🟡 Medium</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Purge Data</strong></td>
+                                <td>Delete ALL messages, feedback, and caches</td>
+                                <td>🔴 HIGH - Cannot be undone</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Reload Config</strong></td>
+                                <td>Reload YAML configuration without restart</td>
+                                <td>🟢 Low</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Restart Worker</strong></td>
+                                <td>Restart Sentinel message processing worker</td>
+                                <td>🟡 Medium</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="alert alert-danger mt-3">
+                    <strong>⚠️ Warning:</strong> Some commands are destructive and cannot be undone. Always backup your data before running purge operations.
+                </div>
+            </section>
+
+            <section id="maintenance" class="mb-5">
+                <h3 class="section-header">Maintenance Tools</h3>
+                <p>Optimize performance and maintain system health.</p>
+                
+                <h4 class="mt-3">Database Maintenance</h4>
+                <ul>
+                    <li><strong>Vacuum Database:</strong> Reclaim free space and optimize SQLite</li>
+                    <li><strong>Analyze Tables:</strong> Update query optimizer statistics</li>
+                    <li><strong>Rebuild Indexes:</strong> Recreate indexes for better performance</li>
+                    <li><strong>Check Integrity:</strong> Verify database consistency</li>
+                </ul>
+
+                <h4 class="mt-3">Automated Maintenance</h4>
+                <p>Schedule regular maintenance tasks:</p>
+                <ul>
+                    <li><strong>Daily:</strong> Cache cleanup, log rotation</li>
+                    <li><strong>Weekly:</strong> Database vacuum, index optimization</li>
+                    <li><strong>Monthly:</strong> Full integrity check, backup verification</li>
+                </ul>
+
+                <h4 class="mt-3">Backup & Restore</h4>
+                <ul>
+                    <li><strong>Session Backup:</strong> Create encrypted backup of .session file</li>
+                    <li><strong>Database Export:</strong> Export messages and config as JSON</li>
+                    <li><strong>Full Backup:</strong> Complete system state snapshot</li>
+                    <li><strong>Restore:</strong> Restore from previous backup</li>
+                </ul>
+            </section>
+
+            <section id="diagnostics" class="mb-5">
+                <h3 class="section-header">Diagnostics</h3>
+                <p>System health checks and troubleshooting tools.</p>
+                
+                <h4 class="mt-3">Health Checks</h4>
+                <div class="row g-3 mt-2">
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">🔌 Connectivity</h5>
+                                <p class="card-text">Telegram API, Redis, Database</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">💾 Storage</h5>
+                                <p class="card-text">Disk space, database size</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">⚡ Performance</h5>
+                                <p class="card-text">CPU, memory, latency</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h4 class="mt-4">Diagnostic Report</h4>
+                <p>Generate comprehensive system report including:</p>
+                <ul>
+                    <li>System status and health metrics</li>
+                    <li>Configuration summary (anonymized)</li>
+                    <li>Recent errors and warnings</li>
+                    <li>Resource usage statistics</li>
+                    <li>Performance benchmarks</li>
+                </ul>
+
+                <h4 class="mt-3">Download Diagnostic Bundle</h4>
+                <p>Create a ZIP file containing:</p>
+                <ul>
+                    <li>Diagnostic report (JSON)</li>
+                    <li>Recent logs (sanitized)</li>
+                    <li>Configuration files (anonymized)</li>
+                    <li>Database schema (no data)</li>
+                </ul>
+                <p>Share with support for troubleshooting.</p>
             </section>
 
             <section id="manual-troubleshooting" class="mb-5">
                 <h2 class="section-header">Troubleshooting</h2>
-                <p>Content coming soon...</p>
+                <p class="lead">Common issues and solutions for TG Sentinel.</p>
+
+                <h3 class="mt-4">Connection Issues</h3>
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <strong>❌ Cannot connect to Telegram</strong>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Symptoms:</strong> "Connection failed" or "Timeout" errors</p>
+                        <p><strong>Solutions:</strong></p>
+                        <ul>
+                            <li>Verify API_ID and API_HASH are correct</li>
+                            <li>Check internet connection and firewall settings</li>
+                            <li>Ensure session file is not corrupted</li>
+                            <li>Try re-uploading session or generating new one</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <h3 class="mt-4">Profile Issues</h3>
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <strong>⚠️ No alerts being triggered</strong>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Symptoms:</strong> Messages arriving but no alerts</p>
+                        <p><strong>Solutions:</strong></p>
+                        <ul>
+                            <li>Check profile is enabled and threshold not too high</li>
+                            <li>Verify keywords/examples match incoming content</li>
+                            <li>Use Backtest feature to test profile against messages</li>
+                            <li>Lower minimum score threshold temporarily</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <h3 class="mt-4">Performance Issues</h3>
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <strong>🐌 Slow message processing</strong>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Symptoms:</strong> Delays in alerts, high CPU/memory</p>
+                        <p><strong>Solutions:</strong></p>
+                        <ul>
+                            <li>Run database vacuum to optimize storage</li>
+                            <li>Clear Redis cache to free memory</li>
+                            <li>Reduce number of monitored channels</li>
+                            <li>Increase retention cleanup frequency</li>
+                            <li>Check for resource limits in Docker</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <h3 class="mt-4">Getting Help</h3>
+                <ul>
+                    <li><strong>Documentation:</strong> Check this manual and API docs</li>
+                    <li><strong>Diagnostic Report:</strong> Generate and review system report</li>
+                    <li><strong>Logs:</strong> Check Console logs for error details</li>
+                    <li><strong>GitHub Issues:</strong> Report bugs or request features</li>
+                    <li><strong>Community:</strong> Join discussions and get support</li>
+                </ul>
             </section>
         </div>
         </div>
@@ -2067,7 +3672,79 @@ volumes:
         });
     });
 
-    activateDocsTab('sentinel');
+    // Hash-based routing: determine which tab to show based on URL hash
+    const handleHashChange = () => {
+        const hash = window.location.hash.slice(1); // Remove the '#'
+        if (!hash) {
+            activateDocsTab('sentinel');
+            return;
+        }
+
+        // Map of section IDs to their parent tabs
+        const sectionToTab = {
+            // User Manual sections
+            'manual-overview': 'manual',
+            'manual-getting-started': 'manual',
+            'manual-profiles': 'manual',
+            'alert-profiles': 'manual',
+            'interest-profiles': 'manual',
+            'detection-settings': 'manual',
+            'profile-scope': 'manual',
+            'digest-api': 'manual',
+            'alerts-api': 'manual',
+            'configuration': 'manual',
+            'telegram-config': 'manual',
+            'alerts-config': 'manual',
+            'scoring-config': 'manual',
+            'channels-api': 'manual',
+            'users-api': 'manual',
+            'system-config': 'manual',
+            'analytics': 'manual',
+            'performance-metrics': 'manual',
+            'resource-metrics': 'manual',
+            'keyword-heatmap': 'manual',
+            'channel-impact': 'manual',
+            'developer': 'manual',
+            'integration-settings': 'manual',
+            'webhooks-api': 'manual',
+            'integration-console': 'manual',
+            'console': 'manual',
+            'console-logs': 'manual',
+            'console-commands': 'manual',
+            'maintenance': 'manual',
+            'diagnostics': 'manual',
+            'manual-troubleshooting': 'manual',
+            // Sentinel API sections
+            'sentinel-overview': 'sentinel',
+            'sentinel-health': 'sentinel',
+            'sentinel-session': 'sentinel',
+            'sentinel-telegram': 'sentinel',
+            'sentinel-alerts': 'sentinel',
+            'sentinel-profiles': 'sentinel',
+            'sentinel-metrics': 'sentinel',
+            // UI API sections (if they exist, otherwise default to 'ui' tab)
+        };
+
+        const targetTab = sectionToTab[hash] || 'sentinel';
+        activateDocsTab(targetTab);
+
+        // Scroll to the target section after a brief delay to allow tab switch
+        setTimeout(() => {
+            const target = document.getElementById(hash);
+            if (target) {
+                const navbarHeight = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--navbar-height')) || 76;
+                const targetRect = target.getBoundingClientRect();
+                const scrollOffset = window.pageYOffset + targetRect.top - navbarHeight - 20;
+                window.scrollTo({ top: scrollOffset, behavior: 'smooth' });
+            }
+        }, 100);
+    };
+
+    // Handle hash changes (back/forward navigation)
+    window.addEventListener('hashchange', handleHashChange);
+
+    // Handle initial page load with hash
+    handleHashChange();
 
     const cleanup = () => {
         if (updateTimeout) {

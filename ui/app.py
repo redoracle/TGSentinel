@@ -1025,6 +1025,21 @@ def init_app() -> None:
         except Exception as bp_exc:
             logger.error("Failed to register digest routes blueprint: %s", bp_exc)
 
+        # Add simple health check endpoint
+        @app.route("/health", methods=["GET"])
+        def health_check():
+            """Simple health check endpoint for monitoring."""
+            return (
+                jsonify(
+                    {
+                        "status": "ok",
+                        "service": "tgsentinel-ui",
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                ),
+                200,
+            )
+
         # Register Socket.IO handlers
         try:
             try:
@@ -1173,6 +1188,10 @@ def init_app() -> None:
             has_been_unlocked = bool(session.get("ui_has_been_unlocked"))
             is_locked = explicitly_locked or (ui_lock_enabled and not has_been_unlocked)
 
+            # Allow /health endpoint without authentication (for monitoring)
+            if path == "/health":
+                return None
+
             # API routes
             if path.startswith("/api/"):
                 # Allow certain API endpoints without authentication
@@ -1183,6 +1202,7 @@ def init_app() -> None:
                     "/api/worker/logout-progress",
                     "/api/worker/login-progress",
                     "/api/avatar/",
+                    "/api/analytics/",  # Allow analytics endpoints
                 )
                 if any(path.startswith(p) for p in allowed_api_paths):
                     return None

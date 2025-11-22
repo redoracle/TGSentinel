@@ -654,6 +654,8 @@
 /* Entity selector container - replaces inline min-height */
 .entity-selector-container {
   min-height: 80px;
+  max-height: 300px;
+  overflow-y: auto;
 }
 
 /* Modal entity list - replaces inline max-height and overflow */

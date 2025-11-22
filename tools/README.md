@@ -103,18 +103,6 @@ No other rate limits active
 
 ## Testing & Development
 
-### `populate_history.py`
-
-Populate Redis with historical message data for testing and development.
-
-### `simulate_digest_from_history.py`
-
-Simulate digest generation from historical data without live Telegram connection.
-
-### `test_digest.py`
-
-Test digest generation logic independently.
-
 ### `run_tests.py`
 
 Run the full test suite with coverage reporting.
@@ -125,9 +113,131 @@ Run the full test suite with coverage reporting.
 python tools/run_tests.py
 ```
 
-### `verify_config_ui.py`
+Executes all unit tests, integration tests, and contract tests with detailed coverage metrics.
 
-Verify configuration UI endpoints and data integrity.
+---
+
+### `simulate_populate_history.py`
+
+Populate Redis with historical messages from monitored channels.
+
+**Usage:**
+
+```bash
+python tools/simulate_populate_history.py [--limit 100] [--channel-id CHANNEL_ID]
+```
+
+**Description:**
+
+Fetches the latest messages from configured Telegram channels and populates Redis as if they were just received. Useful for testing the importance scoring, semantic analysis, and alert generation systems.
+
+---
+
+### `simulate_digest_from_history.py`
+
+Simulate digest generation using historical messages that were populated into Redis.
+
+**Usage:**
+
+```bash
+python tools/simulate_digest_from_history.py [--hours 24] [--top-n 10] [--limit 500]
+```
+
+**Description:**
+
+Reads recent entries from the configured Redis stream, scores them with the same heuristics used by the worker (but without sending per-message alerts), writes important ones into the DB as alerted, and finally composes and sends a digest.
+
+**Typical Flow:**
+
+1. Run `simulate_populate_history.py` to seed the Redis stream from Telegram history
+2. Run this script to score + mark messages and send a digest
+
+---
+
+### `simulate_digest.py`
+
+Test script to trigger digest delivery immediately with test messages.
+
+**Usage:**
+
+```bash
+python tools/simulate_digest.py
+```
+
+**Description:**
+
+Creates test messages in the database and immediately sends a digest. Useful for testing the digest delivery mechanism without waiting for real messages.
+
+---
+
+### `simulate_live_feed.py`
+
+Simulate a live Telegram feed between two accounts.
+
+**Usage:**
+
+```bash
+python tools/simulate_live_feed.py \
+    --session-a ./my_dutch.session \
+    --session-b ./temp_test.session \
+    --api-id 123456 \
+    --api-hash abcdef0123456789abcdef0123456789 \
+    --direction a-to-b \
+    --interval 5 \
+    --count 20
+```
+
+**Using a text file of messages:**
+
+```bash
+python tools/simulate_live_feed.py \
+    --session-a ./helper.session \
+    --session-b ./client.session \
+    --messages-file ./messages.txt \
+    --direction a-to-b \
+    --interval 10
+```
+
+**Description:**
+
+Given two Telethon session files for two different Telegram accounts, this script will make one or both accounts send messages at a fixed interval. Useful for testing TG Sentinel's ingestion using real Telegram traffic.
+
+**Options:**
+
+- `--session-a` / `--session-b`: Path to session files
+- `--api-id` / `--api-hash`: Telegram API credentials (or use `TG_API_ID`/`TG_API_HASH` env vars)
+- `--direction`: Message direction (`a-to-b`, `b-to-a`, or `both`)
+- `--interval`: Seconds between messages
+- `--count`: Number of messages to send
+- `--messages-file`: Optional text file with messages (one per line)
+
+---
+
+## Migration & Maintenance
+
+### `migrate_profiles.py`
+
+Migration script to convert old-style keywords to two-layer profiles.
+
+**Usage:**
+
+```bash
+# Dry run (preview changes)
+python tools/migrate_profiles.py --config config/tgsentinel.yml --dry-run
+
+# Apply changes
+python tools/migrate_profiles.py --config config/tgsentinel.yml --apply
+```
+
+**Description:**
+
+This script:
+
+1. Analyzes existing keywords in all channels/users
+2. Groups them into logical profiles (security, releases, opportunities, etc.)
+3. Generates profiles.yml with global profiles
+4. Updates tgsentinel.yml to bind profiles instead of duplicating keywords
+5. Creates backups before making changes
 
 ---
 

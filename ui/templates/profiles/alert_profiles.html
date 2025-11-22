@@ -39,6 +39,19 @@
 
     <!-- Alert Profile Editor (Right Column) -->
     <div class="col-12 col-xl-8">
-        {% include 'profiles/_alert_profile_form.html' %}
+        <article class="card h-100" aria-labelledby="alert-profile-editor-heading">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="card-title mb-0" id="alert-profile-editor-heading">Alert Profile Editor</h2>
+                    <small class="text-muted">Configure keyword-based alert detection</small>
+                </div>
+                <a href="/docs#alert-profiles" class="btn btn-outline-primary btn-sm" title="View alert profiles documentation" target="_blank" rel="noopener">
+                    <i class="bi bi-info-circle"></i>
+                </a>
+            </div>
+            <div class="card-body">
+                {% include 'profiles/_alert_profile_form.html' %}
+            </div>
+        </article>
     </div>
 </section>

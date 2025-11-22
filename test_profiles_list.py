@@ -86,22 +86,39 @@ def simulate_ui_conversion(sentinel_profiles_dict):
     # NEW WAY (current fix):
     new_way = [profile for profile_id, profile in sentinel_profiles_dict.items()]
 
-    print("\nOLD WAY (broken):")
-    if old_way:
-        first = old_way[0]
+    print("\nOLD WAY (broken - demonstrates overwrite bug):")
+    if old_way and sentinel_profiles_dict:
+        # Get first profile from source to compare
+        first_profile_id, first_profile = next(iter(sentinel_profiles_dict.items()))
+        original_id = first_profile.get("id")
+        overwritten_profile = old_way[0]
+        final_id = overwritten_profile.get("id")
+
+        print(f"  Source profile_id (dict key): {first_profile_id}")
+        print(f"  Original 'id' in profile value: {original_id}")
+        print(f"  Final 'id' after {{**profile, 'id': profile_id}}: {final_id}")
+
+        if original_id is None:
+            print(f"  ⚠️  No original 'id', comprehension added: {final_id}")
+        elif original_id == final_id:
+            print(f"  ✓  'id' unchanged: {final_id}")
+        else:
+            print(
+                f"  ❌ BUG: Original 'id' {original_id} was overwritten with {final_id}"
+            )
+
         print(
-            f"  First profile has {len([k for k, v in first.items() if k == 'id'])} 'id' field(s)"
-        )
-        print(
-            f"  Profile dict: {json.dumps({k: v for k, v in first.items() if k in ['id', 'name']}, indent=2)}"
+            f"  Profile dict: {json.dumps({k: v for k, v in overwritten_profile.items() if k in ['id', 'name']}, indent=2)}"
         )
 
     print("\nNEW WAY (fixed):")
     if new_way:
         first = new_way[0]
-        print(
-            f"  First profile has {len([k for k, v in first.items() if k == 'id'])} 'id' field(s)"
-        )
+        has_id = "id" in first
+        id_value = first.get("id") if has_id else None
+        print(f"  First profile has 'id' field: {has_id}")
+        if has_id:
+            print(f"  'id' value: {id_value}")
         print(
             f"  Profile dict: {json.dumps({k: v for k, v in first.items() if k in ['id', 'name']}, indent=2)}"
         )

@@ -38,6 +38,28 @@ class RedisManager:
         self.redis = redis_client
         self.log = logging.getLogger(__name__)
 
+        # Lua script for atomic TTL refresh without value change
+        # If key exists: refresh TTL and return current value
+        # If key missing: set default value with TTL and return it
+        self._ttl_refresh_script = self.redis.register_script(
+            """
+            local key = KEYS[1]
+            local ttl = tonumber(ARGV[1])
+            local default_value = ARGV[2]
+            
+            local current = redis.call('GET', key)
+            if current then
+                -- Key exists: refresh TTL and return current value
+                redis.call('EXPIRE', key, ttl)
+                return current
+            else
+                -- Key missing: set default with TTL
+                redis.call('SETEX', key, ttl, default_value)
+                return default_value
+            end
+        """
+        )
+
     def publish_worker_status(
         self,
         authorized: bool,
@@ -69,6 +91,50 @@ class RedisManager:
             self.log.debug("Published worker status: %s", status)
         except Exception as exc:
             self.log.warning("Failed to publish worker status: %s", exc)
+
+    def refresh_worker_status_ttl(self, ttl: int = 3600) -> Dict[str, Any] | None:
+        """Atomically refresh worker status TTL without changing the value.
+
+        This method uses a Lua script to prevent TOCTOU races. If the key exists,
+        it extends the TTL and returns the current value. If missing, it sets a
+        default authorized status.
+
+        Args:
+            ttl: Time-to-live in seconds (default: 1 hour)
+
+        Returns:
+            Current worker status dict, or None on error
+        """
+        try:
+            # Default value if key doesn't exist
+            default_payload = {
+                "authorized": True,
+                "status": "authorized",
+                "ts": datetime.now(timezone.utc).isoformat(),
+            }
+            default_json = json.dumps(default_payload)
+
+            # Execute atomic TTL refresh
+            result = self._ttl_refresh_script(
+                keys=[WORKER_STATUS_KEY], args=[ttl, default_json]
+            )
+
+            if result:
+                # Parse and return current status
+                # Result from script is already a string (decode_responses=True)
+                status_data = json.loads(
+                    result if isinstance(result, str) else str(result)
+                )
+                self.log.debug(
+                    "[HEARTBEAT] Worker status TTL refreshed atomically (status=%s)",
+                    status_data.get("status", "unknown"),
+                )
+                return status_data
+            return None
+
+        except Exception as exc:
+            self.log.warning("Failed to refresh worker status TTL: %s", exc)
+            return None
 
     def cache_user_info(
         self, user_data: Dict[str, Any], ttl: Optional[int] = None

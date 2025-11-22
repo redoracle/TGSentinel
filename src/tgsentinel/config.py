@@ -306,6 +306,16 @@ class AppCfg:
         """Legacy db_uri for backward compatibility."""
         return self.system.database_uri
 
+    def get_config_dir(self) -> str:
+        """Get the configuration directory path.
+
+        Returns environment CONFIG_DIR if set, otherwise defaults to 'config'.
+
+        Returns:
+            Absolute or relative path to configuration directory
+        """
+        return os.getenv("CONFIG_DIR", "config")
+
 
 def _env_bool(name: str, default: bool) -> bool:
     raw = os.getenv(name)

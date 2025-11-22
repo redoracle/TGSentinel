@@ -1,0 +1,106 @@
+<!-- System Health Score -->
+<section class="row g-4 mb-4">
+    <div class="col-12">
+        <article class="card health-score-card">
+            <div class="card-body p-4">
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <div class="health-score-subtitle mb-3">System Health Score</div>
+                        <div class="health-score-display">
+                            <span id="health-score-value">--</span><span style="font-size: 2rem; opacity: 0.7;">/100</span>
+                        </div>
+                        <div class="health-indicator">
+                            <div class="health-indicator-fill" id="health-indicator-fill" style="width: 0%;"></div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="row g-3">
+                            <div class="col-6">
+                                <div class="d-flex align-items-center">
+                                    <i class="bi bi-check-circle-fill me-2 fs-4"></i>
+                                    <div>
+                                        <div style="font-size: 0.875rem; opacity: 0.8;">Containers</div>
+                                        <div class="fw-bold" id="health-containers">--</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="d-flex align-items-center">
+                                    <i class="bi bi-check-circle-fill me-2 fs-4"></i>
+                                    <div>
+                                        <div style="font-size: 0.875rem; opacity: 0.8;">APIs</div>
+                                        <div class="fw-bold" id="health-apis">--</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="d-flex align-items-center">
+                                    <i class="bi bi-cpu-fill me-2 fs-4"></i>
+                                    <div>
+                                        <div style="font-size: 0.875rem; opacity: 0.8;">CPU Usage</div>
+                                        <div class="fw-bold" id="health-cpu">--</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="d-flex align-items-center">
+                                    <i class="bi bi-memory me-2 fs-4"></i>
+                                    <div>
+                                        <div style="font-size: 0.875rem; opacity: 0.8;">Memory</div>
+                                        <div class="fw-bold" id="health-memory">--</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </article>
+    </div>
+</section>
+
+<!-- TG Sentinel Health (Container Monitoring) -->
+<section class="row g-4 mb-4">
+    <div class="col-12">
+        <article class="card" aria-labelledby="tg-sentinel-health-heading">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" 
+                        type="button" 
+                        data-bs-toggle="collapse" 
+                        data-bs-target="#tg-sentinel-health-body" 
+                        aria-expanded="false" 
+                        aria-controls="tg-sentinel-health-body">
+                    <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
+                    <div>
+                        <h2 class="card-title mb-0" id="tg-sentinel-health-heading">TG Sentinel Health</h2>
+                        <small class="text-muted">Real-time status of all TG Sentinel containers</small>
+                    </div>
+                </button>
+                <div class="d-flex gap-2">
+                    <a href="/docs#tg-sentinel-health" 
+                       class="btn btn-outline-primary btn-sm" 
+                       title="View TG Sentinel health documentation" 
+                       target="_blank" 
+                       rel="noopener">
+                        <i class="bi bi-info-circle"></i>
+                    </a>
+                    <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-containers">
+                        <i class="bi bi-arrow-clockwise"></i>
+                        Refresh
+                    </button>
+                </div>
+            </div>
+            <div class="collapse card-body" id="tg-sentinel-health-body">
+                <div class="container-health-grid" id="container-grid">
+                    <!-- Containers will be dynamically inserted here -->
+                    <div class="text-center text-muted py-4">
+                        <div class="spinner-border spinner-border-sm me-2" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        Loading TG Sentinel health...
+                    </div>
+                </div>
+            </div>
+        </article>
+    </div>
+</section>

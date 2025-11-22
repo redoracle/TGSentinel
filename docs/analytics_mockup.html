@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TG Sentinel Analytics - Enhanced Mockup</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --primary-color: #0d6efd;
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+            --danger-color: #dc3545;
+            --bg-dark: #1e1e1e;
+            --border-color: #dee2e6;
+        }
+
+        body {
+            background-color: #f8f9fa;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        .page-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        /* System Health Score */
+        .health-score-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .health-score-display {
+            font-size: 4rem;
+            font-weight: 700;
+            line-height: 1;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .health-score-subtitle {
+            font-size: 1.25rem;
+            opacity: 0.9;
+        }
+
+        .health-indicator {
+            width: 100%;
+            height: 8px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .health-indicator-fill {
+            height: 100%;
+            background: white;
+            transition: width 0.3s ease;
+            box-shadow: 0 0 10px rgba(255,255,255,0.5);
+        }
+
+        /* Container Health Grid */
+        .container-health-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.25rem;
+        }
+
+        .container-card {
+            position: relative;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .container-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+
+        .status-indicator {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        .status-indicator.online {
+            background: var(--success-color);
+            box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7);
+        }
+
+        .status-indicator.offline {
+            background: var(--danger-color);
+            animation: none;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+                box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7);
+            }
+            50% {
+                opacity: 0.8;
+                box-shadow: 0 0 0 8px rgba(40, 167, 69, 0);
+            }
+        }
+
+        .container-name {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin: 0 0 1rem 0;
+            text-transform: capitalize;
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .metric-row:last-child {
+            border-bottom: none;
+        }
+
+        .metric-label {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .metric-value {
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        /* API Endpoints */
+        .endpoints-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .endpoint-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            transition: background-color 0.2s;
+        }
+
+        .endpoint-item:hover {
+            background-color: #f8f9fa;
+        }
+
+        .endpoint-item:last-child {
+            border-bottom: none;
+        }
+
+        .endpoint-path {
+            font-family: 'Courier New', monospace;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .endpoint-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-badge.online {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .status-badge.offline {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .latency-badge {
+            padding: 0.25rem 0.5rem;
+            background-color: #e9ecef;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        /* Prometheus Metrics */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .metric-card {
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            transition: all 0.2s;
+        }
+
+        .metric-card:hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        .metric-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 0.75rem;
+            font-size: 1.25rem;
+        }
+
+        .metric-icon.success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .metric-icon.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .metric-icon.warning {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+
+        .metric-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: #6c757d;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.25rem;
+        }
+
+        .metric-value-large {
+            font-size: 1.75rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .metric-trend {
+            font-size: 0.75rem;
+            margin-top: 0.25rem;
+        }
+
+        .trend-up {
+            color: var(--success-color);
+        }
+
+        .trend-down {
+            color: var(--danger-color);
+        }
+
+        .trend-stable {
+            color: #6c757d;
+        }
+
+        /* Endpoint Tree */
+        .endpoint-tree {
+            font-family: 'Courier New', monospace;
+            font-size: 0.875rem;
+        }
+
+        .endpoint-tree .endpoint-group {
+            margin-left: 1rem;
+            border-left: 2px solid #e9ecef;
+            padding-left: 1rem;
+        }
+
+        .endpoint-tree .endpoint-name {
+            padding: 0.25rem 0;
+            color: #495057;
+        }
+
+        .endpoint-tree .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+
+        .endpoint-tree .status-dot.online {
+            background-color: var(--success-color);
+        }
+
+        .endpoint-tree .status-dot.offline {
+            background-color: var(--danger-color);
+        }
+
+        /* Chart Containers */
+        .chart-container {
+            position: relative;
+            height: 250px;
+        }
+
+        .chart-container.compact {
+            height: 200px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .container-health-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .health-score-display {
+                font-size: 3rem;
+            }
+
+            .endpoint-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
+            }
+        }
+
+        /* Card Headers */
+        .card-header {
+            background-color: white;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .collapse-button {
+            cursor: pointer;
+        }
+
+        .collapse-icon {
+            transition: transform 0.3s;
+        }
+
+        .collapse-button[aria-expanded="true"] .collapse-icon {
+            transform: rotate(90deg);
+        }
+    </style>
+</head>
+<body>
+    <!-- Page Header -->
+    <div class="page-header">
+        <div class="container">
+            <h1 class="mb-2"><i class="bi bi-graph-up me-2"></i>TG Sentinel Analytics</h1>
+            <p class="mb-0 opacity-75">Real-time system monitoring, container health, and performance metrics</p>
+        </div>
+    </div>
+
+    <div class="container mb-5">
+        <!-- System Health Score -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card health-score-card">
+                    <div class="card-body p-4">
+                        <div class="row align-items-center">
+                            <div class="col-md-6">
+                                <div class="health-score-display">95<span style="font-size: 2rem; opacity: 0.7;">/100</span></div>
+                                <div class="health-score-subtitle mb-3">System Health Score</div>
+                                <div class="health-indicator">
+                                    <div class="health-indicator-fill" style="width: 95%;"></div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="row g-3">
+                                    <div class="col-6">
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-check-circle-fill me-2 fs-4"></i>
+                                            <div>
+                                                <div style="font-size: 0.875rem; opacity: 0.8;">Containers</div>
+                                                <div class="fw-bold">3/3 Running</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-check-circle-fill me-2 fs-4"></i>
+                                            <div>
+                                                <div style="font-size: 0.875rem; opacity: 0.8;">APIs</div>
+                                                <div class="fw-bold">7/7 Online</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-cpu-fill me-2 fs-4"></i>
+                                            <div>
+                                                <div style="font-size: 0.875rem; opacity: 0.8;">CPU Usage</div>
+                                                <div class="fw-bold">45% Avg</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-memory me-2 fs-4"></i>
+                                            <div>
+                                                <div style="font-size: 0.875rem; opacity: 0.8;">Memory</div>
+                                                <div class="fw-bold">466 MB Total</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Container Health -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#container-health" aria-expanded="true">
+                            <i class="bi bi-chevron-right collapse-icon"></i>
+                            <div>
+                                <h5 class="card-title mb-0">Container Health</h5>
+                                <small class="text-muted">Real-time status of all TG Sentinel containers</small>
+                            </div>
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+                        </button>
+                    </div>
+                    <div class="collapse show" id="container-health">
+                        <div class="card-body">
+                            <div class="container-health-grid">
+                                <!-- Redis Container -->
+                                <div class="container-card">
+                                    <div class="status-indicator online"></div>
+                                    <h4 class="container-name">Redis</h4>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Status:</span>
+                                        <span class="metric-value text-success">Running</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Uptime:</span>
+                                        <span class="metric-value">2h 15m</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Restarts:</span>
+                                        <span class="metric-value">0</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">CPU:</span>
+                                        <span class="metric-value text-success">8.2%</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Memory:</span>
+                                        <span class="metric-value text-success">128 MB (3.2%)</span>
+                                    </div>
+                                </div>
+
+                                <!-- Sentinel Container -->
+                                <div class="container-card">
+                                    <div class="status-indicator online"></div>
+                                    <h4 class="container-name">Sentinel</h4>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Status:</span>
+                                        <span class="metric-value text-success">Running</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Uptime:</span>
+                                        <span class="metric-value">2h 15m</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Restarts:</span>
+                                        <span class="metric-value">0</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">CPU:</span>
+                                        <span class="metric-value text-success">45.0%</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Memory:</span>
+                                        <span class="metric-value text-warning">1,228 MB (31.2%)</span>
+                                    </div>
+                                </div>
+
+                                <!-- UI Container -->
+                                <div class="container-card">
+                                    <div class="status-indicator online"></div>
+                                    <h4 class="container-name">UI</h4>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Status:</span>
+                                        <span class="metric-value text-success">Running</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Uptime:</span>
+                                        <span class="metric-value">2h 15m</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Restarts:</span>
+                                        <span class="metric-value">0</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">CPU:</span>
+                                        <span class="metric-value text-success">12.5%</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Memory:</span>
+                                        <span class="metric-value text-success">256 MB (6.5%)</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- API Endpoints Health -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#api-health" aria-expanded="true">
+                            <i class="bi bi-chevron-right collapse-icon"></i>
+                            <div>
+                                <h5 class="card-title mb-0">API Endpoints Status</h5>
+                                <small class="text-muted">Health checks and latency monitoring</small>
+                            </div>
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+                        </button>
+                    </div>
+                    <div class="collapse show" id="api-health">
+                        <div class="card-body p-0">
+                            <ul class="endpoints-list">
+                                <li class="endpoint-item">
+                                    <div>
+                                        <div class="endpoint-path">Sentinel API (8080)</div>
+                                        <div class="endpoint-tree mt-2">
+                                            <div class="endpoint-group">
+                                                <div class="endpoint-name">
+                                                    <span class="status-dot online"></span>/metrics
+                                                    <span class="latency-badge ms-2">8ms</span>
+                                                </div>
+                                                <div class="endpoint-name">
+                                                    <span class="status-dot online"></span>/api/status
+                                                    <span class="latency-badge ms-2">15ms</span>
+                                                </div>
+                                                <div class="endpoint-name">
+                                                    <span class="status-dot online"></span>/api/alerts
+                                                    <span class="latency-badge ms-2">45ms</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="endpoint-status">
+                                        <span class="status-badge online">
+                                            <i class="bi bi-check-circle-fill"></i>Online
+                                        </span>
+                                        <span class="latency-badge">Avg: 23ms</span>
+                                    </div>
+                                </li>
+                                <li class="endpoint-item">
+                                    <div>
+                                        <div class="endpoint-path">UI API (5001)</div>
+                                        <div class="endpoint-tree mt-2">
+                                            <div class="endpoint-group">
+                                                <div class="endpoint-name">
+                                                    <span class="status-dot online"></span>/api/worker/status
+                                                    <span class="latency-badge ms-2">6ms</span>
+                                                </div>
+                                                <div class="endpoint-name">
+                                                    <span class="status-dot online"></span>/api/dashboard/summary
+                                                    <span class="latency-badge ms-2">12ms</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="endpoint-status">
+                                        <span class="status-badge online">
+                                            <i class="bi bi-check-circle-fill"></i>Online
+                                        </span>
+                                        <span class="latency-badge">Avg: 9ms</span>
+                                    </div>
+                                </li>
+                                <li class="endpoint-item">
+                                    <div>
+                                        <div class="endpoint-path">Redis (6379)</div>
+                                        <div class="text-muted small mt-1">Connection test via PING command</div>
+                                    </div>
+                                    <div class="endpoint-status">
+                                        <span class="status-badge online">
+                                            <i class="bi bi-check-circle-fill"></i>Online
+                                        </span>
+                                        <span class="latency-badge">&lt;1ms</span>
+                                    </div>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Prometheus Metrics -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#prometheus-metrics" aria-expanded="true">
+                            <i class="bi bi-chevron-right collapse-icon"></i>
+                            <div>
+                                <h5 class="card-title mb-0">Live Metrics (Prometheus)</h5>
+                                <small class="text-muted">Real-time system and application metrics</small>
+                            </div>
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+                        </button>
+                    </div>
+                    <div class="collapse show" id="prometheus-metrics">
+                        <div class="card-body">
+                            <div class="metrics-grid">
+                                <!-- Worker Status -->
+                                <div class="metric-card">
+                                    <div class="metric-icon success">
+                                        <i class="bi bi-person-check-fill"></i>
+                                    </div>
+                                    <div class="metric-label">Worker Status</div>
+                                    <div class="metric-value-large text-success">
+                                        <i class="bi bi-check-circle-fill me-1"></i>Authorized
+                                    </div>
+                                    <div class="metric-trend trend-stable">
+                                        <i class="bi bi-dash-lg"></i>Connected
+                                    </div>
+                                </div>
+
+                                <!-- Redis Queue -->
+                                <div class="metric-card">
+                                    <div class="metric-icon info">
+                                        <i class="bi bi-inbox-fill"></i>
+                                    </div>
+                                    <div class="metric-label">Redis Queue Depth</div>
+                                    <div class="metric-value-large">42</div>
+                                    <div class="metric-trend trend-up">
+                                        <i class="bi bi-arrow-up"></i>+5 messages
+                                    </div>
+                                </div>
+
+                                <!-- Message Processing -->
+                                <div class="metric-card">
+                                    <div class="metric-icon success">
+                                        <i class="bi bi-speedometer2"></i>
+                                    </div>
+                                    <div class="metric-label">Msg Process Rate</div>
+                                    <div class="metric-value-large">15.2</div>
+                                    <div class="metric-trend trend-stable">
+                                        <i class="bi bi-dash-lg"></i>msg/min
+                                    </div>
+                                </div>
+
+                                <!-- API Requests -->
+                                <div class="metric-card">
+                                    <div class="metric-icon info">
+                                        <i class="bi bi-graph-up"></i>
+                                    </div>
+                                    <div class="metric-label">API Request Rate</div>
+                                    <div class="metric-value-large">8.5</div>
+                                    <div class="metric-trend trend-down">
+                                        <i class="bi bi-arrow-down"></i>req/sec
+                                    </div>
+                                </div>
+
+                                <!-- Database Messages -->
+                                <div class="metric-card">
+                                    <div class="metric-icon warning">
+                                        <i class="bi bi-database-fill"></i>
+                                    </div>
+                                    <div class="metric-label">DB Message Count</div>
+                                    <div class="metric-value-large">1,234</div>
+                                    <div class="metric-trend trend-up">
+                                        <i class="bi bi-arrow-up"></i>+50 stored
+                                    </div>
+                                </div>
+
+                                <!-- Semantic Latency -->
+                                <div class="metric-card">
+                                    <div class="metric-icon success">
+                                        <i class="bi bi-clock-fill"></i>
+                                    </div>
+                                    <div class="metric-label">Semantic Latency</div>
+                                    <div class="metric-value-large">0.123</div>
+                                    <div class="metric-trend trend-stable">
+                                        <i class="bi bi-dash-lg"></i>seconds
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Add interactivity to mockup
+        document.addEventListener('DOMContentLoaded', function() {
+            // Simulate data refresh
+            const refreshButtons = document.querySelectorAll('button:not(.collapse-button)');
+            refreshButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const icon = this.querySelector('i');
+                    icon.classList.add('rotate-animation');
+                    setTimeout(() => icon.classList.remove('rotate-animation'), 1000);
+                });
+            });
+        });
+    </script>
+    <style>
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .rotate-animation {
+            animation: rotate 1s linear;
+        }
+    </style>
+</body>
+</html>

@@ -1,17 +1,30 @@
 """
 Analytics API Routes Blueprint
 
-Handles anomaly detection and diagnostic exports for the TG Sentinel UI.
+Handles anomaly detection, diagnostic exports, and container health monitoring for the TG Sentinel UI.
 """
 
 import json
 import logging
 import os
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
-from flask import Blueprint, jsonify, make_response, request
+import requests
+from flask import Blueprint, jsonify, make_response, request, session as flask_session
+from prometheus_client.parser import text_string_to_metric_families
+
+try:
+    import docker  # type: ignore[import-not-found]
+    from docker.errors import DockerException  # type: ignore[import-not-found]
+
+    DOCKER_AVAILABLE = True
+except ImportError:
+    DOCKER_AVAILABLE = False
+    docker = None  # type: ignore[assignment]
+    DockerException = Exception  # type: ignore[misc,assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -294,3 +307,864 @@ def api_export_diagnostics():
     except Exception as exc:
         logger.error(f"Failed to generate diagnostics: {exc}")
         return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+def get_docker_client():
+    """Get Docker client instance with error handling."""
+    if not DOCKER_AVAILABLE:
+        logger.warning(
+            "Docker SDK not available - container health monitoring disabled"
+        )
+        return None
+    try:
+        return docker.from_env()  # type: ignore[union-attr]
+    except DockerException as e:
+        logger.error(f"Failed to connect to Docker daemon: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error connecting to Docker: {e}")
+        return None
+
+
+def calculate_cpu_percent(stats):
+    """
+    Calculate CPU percentage from Docker stats.
+
+    Formula from Docker docs:
+    cpu_delta = cpu_stats.cpu_usage.total_usage - precpu_stats.cpu_usage.total_usage
+    system_cpu_delta = cpu_stats.system_cpu_usage - precpu_stats.system_cpu_usage
+    cpu_percent = (cpu_delta / system_cpu_delta) * number_cpus * 100.0
+    """
+    try:
+        cpu_stats = stats.get("cpu_stats", {})
+        precpu_stats = stats.get("precpu_stats", {})
+
+        cpu_usage = cpu_stats.get("cpu_usage", {})
+        precpu_usage = precpu_stats.get("cpu_usage", {})
+
+        cpu_delta = cpu_usage.get("total_usage", 0) - precpu_usage.get("total_usage", 0)
+        system_delta = cpu_stats.get("system_cpu_usage", 0) - precpu_stats.get(
+            "system_cpu_usage", 0
+        )
+
+        online_cpus = cpu_stats.get(
+            "online_cpus", len(cpu_usage.get("percpu_usage", [1]))
+        )
+
+        if system_delta > 0 and cpu_delta > 0:
+            cpu_percent = (cpu_delta / system_delta) * online_cpus * 100.0
+            return round(cpu_percent, 1)
+        return 0.0
+    except (KeyError, TypeError, ZeroDivisionError) as e:
+        logger.warning(f"Error calculating CPU percentage: {e}")
+        return 0.0
+
+
+def format_uptime(started_at_str):
+    """Convert container start time to human-readable uptime."""
+    try:
+        # Parse ISO 8601 timestamp from Docker
+        started_at = datetime.fromisoformat(started_at_str.replace("Z", "+00:00"))
+        now = datetime.now(started_at.tzinfo)
+        uptime_seconds = (now - started_at).total_seconds()
+
+        hours = int(uptime_seconds // 3600)
+        minutes = int((uptime_seconds % 3600) // 60)
+
+        if hours > 0:
+            return f"{hours}h {minutes}m"
+        else:
+            return f"{minutes}m"
+    except (ValueError, AttributeError) as e:
+        logger.warning(f"Error formatting uptime: {e}")
+        return "N/A"
+
+
+@analytics_bp.route("/analytics/containers", methods=["GET"])
+def get_container_health():
+    """
+    Get health status for all TG Sentinel containers.
+
+    Returns:
+        JSON with container status, resource usage, uptime, and restart count
+    """
+    client = get_docker_client()
+    if not client:
+        return (
+            jsonify(
+                {
+                    "status": "error",
+                    "message": "Cannot connect to Docker daemon",
+                    "containers": [],
+                }
+            ),
+            503,
+        )
+
+    try:
+        # Filter containers by project name
+        containers = client.containers.list(all=True, filters={"name": "tgsentinel"})
+
+        container_data = []
+
+        for container in containers:
+            try:
+                # Get real-time stats (non-streaming)
+                stats = container.stats(stream=False)
+
+                # Parse container info
+                attrs = container.attrs
+                state = attrs.get("State", {})
+
+                # Calculate memory usage in MB
+                memory_stats = stats.get("memory_stats", {})
+                memory_usage = memory_stats.get("usage", 0)
+                memory_limit = memory_stats.get("limit", 1)
+                memory_mb = round(memory_usage / 1024 / 1024, 1)
+                memory_limit_mb = round(memory_limit / 1024 / 1024, 1)
+                memory_percent = (
+                    round((memory_usage / memory_limit) * 100, 1)
+                    if memory_limit > 0
+                    else 0.0
+                )
+
+                # Network I/O
+                networks = stats.get("networks", {})
+                rx_bytes = sum(net.get("rx_bytes", 0) for net in networks.values())
+                tx_bytes = sum(net.get("tx_bytes", 0) for net in networks.values())
+
+                # Build container info
+                container_info = {
+                    "name": container.name,
+                    "short_name": container.name.replace("tgsentinel-", "").replace(
+                        "-1", ""
+                    ),
+                    "status": state.get("Status", "unknown"),
+                    "running": state.get("Running", False),
+                    "uptime_seconds": 0,
+                    "uptime_display": "N/A",
+                    "restarts": state.get("RestartCount", 0),
+                    "cpu_percent": calculate_cpu_percent(stats),
+                    "memory_mb": memory_mb,
+                    "memory_limit_mb": memory_limit_mb,
+                    "memory_percent": memory_percent,
+                    "network_rx_bytes": rx_bytes,
+                    "network_tx_bytes": tx_bytes,
+                }
+
+                # Format uptime if running
+                if state.get("Running"):
+                    started_at = state.get("StartedAt")
+                    if started_at:
+                        container_info["uptime_display"] = format_uptime(started_at)
+                        try:
+                            started = datetime.fromisoformat(
+                                started_at.replace("Z", "+00:00")
+                            )
+                            now = datetime.now(started.tzinfo)
+                            container_info["uptime_seconds"] = int(
+                                (now - started).total_seconds()
+                            )
+                        except (ValueError, AttributeError):
+                            pass
+
+                container_data.append(container_info)
+
+            except Exception as e:
+                logger.error(f"Error processing container {container.name}: {e}")
+                # Add minimal info for failed container
+                container_data.append(
+                    {
+                        "name": container.name,
+                        "short_name": container.name.replace("tgsentinel-", "").replace(
+                            "-1", ""
+                        ),
+                        "status": "error",
+                        "running": False,
+                        "error": str(e),
+                    }
+                )
+
+        # Sort by name for consistent ordering
+        container_data.sort(key=lambda x: x["name"])
+
+        return jsonify(
+            {
+                "status": "ok",
+                "containers": container_data,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "count": len(container_data),
+            }
+        )
+
+    except DockerException as e:
+        logger.error(f"Docker API error: {e}")
+        return jsonify({"status": "error", "message": str(e), "containers": []}), 500
+    finally:
+        try:
+            client.close()
+        except Exception:
+            pass
+
+
+@analytics_bp.route("/analytics/endpoints", methods=["GET"])
+def get_endpoint_health():
+    """
+    Check health status of all TG Sentinel API endpoints.
+
+    Monitors:
+    - Sentinel API (port 8080): /metrics, /api/status, /api/alerts
+    - UI API (port 5000): /health, /api/worker/status
+    - Redis (port 6379): Connection via PING
+
+    Returns:
+        JSON with endpoint statuses, latencies, and uptime percentages
+    """
+    sentinel_base_url = os.getenv("SENTINEL_API_BASE_URL", "http://sentinel:8080")
+    # UI listens on port 5000 internally within the container
+    ui_base_url = "http://127.0.0.1:5000"
+
+    endpoints_to_check = [
+        {
+            "group": "Sentinel API",
+            "port": 8080,
+            "base_url": sentinel_base_url,
+            "paths": [
+                {"path": "/metrics", "timeout": 5},
+                {"path": "/api/status", "timeout": 3},
+                {"path": "/api/alerts", "timeout": 5},
+            ],
+        },
+        {
+            "group": "UI API",
+            "port": 5000,  # Internal container port
+            "base_url": ui_base_url,
+            "paths": [
+                {"path": "/health", "timeout": 2, "auth_required": False},
+                {"path": "/api/worker/status", "timeout": 3, "auth_required": True},
+            ],
+        },
+    ]
+
+    results = []
+
+    # Check HTTP endpoints
+    for group_config in endpoints_to_check:
+        group_name = group_config["group"]
+        base_url = group_config["base_url"]
+        port = group_config["port"]
+
+        group_online = True
+        group_latencies = []
+        endpoint_details = []
+
+        for endpoint_config in group_config["paths"]:
+            path = endpoint_config["path"]
+            timeout = endpoint_config["timeout"]
+            auth_required = endpoint_config.get("auth_required", False)
+            full_url = f"{base_url}{path}"
+
+            try:
+                start_time = time.time()
+                # Add session cookie if authentication is required
+                if auth_required and request.cookies.get("session"):
+                    session_cookie = request.cookies.get("session")
+                    response = requests.get(
+                        full_url,
+                        timeout=timeout,
+                        cookies={"session": session_cookie} if session_cookie else None,
+                    )
+                else:
+                    response = requests.get(full_url, timeout=timeout)
+                latency_ms = round((time.time() - start_time) * 1000, 1)
+
+                online = response.status_code < 500
+                group_latencies.append(latency_ms)
+
+                endpoint_details.append(
+                    {
+                        "path": path,
+                        "online": online,
+                        "status_code": response.status_code,
+                        "latency_ms": latency_ms,
+                    }
+                )
+
+                if not online:
+                    group_online = False
+
+            except requests.Timeout:
+                endpoint_details.append(
+                    {
+                        "path": path,
+                        "online": False,
+                        "status_code": 0,
+                        "latency_ms": timeout * 1000,
+                        "error": "Timeout",
+                    }
+                )
+                group_online = False
+
+            except requests.RequestException as e:
+                endpoint_details.append(
+                    {
+                        "path": path,
+                        "online": False,
+                        "status_code": 0,
+                        "latency_ms": 0,
+                        "error": str(e),
+                    }
+                )
+                group_online = False
+
+        avg_latency = (
+            round(sum(group_latencies) / len(group_latencies), 1)
+            if group_latencies
+            else 0
+        )
+
+        results.append(
+            {
+                "group": group_name,
+                "port": port,
+                "online": group_online,
+                "avg_latency_ms": avg_latency,
+                "endpoints": endpoint_details,
+            }
+        )
+
+    # Check Redis connection
+    redis_online = False
+    redis_latency = 0
+
+    if redis_client:
+        try:
+            start_time = time.time()
+            redis_client.ping()
+            redis_latency = round((time.time() - start_time) * 1000, 1)
+            redis_online = True
+        except Exception as e:
+            logger.warning(f"Redis health check failed: {e}")
+
+    results.append(
+        {
+            "group": "Redis",
+            "port": 6379,
+            "online": redis_online,
+            "avg_latency_ms": redis_latency,
+            "endpoints": [
+                {
+                    "path": "PING",
+                    "online": redis_online,
+                    "latency_ms": redis_latency,
+                }
+            ],
+        }
+    )
+
+    # Calculate overall health
+    total_endpoints = sum(len(r["endpoints"]) for r in results)
+    online_endpoints = sum(
+        sum(1 for e in r["endpoints"] if e.get("online", False)) for r in results
+    )
+
+    return jsonify(
+        {
+            "status": "ok",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "summary": {
+                "total_endpoints": total_endpoints,
+                "online_endpoints": online_endpoints,
+                "online_percentage": (
+                    round((online_endpoints / total_endpoints) * 100, 1)
+                    if total_endpoints > 0
+                    else 0
+                ),
+            },
+            "groups": results,
+        }
+    )
+
+
+@analytics_bp.route("/analytics/prometheus", methods=["GET"])
+def get_prometheus_metrics():
+    """
+    Parse and return key Prometheus metrics from Sentinel service.
+
+    Extracts metrics like:
+    - worker_authorized
+    - worker_connected
+    - redis_stream_depth
+    - messages_processed_total
+    - api_requests_total
+    - db_messages_current
+
+    Returns:
+        JSON with parsed metrics and their current values
+    """
+    sentinel_metrics_url = os.getenv(
+        "SENTINEL_METRICS_URL", "http://sentinel:8080/metrics"
+    )
+
+    try:
+        response = requests.get(sentinel_metrics_url, timeout=5)
+        response.raise_for_status()
+
+        metrics_text = response.text
+
+        # Log for debugging
+        logger.debug(
+            f"Fetched {len(metrics_text)} bytes from Prometheus metrics endpoint"
+        )
+        if not metrics_text or len(metrics_text) < 10:
+            logger.warning(
+                "Prometheus metrics endpoint returned empty or very short response"
+            )
+
+        parsed_metrics = {}
+
+        # Define metrics we want to extract (include tgsentinel_ prefix and common Python metrics)
+        target_metrics = [
+            "tgsentinel_",  # All TG Sentinel custom metrics
+            "process_",  # Process metrics (CPU, memory, etc.)
+            "python_",  # Python runtime metrics
+        ]
+
+        # Use prometheus_client parser for robust metric parsing
+        try:
+            for family in text_string_to_metric_families(metrics_text):
+                # Check if this is a metric family we care about
+                metric_name = family.name
+                is_target_metric = any(
+                    metric_name.startswith(target) for target in target_metrics
+                )
+
+                if not is_target_metric:
+                    continue
+
+                if metric_name not in parsed_metrics:
+                    parsed_metrics[metric_name] = []
+
+                # Extract samples from the metric family
+                for sample in family.samples:
+                    try:
+                        metric_entry: dict[str, Any] = {"value": float(sample.value)}
+
+                        # Add labels if present
+                        if sample.labels:
+                            metric_entry["labels"] = dict(sample.labels)
+
+                        parsed_metrics[metric_name].append(metric_entry)
+                    except (ValueError, AttributeError) as e:
+                        logger.debug(f"Error parsing sample {sample.name}: {e}")
+                        continue
+
+        except Exception as parse_error:
+            logger.error(f"Error parsing Prometheus metrics with parser: {parse_error}")
+            # Fall back to empty metrics on parser failure
+            parsed_metrics = {}
+
+        # Calculate aggregates for multi-value metrics
+        aggregated_metrics = {}
+
+        for metric_name, values in parsed_metrics.items():
+            if len(values) == 1 and "labels" not in values[0]:
+                # Simple metric with single value
+                aggregated_metrics[metric_name] = {
+                    "value": values[0]["value"],
+                    "type": "gauge",
+                }
+            else:
+                # Multiple values or labeled metric
+                total = sum(v["value"] for v in values)
+                aggregated_metrics[metric_name] = {
+                    "value": total,
+                    "count": len(values),
+                    "type": "counter" if "total" in metric_name else "gauge",
+                    "details": values,
+                }
+
+        return jsonify(
+            {
+                "status": "ok",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "metrics": aggregated_metrics,
+                "raw_count": len(parsed_metrics),
+            }
+        )
+
+    except requests.Timeout:
+        return (
+            jsonify(
+                {
+                    "status": "error",
+                    "message": "Timeout connecting to Prometheus metrics endpoint",
+                    "metrics": {},
+                }
+            ),
+            504,
+        )
+
+    except requests.ConnectionError as e:
+        # Connection refused typically means Sentinel is starting up
+        logger.warning(
+            f"Connection error fetching Prometheus metrics (Sentinel may be starting): {e}"
+        )
+        return (
+            jsonify(
+                {
+                    "status": "initializing",
+                    "message": "Sentinel service is starting up. Metrics will be available shortly.",
+                    "metrics": {},
+                }
+            ),
+            503,
+        )
+
+    except requests.RequestException as e:
+        logger.error(f"Error fetching Prometheus metrics: {e}")
+        # Check if it's a 503 status code response (service unavailable during startup)
+        if (
+            hasattr(e, "response")
+            and e.response is not None
+            and e.response.status_code == 503
+        ):
+            return (
+                jsonify(
+                    {
+                        "status": "initializing",
+                        "message": "Sentinel service is starting up. Metrics will be available shortly.",
+                        "metrics": {},
+                    }
+                ),
+                503,
+            )
+        return (
+            jsonify(
+                {
+                    "status": "error",
+                    "message": f"Failed to fetch metrics: {str(e)}",
+                    "metrics": {},
+                }
+            ),
+            503,
+        )
+
+
+@analytics_bp.route("/analytics/system-health", methods=["GET"])
+def get_system_health():
+    """
+    Calculate and return overall system health score (0-100).
+
+    Health score calculation:
+    - Container health: 30% (all containers running, low restarts)
+    - API health: 25% (all endpoints online, low latency)
+    - Resource usage: 25% (CPU/memory within thresholds)
+    - Worker status: 20% (authorized, connected, processing messages)
+
+    Returns:
+        JSON with health score, component scores, and recommendations
+    """
+    health_components = {}
+    total_score = 0.0
+
+    # 1. Container Health (30 points)
+    container_score = 0.0
+    client = None
+    try:
+        # Reuse container health endpoint logic
+        client = get_docker_client()
+
+        if client and DOCKER_AVAILABLE:
+            try:
+                containers = client.containers.list(
+                    all=True, filters={"name": "tgsentinel"}
+                )
+                if containers:
+                    running_count = sum(
+                        1 for c in containers if c.attrs.get("State", {}).get("Running")
+                    )
+                    total_count = len(containers)
+                    running_ratio = (
+                        running_count / total_count if total_count > 0 else 0
+                    )
+
+                    # Check restart counts
+                    restart_counts = [
+                        c.attrs.get("State", {}).get("RestartCount", 0)
+                        for c in containers
+                    ]
+                    avg_restarts = (
+                        sum(restart_counts) / len(restart_counts)
+                        if restart_counts
+                        else 0
+                    )
+
+                    # Score calculation
+                    container_score = running_ratio * 30  # Up to 30 points
+                    if avg_restarts > 5:
+                        container_score -= 5  # Penalty for frequent restarts
+                    elif avg_restarts > 2:
+                        container_score -= 2
+
+                    health_components["containers"] = {
+                        "score": round(container_score, 1),
+                        "max_score": 30,
+                        "details": {
+                            "running": running_count,
+                            "total": total_count,
+                            "avg_restarts": round(avg_restarts, 1),
+                        },
+                    }
+            except Exception as e:
+                logger.error(f"Error calculating container health: {e}")
+                health_components["containers"] = {
+                    "score": 0,
+                    "max_score": 30,
+                    "details": {"error": str(e)},
+                }
+                container_score = 0
+        else:
+            health_components["containers"] = {
+                "score": 0,
+                "max_score": 30,
+                "details": {"error": "Docker unavailable"},
+            }
+
+        total_score += container_score
+
+    except Exception as e:
+        logger.error(f"Error initializing Docker client for container health: {e}")
+        health_components["containers"] = {
+            "score": 0,
+            "max_score": 30,
+            "details": {"error": str(e)},
+        }
+    finally:
+        # Always close Docker client if it was created
+        if client:
+            try:
+                client.close()
+            except Exception as close_error:
+                logger.warning(f"Error closing Docker client: {close_error}")
+
+    # 2. API Endpoints Health (25 points)
+    try:
+        sentinel_base_url = os.getenv("SENTINEL_API_BASE_URL", "http://sentinel:8080")
+        api_score = 0.0
+        endpoints_checked = 0
+        endpoints_online = 0
+
+        # Check key endpoints
+        critical_endpoints = [
+            f"{sentinel_base_url}/api/status",
+            f"{sentinel_base_url}/metrics",
+        ]
+
+        for endpoint in critical_endpoints:
+            endpoints_checked += 1
+            try:
+                response = requests.get(endpoint, timeout=3)
+                if response.status_code < 500:
+                    endpoints_online += 1
+            except Exception:
+                pass
+
+        if endpoints_checked > 0:
+            api_score = (endpoints_online / endpoints_checked) * 25
+
+        health_components["api_endpoints"] = {
+            "score": round(api_score, 1),
+            "max_score": 25,
+            "details": {"online": endpoints_online, "total": endpoints_checked},
+        }
+
+        total_score += api_score
+
+    except Exception as e:
+        logger.error(f"Error calculating API health: {e}")
+        health_components["api_endpoints"] = {
+            "score": 0,
+            "max_score": 25,
+            "details": {"error": str(e)},
+        }
+
+    # 3. Resource Usage (25 points)
+    resource_score = 25.0  # Start optimistic
+    client = None
+    try:
+        client = get_docker_client()
+
+        if client and DOCKER_AVAILABLE:
+            try:
+                containers = client.containers.list(filters={"name": "tgsentinel"})
+                cpu_values = []
+                memory_values = []
+
+                for container in containers:
+                    try:
+                        stats = container.stats(stream=False)
+                        cpu_percent = calculate_cpu_percent(stats)
+                        cpu_values.append(cpu_percent)
+
+                        memory_stats = stats.get("memory_stats", {})
+                        memory_usage = memory_stats.get("usage", 0)
+                        memory_limit = memory_stats.get("limit", 1)
+                        memory_percent = (
+                            (memory_usage / memory_limit) * 100
+                            if memory_limit > 0
+                            else 0
+                        )
+                        memory_values.append(memory_percent)
+
+                    except Exception:
+                        pass
+
+                # Apply penalties for high resource usage
+                if cpu_values:
+                    avg_cpu = sum(cpu_values) / len(cpu_values)
+                    if avg_cpu > 85:
+                        resource_score -= 10
+                    elif avg_cpu > 70:
+                        resource_score -= 5
+
+                if memory_values:
+                    avg_memory = sum(memory_values) / len(memory_values)
+                    if avg_memory > 90:
+                        resource_score -= 10
+                    elif avg_memory > 80:
+                        resource_score -= 5
+
+                health_components["resources"] = {
+                    "score": round(max(0, resource_score), 1),
+                    "max_score": 25,
+                    "details": {
+                        "avg_cpu_percent": round(avg_cpu, 1) if cpu_values else 0,
+                        "avg_memory_percent": (
+                            round(avg_memory, 1) if memory_values else 0
+                        ),
+                    },
+                }
+
+            except Exception as e:
+                logger.error(f"Error calculating resource health: {e}")
+                health_components["resources"] = {
+                    "score": 0,
+                    "max_score": 25,
+                    "details": {"error": str(e)},
+                }
+                resource_score = 0
+        else:
+            health_components["resources"] = {
+                "score": 0,
+                "max_score": 25,
+                "details": {"error": "Docker unavailable"},
+            }
+            resource_score = 0
+
+        total_score += max(0, resource_score)
+
+    except Exception as e:
+        logger.error(f"Error initializing Docker client for resource health: {e}")
+        health_components["resources"] = {
+            "score": 0,
+            "max_score": 25,
+            "details": {"error": str(e)},
+        }
+    finally:
+        # Always close Docker client if it was created
+        if client:
+            try:
+                client.close()
+            except Exception as close_error:
+                logger.warning(f"Error closing Docker client: {close_error}")
+
+    # 4. Worker Status (20 points)
+    try:
+        worker_score = 0.0
+
+        # Check Redis for worker status
+        if redis_client:
+            worker_status = redis_client.get("tgsentinel:worker_status")
+            if worker_status:
+                try:
+                    status_data = json.loads(worker_status)
+                    if status_data.get("authorized"):
+                        worker_score += 15  # Authorized worker
+                    # Accept both 'authorized' and 'ready' status as healthy
+                    if status_data.get("status") in ["authorized", "ready"]:
+                        worker_score += 5  # Additional points for ready status
+
+                    health_components["worker"] = {
+                        "score": round(worker_score, 1),
+                        "max_score": 20,
+                        "details": {
+                            "authorized": status_data.get("authorized", False),
+                            "status": status_data.get("status", "unknown"),
+                        },
+                    }
+                except json.JSONDecodeError:
+                    pass
+
+        if "worker" not in health_components:
+            health_components["worker"] = {
+                "score": 0,
+                "max_score": 20,
+                "details": {"error": "Worker status unavailable"},
+            }
+
+        total_score += worker_score
+
+    except Exception as e:
+        logger.error(f"Error calculating worker health: {e}")
+        health_components["worker"] = {
+            "score": 0,
+            "max_score": 20,
+            "details": {"error": str(e)},
+        }
+
+    # Calculate final score and grade
+    final_score = min(100, round(total_score, 1))
+
+    if final_score >= 90:
+        grade = "excellent"
+        color = "success"
+    elif final_score >= 75:
+        grade = "good"
+        color = "success"
+    elif final_score >= 60:
+        grade = "fair"
+        color = "warning"
+    elif final_score >= 40:
+        grade = "poor"
+        color = "warning"
+    else:
+        grade = "critical"
+        color = "danger"
+
+    # Generate recommendations
+    recommendations = []
+    if health_components.get("containers", {}).get("score", 0) < 20:
+        recommendations.append(
+            "Check container status - some containers are not running"
+        )
+    if health_components.get("api_endpoints", {}).get("score", 0) < 15:
+        recommendations.append("API endpoints are not responding properly")
+    if health_components.get("resources", {}).get("score", 0) < 15:
+        recommendations.append(
+            "Resource usage is high - consider scaling or optimization"
+        )
+    if health_components.get("worker", {}).get("score", 0) < 10:
+        recommendations.append("Worker authorization or connection issues detected")
+
+    return jsonify(
+        {
+            "status": "ok",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "health_score": final_score,
+            "grade": grade,
+            "color": color,
+            "components": health_components,
+            "recommendations": recommendations,
+        }
+    )

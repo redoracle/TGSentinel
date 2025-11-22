@@ -49,6 +49,7 @@ services:
       - SENTINEL_API_BASE_URL=http://sentinel:8080/api
     volumes:
       - tgsentinel_ui_data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       - redis
       - sentinel

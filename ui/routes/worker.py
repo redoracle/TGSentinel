@@ -40,7 +40,23 @@ def worker_status():
                     status = json.loads(str(raw))
             except Exception:
                 status = None
+
         if not status:
+            # Fallback: Check if user_info exists (indicates active session)
+            # This handles cases where worker_status key expired or Redis restarted
+            try:
+                if deps.redis_client:
+                    user_info_raw = deps.redis_client.get("tgsentinel:user_info")
+                    if user_info_raw:
+                        logger.info(
+                            "Worker status key missing but user_info exists - assuming ready"
+                        )
+                        return jsonify(
+                            {"authorized": True, "status": "ready", "ts": None}
+                        )
+            except Exception as fallback_exc:
+                logger.debug("Fallback check error: %s", fallback_exc)
+
             return jsonify({"authorized": None, "status": "unknown"})
         # Normalize fields and include rate limit info if present
         response = {

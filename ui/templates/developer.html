@@ -6,14 +6,14 @@
     <div class="col-12 col-xl-6">
         <article class="card h-100" aria-labelledby="integration-heading">
             <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
-                <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#integration-body" aria-expanded="true" aria-controls="integration-body" style="text-decoration: none; color: inherit;">
-                    <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+                <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#integration-body" aria-expanded="true" aria-controls="integration-body">
+                    <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
                     <div>
                         <h1 class="card-title mb-0" id="integration-heading">Integration Settings</h1>
                         <small class="text-muted">Configure API keys and external services</small>
                     </div>
                 </button>
-                <a href="/docs#integration-settings" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                <a href="/docs#integration-settings" class="btn btn-outline-primary btn-sm" title="View integration settings documentation" target="_blank" rel="noopener">
                     <i class="bi bi-info-circle"></i>
                 </a>
             </div>
@@ -41,15 +41,15 @@
     <div class="col-12 col-xl-6">
         <article class="card h-100" aria-labelledby="webhook-table-heading">
             <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
-                <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#webhook-table-body-container" aria-expanded="true" aria-controls="webhook-table-body-container" style="text-decoration: none; color: inherit;">
-                    <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+                <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#webhook-table-body-container" aria-expanded="true" aria-controls="webhook-table-body-container">
+                    <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
                     <div>
                         <h2 class="card-title mb-0" id="webhook-table-heading">Webhooks</h2>
                         <small class="text-muted">Manage external notification endpoints</small>
                     </div>
                 </button>
                 <div class="d-flex gap-2">
-                    <a href="/docs#webhooks-api" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                    <a href="/docs#webhooks-api" class="btn btn-outline-primary btn-sm" title="View webhooks documentation" target="_blank" rel="noopener">
                         <i class="bi bi-info-circle"></i>
                     </a>
                     <button class="btn btn-primary btn-sm" type="button" id="btn-add-webhook">
@@ -71,7 +71,7 @@
                         <div class="mb-3">
                             <label class="form-label" for="webhook-secret">Secret/Token (optional)</label>
                             <!-- Hidden username field for password form accessibility -->
-                            <input type="text" name="webhook-username" autocomplete="username" style="display:none;" aria-hidden="true" tabindex="-1">
+                            <input type="text" name="webhook-username" autocomplete="username" class="d-none" aria-hidden="true" tabindex="-1">
                             <input class="form-control form-control-sm" id="webhook-secret" type="password" placeholder="Authentication token" autocomplete="current-password">
                         </div>
                         <div class="d-flex gap-2">
@@ -109,16 +109,16 @@
 </section>
 
 <section class="card" aria-labelledby="developer-console-heading">
-    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
-        <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#developer-console-body" aria-expanded="true" aria-controls="developer-console-body" style="text-decoration: none; color: inherit;">
-            <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#developer-console-body" aria-expanded="true" aria-controls="developer-console-body">
+            <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
             <div>
                 <h2 class="card-title mb-0" id="developer-console-heading">Integration Console</h2>
                 <small class="text-muted">Live webhook and integration event logs</small>
             </div>
         </button>
         <div class="d-flex gap-2">
-            <a href="/docs#integration-console" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+            <a href="/docs#integration-console" class="btn btn-outline-primary btn-sm" title="View integration console documentation" target="_blank" rel="noopener">
                 <i class="bi bi-info-circle"></i>
             </a>
             <button class="btn btn-outline-primary btn-sm" type="button" id="btn-webhook-test">Send sample alert</button>

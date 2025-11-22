@@ -6,14 +6,14 @@
     <div class="col-12 col-xl-7">
         <article class="card h-100" aria-labelledby="log-tail-heading">
             <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
-                <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#log-tail-body" aria-expanded="true" aria-controls="log-tail-body" style="text-decoration: none; color: inherit;">
-                    <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+                <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#log-tail-body" aria-expanded="true" aria-controls="log-tail-body">
+                    <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
                     <div>
                         <h1 class="card-title mb-0" id="log-tail-heading">Real-time Log Tail</h1>
                         <small class="text-muted">Live system event stream</small>
                     </div>
                 </button>
-                <a href="/docs#console-logs" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                <a href="/docs#console-logs" class="btn btn-outline-primary btn-sm" title="View log viewer documentation" target="_blank" rel="noopener">
                     <i class="bi bi-info-circle"></i>
                 </a>
             </div>
@@ -27,14 +27,14 @@
     <div class="col-12 col-xl-5">
         <article class="card h-100" aria-labelledby="command-center-heading">
             <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
-                <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#command-center-body" aria-expanded="true" aria-controls="command-center-body" style="text-decoration: none; color: inherit;">
-                    <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+                <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#command-center-body" aria-expanded="true" aria-controls="command-center-body">
+                    <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
                     <div>
                         <h2 class="card-title mb-0" id="command-center-heading">Command Center</h2>
                         <small class="text-muted">Execute system commands and quick actions</small>
                     </div>
                 </button>
-                <a href="/docs#console-commands" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                <a href="/docs#console-commands" class="btn btn-outline-primary btn-sm" title="View system commands documentation" target="_blank" rel="noopener">
                     <i class="bi bi-info-circle"></i>
                 </a>
             </div>
@@ -65,14 +65,14 @@
     <div class="col-12 col-xl-6">
         <article class="card h-100" aria-labelledby="maintenance-heading">
             <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
-                <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#maintenance-body" aria-expanded="true" aria-controls="maintenance-body" style="text-decoration: none; color: inherit;">
-                    <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+                <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#maintenance-body" aria-expanded="true" aria-controls="maintenance-body">
+                    <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
                     <div>
                         <h2 class="card-title mb-0" id="maintenance-heading">Maintenance Actions</h2>
                         <small class="text-muted">Database optimization and log management</small>
                     </div>
                 </button>
-                <a href="/docs#maintenance" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                <a href="/docs#maintenance" class="btn btn-outline-primary btn-sm" title="View maintenance tools documentation" target="_blank" rel="noopener">
                     <i class="bi bi-info-circle"></i>
                 </a>
             </div>
@@ -95,14 +95,14 @@
     <div class="col-12 col-xl-6">
         <article class="card h-100" aria-labelledby="diagnostics-heading">
             <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
-                <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#diagnostics-body" aria-expanded="true" aria-controls="diagnostics-body" style="text-decoration: none; color: inherit;">
-                    <i class="bi bi-chevron-right collapse-icon" style="font-size: 0.875rem;"></i>
+                <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#diagnostics-body" aria-expanded="true" aria-controls="diagnostics-body">
+                    <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
                     <div>
                         <h2 class="card-title mb-0" id="diagnostics-heading">Diagnostics Export</h2>
                         <small class="text-muted">Download system diagnostics for support</small>
                     </div>
                 </button>
-                <a href="/docs#diagnostics" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                <a href="/docs#diagnostics" class="btn btn-outline-primary btn-sm" title="View diagnostics documentation" target="_blank" rel="noopener">
                     <i class="bi bi-info-circle"></i>
                 </a>
             </div>
@@ -326,10 +326,8 @@
                 sendCommand(command, true); // Execute with confirmation
             }
         });
-    });
-    
-    // Socket.IO log streaming
-    document.addEventListener("DOMContentLoaded", () => {
+
+        // Socket.IO log streaming
         if (typeof io !== "undefined") {
             const socket = io();
             

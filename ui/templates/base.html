@@ -1564,29 +1564,17 @@
             const statusData = await statusResponse.json();
             
             if (statusData.authorized) {
-              // Always show loading toast first, even if already ready
-              loadingToastId = showToast('Loading TG Sentinel...', 'info', { persistent: true, spinner: true });
-              
               // Check if already ready (caches warmed, dialogs fetched)
               if (statusData.status === 'ready') {
-                console.log('Worker already ready, marking dialogs as fetched');
+                console.log('Worker already ready, skipping loading toast');
                 sessionStorage.setItem(dialogsFetchedKey, 'true');
-                
-                // Give user visual feedback (minimum 1 second)
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                
-                // Hide loading toast
-                if (loadingToastId) {
-                  const toastEl = document.getElementById(loadingToastId);
-                  if (toastEl) {
-                    const toastInstance = bootstrap.Toast.getInstance(toastEl);
-                    if (toastInstance) toastInstance.hide();
-                  }
-                }
-                
-                showToast('TG Sentinel ready', 'success');
+                // Don't show loading toast at all - worker is already ready
+                showToast('TG Sentinel ready', 'success', { delay: 2000 });
                 return;
               }
+              
+              // Worker is not ready yet - show loading toast and poll
+              loadingToastId = showToast('Loading TG Sentinel...', 'info', { persistent: true, spinner: true });
               
               // Worker is not ready yet - poll until it becomes ready
               const pollWorkerStatus = async () => {

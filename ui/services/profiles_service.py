@@ -9,7 +9,6 @@ All file operations are delegated to the Sentinel API to maintain single source 
 
 import logging
 import os
-from pathlib import Path
 from typing import Any, Dict, List
 
 import requests
@@ -29,7 +28,7 @@ INTEREST_PROFILE_ID_PREFIX = 3000
 class ProfileService:
     """Service for managing profiles via Sentinel API endpoints."""
 
-    def __init__(self, sentinel_api_base_url: str = None):
+    def __init__(self, sentinel_api_base_url: str | None = None):
         """Initialize profile service with Sentinel API base URL.
 
         Args:
@@ -68,81 +67,6 @@ class ProfileService:
 
         # Default to interest for unknown ranges
         return "interest"
-
-        # ==================== INTEREST PROFILES ====================
-
-        logger.debug(
-            "ProfileService initialized: alert=%s, global=%s, interest=%s",
-            self.alert_profiles_file,
-            self.global_profiles_file,
-            self.interest_profiles_file,
-        )
-
-    def _migrate_to_unified_storage(self) -> None:
-        """Migrate profiles from legacy storage to unified YAML structure.
-
-        Migrates:
-        - data/profiles.yml (or profiles.json) -> config/profiles_interest.yml
-        - data/alert_profiles.json -> config/profiles_alert.yml
-        - Preserves config/profiles.yml as config/profiles_global.yml
-        """
-        try:
-            # Migrate Interest Profiles
-            if not self.interest_profiles_file.exists():
-                # Check for legacy interest profiles file
-                legacy_interest = None
-                if self.profiles_file_legacy.exists():
-                    logger.info(
-                        "Migrating interest profiles from %s", self.profiles_file_legacy
-                    )
-                    with open(self.profiles_file_legacy, "r", encoding="utf-8") as f:
-                        legacy_interest = yaml.safe_load(f) or {}
-
-                if legacy_interest:
-                    with open(self.interest_profiles_file, "w", encoding="utf-8") as f:
-                        yaml.safe_dump(
-                            legacy_interest,
-                            f,
-                            default_flow_style=False,
-                            sort_keys=False,
-                        )
-                    logger.info("Migrated %d interest profiles", len(legacy_interest))
-                else:
-                    # Create empty file
-                    with open(self.interest_profiles_file, "w", encoding="utf-8") as f:
-                        yaml.safe_dump({}, f)
-                    logger.debug("Created empty interest profiles file")
-
-            # Migrate Alert Profiles
-            if not self.alert_profiles_file.exists():
-                if self.alert_profiles_file_legacy.exists():
-                    logger.info(
-                        "Migrating alert profiles from %s",
-                        self.alert_profiles_file_legacy,
-                    )
-                    with open(
-                        self.alert_profiles_file_legacy, "r", encoding="utf-8"
-                    ) as f:
-                        legacy_alert = json.load(f)
-
-                    with open(self.alert_profiles_file, "w", encoding="utf-8") as f:
-                        yaml.safe_dump(
-                            legacy_alert, f, default_flow_style=False, sort_keys=False
-                        )
-                    logger.info("Migrated %d alert profiles", len(legacy_alert))
-                else:
-                    with open(self.alert_profiles_file, "w", encoding="utf-8") as f:
-                        yaml.safe_dump({}, f)
-                    logger.debug("Created empty alert profiles file")
-
-            # Create Global Profiles file if it doesn't exist
-            if not self.global_profiles_file.exists():
-                with open(self.global_profiles_file, "w", encoding="utf-8") as f:
-                    yaml.safe_dump({}, f)
-                logger.debug("Created empty global profiles file")
-
-        except Exception as exc:
-            logger.error("Failed to migrate profiles: %s", exc, exc_info=True)
 
     # ═══════════════════════════════════════════════════════════════════
     # Interest Profile Methods
@@ -682,7 +606,7 @@ class ProfileService:
         return {"valid": len(errors) == 0, "errors": errors}
 
     def get_profile_usage(self, profile_id: str) -> Dict[str, Any]:
-        """Get usage information for a global profile.
+        """Get usage information for a global profile via Sentinel API.
 
         Args:
             profile_id: Profile ID to check.
@@ -690,40 +614,29 @@ class ProfileService:
         Returns:
             Dictionary with 'channels' and 'users' lists showing where profile is used.
         """
-        usage = {"channels": [], "users": []}
-
         try:
-            if not self.tgsentinel_config.exists():
-                logger.warning("Config file not found: %s", self.tgsentinel_config)
-                return usage
+            url = f"{self.sentinel_api_base_url}/profiles/global/{profile_id}/usage"
+            response = requests.get(url, timeout=10)
 
-            with open(self.tgsentinel_config, "r", encoding="utf-8") as f:
-                config = yaml.safe_load(f) or {}
+            if response.status_code == 404:
+                return {"channels": [], "users": []}
 
-            # Check channels
-            for channel in config.get("channels", []):
-                if profile_id in channel.get("profiles", []):
-                    usage["channels"].append(
-                        {
-                            "id": channel.get("id"),
-                            "name": channel.get("name", "Unnamed"),
-                        }
-                    )
+            response.raise_for_status()
+            data = response.json()
 
-            # Check monitored users
-            for user in config.get("monitored_users", []):
-                if profile_id in user.get("profiles", []):
-                    usage["users"].append(
-                        {
-                            "id": user.get("id"),
-                            "name": user.get("name", "Unnamed"),
-                        }
-                    )
+            if data.get("status") == "ok":
+                return data.get("data", {"channels": [], "users": []})
 
+            return {"channels": [], "users": []}
+
+        except requests.exceptions.RequestException as exc:
+            logger.error(f"Error getting profile usage for {profile_id}: {exc}")
+            return {"channels": [], "users": []}
         except Exception as exc:
-            logger.error("Failed to get profile usage for '%s': %s", profile_id, exc)
-
-        return usage
+            logger.error(
+                f"Unexpected error getting profile usage for {profile_id}: {exc}"
+            )
+            return {"channels": [], "users": []}
 
     # ==================== ALERT PROFILES (via Sentinel API) ====================
 
@@ -840,7 +753,13 @@ class ProfileService:
         profile_id = profile_dict.get("id")
         if profile_id is None:
             # New profile - generate ID
-            profile_id = self._generate_next_id(ALERT_PROFILE_ID_PREFIX, profiles)
+            # Cast to Dict[int, Any] for type compatibility
+            int_keyed_profiles: Dict[int, Any] = {
+                int(k): v for k, v in profiles.items()
+            }
+            profile_id = self._generate_next_id(
+                ALERT_PROFILE_ID_PREFIX, int_keyed_profiles
+            )
             profile_dict["id"] = profile_id
             logger.info(f"Generated alert profile ID: {profile_id}")
         else:
@@ -849,7 +768,7 @@ class ProfileService:
             profile_dict["id"] = profile_id
 
         # Key by integer ID for consistent lookups
-        profiles[profile_id] = profile_dict
+        profiles[profile_id] = profile_dict  # type: ignore[index]
         return self.save_alert_profiles(profiles)
 
     def delete_alert_profile(self, profile_id: int) -> bool:
@@ -925,134 +844,8 @@ class ProfileService:
             logger.error(f"Unexpected error toggling alert profile {profile_id}: {exc}")
             return False
 
-    # =========================================================================
-    # Alert Profile Synchronization
-    # =========================================================================
-
-    def sync_alert_profiles_to_config(self, config_path: Path) -> bool:
-        """Sync alert profiles from JSON to tgsentinel.yml channels config.
-
-        This ensures alert profile settings (keywords, thresholds, etc.) are
-        reflected in the main configuration file for the sentinel worker.
-
-        Args:
-            config_path: Path to tgsentinel.yml configuration file.
-
-        Returns:
-            True on success, False on error.
-        """
-        try:
-            alert_profiles = self.load_alert_profiles()
-
-            if not config_path.exists():
-                logger.warning("Config file not found, cannot sync alert profiles")
-                return False
-
-            with open(config_path, "r", encoding="utf-8") as f:
-                config = yaml.safe_load(f) or {}
-
-            # Update channels with alert profile data
-            channels = config.get("channels", [])
-            profile_map = {
-                p.get("channel_id"): p
-                for p in alert_profiles.values()
-                if p.get("type") == "channel" and p.get("channel_id")
-            }
-
-            for channel in channels:
-                channel_id = channel.get("id")
-                if channel_id in profile_map:
-                    profile = profile_map[channel_id]
-
-                    # Sync keyword categories
-                    for key in [
-                        "action_keywords",
-                        "decision_keywords",
-                        "urgency_keywords",
-                        "importance_keywords",
-                        "release_keywords",
-                        "security_keywords",
-                        "risk_keywords",
-                        "opportunity_keywords",
-                    ]:
-                        if profile.get(key):
-                            channel[key] = profile[key]
-
-                    # Sync other settings
-                    channel["vip_senders"] = profile.get("vip_senders", [])
-                    channel["reaction_threshold"] = profile.get("reaction_threshold", 5)
-                    channel["reply_threshold"] = profile.get("reply_threshold", 3)
-                    channel["detect_codes"] = profile.get("detect_codes", True)
-                    channel["detect_documents"] = profile.get("detect_documents", True)
-                    channel["prioritize_pinned"] = profile.get(
-                        "prioritize_pinned", True
-                    )
-                    channel["prioritize_admin"] = profile.get("prioritize_admin", True)
-                    channel["detect_polls"] = profile.get("detect_polls", True)
-                    channel["rate_limit_per_hour"] = profile.get(
-                        "rate_limit_per_hour", 10
-                    )
-
-                    # Sync digest configuration if present
-                    if "digest_config" in profile:
-                        channel["digest"] = profile["digest_config"]
-                    elif "digest" not in channel:
-                        # Clear digest if profile doesn't have one
-                        channel.pop("digest", None)
-
-            # Write back to config with file locking
-            # Open target file and acquire exclusive lock for inter-process safety
-            target_fd = os.open(str(config_path), os.O_CREAT | os.O_WRONLY, 0o644)
-
-            try:
-                # Acquire exclusive lock on target file
-                fcntl.flock(target_fd, fcntl.LOCK_EX)
-
-                try:
-                    # Create temp file in same directory for atomic rename
-                    temp_fd, temp_path = tempfile.mkstemp(
-                        dir=config_path.parent, prefix=".config_", suffix=".tmp"
-                    )
-
-                    try:
-                        # Write to temp file with flush + fsync
-                        with os.fdopen(temp_fd, "w", encoding="utf-8") as temp_f:
-                            yaml.safe_dump(
-                                config,
-                                temp_f,
-                                default_flow_style=False,
-                                sort_keys=False,
-                            )
-                            temp_f.flush()
-                            os.fsync(temp_f.fileno())
-
-                        # Atomic replace: os.replace is guaranteed atomic on POSIX
-                        os.replace(temp_path, str(config_path))
-
-                    except Exception:
-                        # Clean up temp file on error
-                        if os.path.exists(temp_path):
-                            os.unlink(temp_path)
-                        raise
-
-                finally:
-                    # Release lock on target file
-                    fcntl.flock(target_fd, fcntl.LOCK_UN)
-
-            finally:
-                # Close target file descriptor
-                os.close(target_fd)
-
-            # Touch reload marker to signal config reload
-            reload_marker = self.data_dir / ".reload_config"
-            reload_marker.touch()
-
-            logger.info("Alert profiles synced to config successfully")
-            return True
-
-        except Exception as exc:
-            logger.error("Failed to sync alert profiles to config: %s", exc)
-            return False
+    # Note: Alert profile synchronization is now handled by the Sentinel service.
+    # The UI delegates all profile operations to Sentinel via API endpoints.
 
 
 # Module-level singleton instance (initialized by app.py)
@@ -1071,7 +864,7 @@ def get_profile_service() -> ProfileService:
     return _profile_service
 
 
-def init_profile_service(sentinel_api_base_url: str = None) -> ProfileService:
+def init_profile_service(sentinel_api_base_url: str | None = None) -> ProfileService:
     """Initialize the global ProfileService instance.
 
     Args:

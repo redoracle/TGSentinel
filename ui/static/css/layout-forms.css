@@ -70,7 +70,7 @@
 
 /* Stats row spacing */
 .row {
-  margin-bottom: 2rem;
+  margin-bottom: 0rem;
 }
 
 .row > [class*="col-"] {
