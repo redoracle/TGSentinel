@@ -229,6 +229,7 @@ class AlertsCfg:
     target_channel: str = ""
     min_score: float = 5.0  # Minimum score threshold for alerts (0.0-10.0)
     digest: DigestCfg = field(default_factory=DigestCfg)
+    feedback_learning: bool = True  # Enable learning from user feedback (👍/👎)
 
     def __post_init__(self):
         """Validate alert configuration constraints."""
@@ -708,6 +709,9 @@ logging:
             "ALERT_MIN_SCORE", y.get("alerts", {}).get("min_score", 5.0)
         ),
         digest=digest_cfg,
+        feedback_learning=_env_bool(
+            "FEEDBACK_LEARNING", y.get("alerts", {}).get("feedback_learning", True)
+        ),
     )
 
     channels = [ChannelRule(**c) for c in y.get("channels", [])]

@@ -1926,6 +1926,21 @@ def create_api_app() -> Flask:
                         (high_score_count / alerts_sent * 100) if alerts_sent else 0.0
                     )
 
+            # Get database file size
+            db_size_bytes = 0
+            try:
+                db_path = _sentinel_state.get("db_path")
+                if not db_path and _engine:
+                    # Try to extract from engine URL
+                    db_url = str(_engine.url)
+                    if db_url.startswith("sqlite:///"):
+                        db_path = db_url.replace("sqlite:///", "")
+
+                if db_path and Path(db_path).exists():
+                    db_size_bytes = Path(db_path).stat().st_size
+            except Exception as db_exc:
+                logger.debug(f"Could not get database size: {db_exc}")
+
             return (
                 jsonify(
                     {
@@ -1935,6 +1950,7 @@ def create_api_app() -> Flask:
                             "alerts_sent": int(alerts_sent),
                             "avg_importance": round(float(avg_importance), 2),
                             "feedback_accuracy": round(feedback_accuracy, 1),
+                            "database_size_bytes": db_size_bytes,
                         },
                         "error": None,
                     }

@@ -1,5 +1,36 @@
 /* Analytics Container Health Components */
 
+/* CSS Variables for theming and maintenance */
+:root {
+    /* Status colors */
+    --status-online: #28a745;
+    --status-online-rgb: 40, 167, 69;
+    --status-offline: #dc3545;
+    --status-offline-rgb: 220, 53, 69;
+    --status-warning: #ffc107;
+    --status-warning-rgb: 255, 193, 7;
+    
+    /* Semantic color aliases */
+    --color-success: var(--status-online);
+    --color-success-rgb: var(--status-online-rgb);
+    --color-danger: var(--status-offline);
+    --color-danger-rgb: var(--status-offline-rgb);
+    --color-warning: var(--status-warning);
+    --color-warning-rgb: var(--status-warning-rgb);
+}
+
+/* Health score denominator (/100 text) */
+.health-score-denominator {
+    font-size: 2rem;
+    opacity: 0.7;
+}
+
+/* Health metric labels (Containers, APIs, CPU Usage, Memory) */
+.health-metric-label {
+    font-size: 0.875rem;
+    opacity: 0.8;
+}
+
 /* Container Health Grid */
 .container-health-grid {
     display: grid;
@@ -34,24 +65,30 @@
 }
 
 .status-indicator.online {
-    background: #28a745;
-    box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7);
+    background: var(--status-online);
+    box-shadow: 0 0 0 0 rgba(var(--status-online-rgb), 0.7);
 }
 
 .status-indicator.offline {
-    background: #dc3545;
-    box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7);
+    background: var(--status-offline);
+    box-shadow: 0 0 0 0 rgba(var(--status-offline-rgb), 0.7);
     animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .status-indicator {
+        animation: none;
+    }
 }
 
 @keyframes pulse {
     0%, 100% {
         opacity: 1;
-        box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7);
+        box-shadow: 0 0 0 0 rgba(var(--status-online-rgb), 0.7);
     }
     50% {
         opacity: 0.8;
-        box-shadow: 0 0 0 8px rgba(40, 167, 69, 0);
+        box-shadow: 0 0 0 8px rgba(var(--status-online-rgb), 0.1);
     }
 }
 
@@ -99,24 +136,24 @@
 
 /* Status-specific colors */
 .metric-value.status-online {
-    color: #28a745;
+    color: var(--status-online);
 }
 
 .metric-value.status-offline {
-    color: #dc3545;
+    color: var(--status-offline);
 }
 
 /* Resource threshold colors */
 .text-success {
-    color: #28a745 !important;
+    color: var(--color-success) !important;
 }
 
 .text-warning {
-    color: #ffc107 !important;
+    color: var(--color-warning) !important;
 }
 
 .text-danger {
-    color: #dc3545 !important;
+    color: var(--color-danger) !important;
 }
 
 /* Dark mode support */

@@ -6,7 +6,7 @@
 
 ## 📁 File Locations
 
-```
+```bash
 config/
   ├── profiles.yml              # Global profile definitions (NEW)
   └── tgsentinel.yml            # Entity bindings + overrides
@@ -247,7 +247,7 @@ monitored_users:
 
 ## 🔀 Profile Resolution Flow
 
-```
+```bash
 1. Message arrives (chat_id=-1001234567890)
         ↓
 2. resolver.resolve_for_channel(-1001234567890)
@@ -353,7 +353,7 @@ python tools/migrate_profiles.py --dry-run --config config/tgsentinel.yml
 
 **Output:**
 
-```
+```bash
 [DRY-RUN] Would create profiles.yml with 3 profiles:
   - security (15 keywords, used by 5 channels)
   - releases (8 keywords, used by 3 channels)
@@ -374,7 +374,7 @@ python tools/migrate_profiles.py --config config/tgsentinel.yml --yes
 
 **Output:**
 
-```
+```bash
 ✓ Created backup: config/backups/tgsentinel_20250115_100000.yml
 ✓ Created profiles.yml with 3 profiles
 ✓ Updated tgsentinel.yml with profile bindings

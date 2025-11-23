@@ -106,92 +106,64 @@
                     <textarea class="form-control" id="alert-template" name="template" rows="4" placeholder="[{chat}] {sender}: {excerpt}"></textarea>
                     <small class="form-text">Use placeholders {chat}, {sender}, {excerpt}.</small>
                 </div>
-            </div>
-        </div>
-    </section>
-
-    <section class="card" aria-labelledby="scoring-settings-heading">
-        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
-            <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#scoring-settings-body" aria-expanded="false" aria-controls="scoring-settings-body">
-                <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
-                <div>
-                    <h2 class="card-title mb-0" id="scoring-settings-heading">Importance & Scoring</h2>
-                    <small class="text-muted">Tune relevance thresholds and heuristics</small>
-                </div>
-            </button>
-            <div class="d-flex gap-2">
-                <a href="/docs#scoring-config" class="btn btn-outline-primary btn-sm" title="View scoring configuration documentation" target="_blank" rel="noopener">
-                    <i class="bi bi-info-circle"></i>
-                </a>
-                <button class="btn btn-primary btn-sm" type="button" id="btn-save-scoring">
-                    <span aria-hidden="true">✓</span> Apply Changes
-                </button>
-            </div>
-        </div>
-        <div class="collapse card-body" id="scoring-settings-body">
-            <div class="row g-4">
-                <div class="col-12 col-md-4">
-                    <label class="form-label" for="embedding-model">
-                        Embedding model
-                        <i class="bi bi-info-circle-fill ms-1 info-tooltip-icon" data-bs-toggle="tooltip" data-bs-placement="top" 
-                           data-bs-title="The AI model used to convert text into numerical vectors for semantic similarity matching. MiniLM is fast and efficient, BGE is more accurate."></i>
-                    </label>
-                    <select class="form-select" id="embedding-model" name="embedding_model">
-                        <option value="all-MiniLM-L6-v2">all-MiniLM-L6-v2</option>
-                        <option value="bge-small-en">bge-small-en</option>
-                        <option value="custom">Custom</option>
-                    </select>
-                </div>
-                <div class="col-12 col-md-4">
-                    <label class="form-label" for="similarity-threshold">
-                        Similarity threshold
-                        <i class="bi bi-info-circle-fill ms-1 info-tooltip-icon" data-bs-toggle="tooltip" data-bs-placement="top" 
-                           data-bs-title="Minimum similarity score (0-1) for messages to match your interests. Lower = more messages, higher = only very relevant messages."></i>
-                    </label>
-                    <input class="form-range" id="similarity-threshold" name="similarity_threshold" type="range" min="0" max="1" step="0.01" value="{{ summary.avg_importance | default(0.42) }}">
-                    <p class="text-muted small mb-0">Current: <span id="similarity-value">{{ summary.avg_importance | default(0.42) }}</span></p>
-                </div>
-                <div class="col-12 col-md-4">
-                    <label class="form-label" for="decay-window">
-                        Decay window (hours)
-                        <i class="bi bi-info-circle-fill ms-1 info-tooltip-icon" data-bs-toggle="tooltip" data-bs-placement="top" 
-                           data-bs-title="Time window for message importance to decay. Messages lose relevance over time to prevent alert fatigue on old topics."></i>
-                    </label>
-                    <input class="form-control" id="decay-window" name="decay_window" type="number" min="1" value="24">
-                </div>
-                <div class="col-12">
-                    <label class="form-label" for="interest-profiles">
-                        Interest profiles
-                        <i class="bi bi-info-circle-fill ms-1 info-tooltip-icon" data-bs-toggle="tooltip" data-bs-placement="top" 
-                           data-bs-title="Keywords or topics you're interested in. The semantic matcher uses these to identify relevant messages (e.g., 'security, vulnerability, zero-day')."></i>
-                    </label>
-                    <input class="form-control" id="interest-profiles" type="text" value="{{ interests | join(', ') }}" placeholder="comma,separated,topics">
-                    <small class="form-text">These inform the semantic matcher.</small>
-                </div>
-                <div class="col-12">
-                    <div class="form-label" id="heuristic-weighting-label">
-                        Heuristic weighting
-                        <i class="bi bi-info-circle-fill ms-1 info-tooltip-icon" data-bs-toggle="tooltip" data-bs-placement="top" 
-                           data-bs-title="Weight (0-1) for each detection heuristic. Higher weights make that signal more important in the final score. Adjust based on what matters most to you."></i>
-                    </div>
-                    <div class="row g-3" id="heuristic-weighting" aria-labelledby="heuristic-weighting-label">
-                        {%- for item in heuristic_options %}
-                        <div class="col-12 col-md-4">
-                            <label class="form-label" for="weight-{{ loop.index0 }}">{{ item }}</label>
-                            <input class="form-range" id="weight-{{ loop.index0 }}" name="weight_{{ loop.index0 }}" type="range" min="0" max="1" step="0.05" value="0.5">
-                        </div>
-                        {%- endfor %}
-                    </div>
-                </div>
                 <div class="col-12 col-md-4">
                     <div class="form-check form-switch mt-4">
                         <input class="form-check-input" id="feedback-learning" name="feedback_learning" type="checkbox" checked>
                         <label class="form-check-label" for="feedback-learning">
                             Feedback learning
                             <i class="bi bi-info-circle-fill ms-1 info-tooltip-icon" data-bs-toggle="tooltip" data-bs-placement="top" 
-                               data-bs-title="When enabled, the system learns from your feedback (👍/👎) to improve future alert accuracy."></i>
+                               data-bs-title="When enabled, the system learns from your feedback (👍/👎) on alerts to improve future alert accuracy and adjust scoring weights."></i>
                         </label>
                     </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="card" aria-labelledby="advanced-settings-heading">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#advanced-settings-body" aria-expanded="false" aria-controls="advanced-settings-body">
+                <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
+                <div>
+                    <h2 class="card-title mb-0" id="advanced-settings-heading">Advanced Settings</h2>
+                    <small class="text-muted">Global system configuration</small>
+                </div>
+            </button>
+            <div class="d-flex gap-2">
+                <a href="/docs#advanced-config" class="btn btn-outline-primary btn-sm" title="View advanced settings documentation" target="_blank" rel="noopener">
+                    <i class="bi bi-info-circle"></i>
+                </a>
+                <button class="btn btn-primary btn-sm" type="button" id="btn-save-advanced">
+                    <span aria-hidden="true">✓</span> Apply Changes
+                </button>
+            </div>
+        </div>
+        <div class="collapse card-body" id="advanced-settings-body">
+            <div class="row g-4">
+                <div class="col-12">
+                    <div class="alert alert-info" role="alert">
+                        <strong>Note:</strong> For keyword matching and scoring thresholds, use the <a href="/profiles" class="alert-link">Profiles</a> page to configure Alert Profiles and Interest Profiles.
+                    </div>
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label" for="embedding-model">
+                        Embedding model
+                        <i class="bi bi-info-circle-fill ms-1 info-tooltip-icon" data-bs-toggle="tooltip" data-bs-placement="top" 
+                           data-bs-title="The AI model used to convert text into numerical vectors for semantic similarity matching. MiniLM is fast and efficient, BGE is more accurate. This is a global setting that affects all Interest Profiles."></i>
+                    </label>
+                    <select class="form-select" id="embedding-model" name="embedding_model">
+                        <option value="all-MiniLM-L6-v2">all-MiniLM-L6-v2 (Fast)</option>
+                        <option value="bge-small-en">bge-small-en (Accurate)</option>
+                        <option value="custom">Custom</option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label" for="decay-window">
+                        Decay window (hours)
+                        <i class="bi bi-info-circle-fill ms-1 info-tooltip-icon" data-bs-toggle="tooltip" data-bs-placement="top" 
+                           data-bs-title="Global time window for message importance to decay. Messages lose relevance over time to prevent alert fatigue on old topics. This applies to all messages system-wide."></i>
+                    </label>
+                    <input class="form-control" id="decay-window" name="decay_window" type="number" min="1" value="24" placeholder="24">
                 </div>
             </div>
         </div>
@@ -962,6 +934,9 @@
         if (flatData.target_channel) {
             payload.alerts.target_channel = flatData.target_channel;
         }
+        if (flatData.feedback_learning !== undefined) {
+            payload.alerts.feedback_learning = flatData.feedback_learning;
+        }
         
         // Digest subsection
         payload.alerts.digest = {};
@@ -1447,6 +1422,41 @@
                 button.innerHTML = originalText;
             }
         });
+        
+        // Handle Save Advanced button
+        document.getElementById("btn-save-advanced")?.addEventListener("click", async () => {
+            const button = document.getElementById("btn-save-advanced");
+            const originalText = button.innerHTML;
+            
+            try {
+                button.disabled = true;
+                button.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Applying...';
+                
+                const payload = collectPayload();
+                const response = await fetch(saveEndpoint, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
+                
+                if (!response.ok) {
+                    throw new Error("Save failed");
+                }
+                
+                // Config is automatically reloaded by Sentinel via Redis pub/sub
+                showToast("Advanced settings saved successfully", "success");
+                
+                // Reload config from server to update UI display
+                await loadCurrentConfig();
+                
+            } catch (error) {
+                console.error(error);
+                showToast("Failed to save advanced settings", "error");
+            } finally {
+                button.disabled = false;
+                button.innerHTML = originalText;
+            }
+        });
     }
     
     async function loadCurrentConfig() {
@@ -1479,12 +1489,16 @@
             if (config.alerts) {
                 const alertModeSelect = document.getElementById("alert-mode");
                 const alertChannelInput = document.getElementById("alert-channel");
+                const feedbackLearningCheckbox = document.getElementById("feedback-learning");
                 
                 if (alertModeSelect && config.alerts.mode) {
                     alertModeSelect.value = config.alerts.mode;
                 }
                 if (alertChannelInput && config.alerts.target_channel) {
                     alertChannelInput.value = config.alerts.target_channel;
+                }
+                if (feedbackLearningCheckbox && config.alerts.feedback_learning !== undefined) {
+                    feedbackLearningCheckbox.checked = Boolean(config.alerts.feedback_learning);
                 }
             }
             

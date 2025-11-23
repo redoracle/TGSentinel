@@ -4,10 +4,6 @@
 <form id="alert-profile-form" class="d-grid gap-3" novalidate>
     <input type="hidden" id="alert-profile-id" value="">
     
-    <div class="alert alert-info" role="alert">
-        <strong>Select a profile</strong> from the list or create a new one to configure keyword-based detection.
-    </div>
-    
     <!-- Basic Info -->
     <div class="row">
         <div class="col-md-4 d-none">
@@ -271,7 +267,7 @@
                     </div>
                     <div class="col-md-6">
                         <label class="form-label" for="alert-digest-target-channel">Target Channel (for channel/both mode)</label>
-                        <input type="text" class="form-control form-control-sm" id="alert-digest-target-channel" name="alert_digest_target_channel" placeholder="@my_alerts_channel">
+                        <input type="text" class="form-control form-control-sm" id="alert-digest-target-channel" name="alert_digest_target_channel" placeholder="@my_alerts_channel" value="{{ alert_channel }}">
                         <small class="form-text">Channel username or ID</small>
                     </div>
                 </div>

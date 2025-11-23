@@ -753,13 +753,9 @@ class ProfileService:
         profile_id = profile_dict.get("id")
         if profile_id is None:
             # New profile - generate ID
-            # Cast to Dict[int, Any] for type compatibility
-            int_keyed_profiles: Dict[int, Any] = {
-                int(k): v for k, v in profiles.items()
-            }
-            profile_id = self._generate_next_id(
-                ALERT_PROFILE_ID_PREFIX, int_keyed_profiles
-            )
+            # Convert string keys to int only for ID generation logic
+            int_profiles = {int(k): v for k, v in profiles.items() if k.isdigit()}
+            profile_id = self._generate_next_id(ALERT_PROFILE_ID_PREFIX, int_profiles)
             profile_dict["id"] = profile_id
             logger.info(f"Generated alert profile ID: {profile_id}")
         else:
@@ -767,8 +763,8 @@ class ProfileService:
             profile_id = int(profile_id)
             profile_dict["id"] = profile_id
 
-        # Key by integer ID for consistent lookups
-        profiles[profile_id] = profile_dict  # type: ignore[index]
+        # Store with string key to maintain Dict[str, Any] consistency
+        profiles[str(profile_id)] = profile_dict
         return self.save_alert_profiles(profiles)
 
     def delete_alert_profile(self, profile_id: int) -> bool:

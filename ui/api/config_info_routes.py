@@ -93,6 +93,7 @@ if PYDANTIC_AVAILABLE:
         dedupe_window: Optional[int] = Field(None, ge=0, le=1440)
         rate_limit_per_channel: Optional[int] = Field(None, ge=0, le=1000)
         template: Optional[str] = None
+        feedback_learning: Optional[bool] = None
 
         # Semantic settings
         embedding_model: Optional[str] = None

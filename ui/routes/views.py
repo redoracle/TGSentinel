@@ -261,6 +261,7 @@ def profiles():
         interests=sorted(profile_names),
         profiles=profiles,
         alert_profiles=alert_profiles,
+        alert_channel=os.getenv("ALERT_CHANNEL", ""),
     )
 
 

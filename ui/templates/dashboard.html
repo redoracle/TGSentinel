@@ -1,6 +1,76 @@
 {% extends "base.html" %}
 {% block title %}Dashboard · TG Sentinel{% endblock %}
 
+{% block extra_head %}
+<style>
+/* Health score components */
+.health-score-subtitle {
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.8;
+}
+
+.health-score-display {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 0.25rem;
+}
+
+.health-score-denominator {
+    font-size: 2rem;
+    opacity: 0.7;
+}
+
+.health-metric-label {
+    font-size: 0.875rem;
+    opacity: 0.8;
+}
+
+.health-indicator {
+    position: relative;
+}
+
+.health-indicator-fill {
+    transition: width 0.3s ease;
+}
+
+.glass-effect {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Activity feed scrolling - show ~3 items, rest need scrolling */
+#activity-feed {
+    max-height: 400px; /* Approximately 3 activity items */
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 8px; /* Space for scrollbar */
+}
+
+/* Custom scrollbar styling */
+#activity-feed::-webkit-scrollbar {
+    width: 6px;
+}
+
+#activity-feed::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+}
+
+#activity-feed::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}
+
+#activity-feed::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <section class="row g-4 mb-4">
     <div class="col-12 col-md-3">
@@ -55,29 +125,75 @@
                 <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-health" title="Refresh system metrics">Refresh</button>
             </div>
             <div class="collapse show card-body" id="system-health-body">
-                <div class="row g-4">
-                    <div class="col-6">
-                        <div class="glass-effect p-3 rounded" aria-live="polite">
-                            <p class="text-muted mb-1">Redis stream depth</p>
-                            <p class="fs-4 fw-bold mb-0" id="health-redis-depth">{{ health.redis_stream_depth | default(0) }}</p>
+                <!-- Health Score - Full Width Top -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="text-center">
+                            <div class="health-score-subtitle mb-2">System Health Score</div>
+                            <div class="health-score-display">
+                                <span id="health-score-value" style="font-size: 3rem; font-weight: bold;">--</span>
+                                <span class="health-score-denominator">/100</span>
+                            </div>
+                            <div class="health-indicator mt-2" style="height: 8px; background: rgba(0,0,0,0.1); border-radius: 4px; overflow: hidden; max-width: 400px; margin: 0 auto;">
+                                <div class="health-indicator-fill" id="health-indicator-fill" style="height: 100%; width: 0%; background: linear-gradient(90deg, #dc3545 0%, #ffc107 50%, #28a745 100%); transition: width 0.3s ease;"></div>
+                            </div>
                         </div>
                     </div>
-                    <div class="col-6">
-                        <div class="glass-effect p-3 rounded" aria-live="polite">
-                            <p class="text-muted mb-1">Database size</p>
-                            <p class="fs-4 fw-bold mb-0" id="health-db-size">{{ health.database_size_mb | default(0.0) }}&nbsp;MB</p>
+                </div>
+                <!-- Metrics Grid - Full Width Below -->
+                <div class="row g-3">
+                    <div class="col-6 col-md-4 col-lg-4">
+                        <div class="d-flex align-items-center glass-effect p-3 rounded h-100">
+                            <i class="bi bi-hdd-fill me-2 fs-3 text-primary"></i>
+                            <div>
+                                <div class="health-metric-label">Database</div>
+                                <div class="fw-bold fs-5" id="health-db-size">--</div>
+                            </div>
                         </div>
                     </div>
-                    <div class="col-6">
-                        <div class="glass-effect p-3 rounded" aria-live="polite">
-                            <p class="text-muted mb-1">CPU usage</p>
-                            <p class="fs-4 fw-bold mb-0" id="health-cpu">{{ health.cpu_percent | default('N/A') }}</p>
+                    <div class="col-6 col-md-4 col-lg-4">
+                        <div class="d-flex align-items-center glass-effect p-3 rounded h-100">
+                            <i class="bi bi-check-circle-fill me-2 fs-3 text-success"></i>
+                            <div>
+                                <div class="health-metric-label">Containers</div>
+                                <div class="fw-bold fs-5" id="health-containers">--</div>
+                            </div>
                         </div>
                     </div>
-                    <div class="col-6">
-                        <div class="glass-effect p-3 rounded" aria-live="polite">
-                            <p class="text-muted mb-1">Memory usage</p>
-                            <p class="fs-4 fw-bold mb-0" id="health-memory">{{ health.memory_mb | default('N/A') }}</p>
+                    <div class="col-6 col-md-4 col-lg-4">
+                        <div class="d-flex align-items-center glass-effect p-3 rounded h-100">
+                            <i class="bi bi-check-circle-fill me-2 fs-3 text-success"></i>
+                            <div>
+                                <div class="health-metric-label">APIs</div>
+                                <div class="fw-bold fs-5" id="health-apis">--</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-lg-4">
+                        <div class="d-flex align-items-center glass-effect p-3 rounded h-100">
+                            <i class="bi bi-cpu-fill me-2 fs-3 text-info"></i>
+                            <div>
+                                <div class="health-metric-label">CPU Usage</div>
+                                <div class="fw-bold fs-5" id="health-cpu">--</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-lg-4">
+                        <div class="d-flex align-items-center glass-effect p-3 rounded h-100">
+                            <i class="bi bi-memory me-2 fs-3 text-info"></i>
+                            <div>
+                                <div class="health-metric-label">Memory</div>
+                                <div class="fw-bold fs-5" id="health-memory">--</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-lg-4">
+                        <div class="d-flex align-items-center glass-effect p-3 rounded h-100">
+                            <i class="bi bi-stack me-2 fs-3 text-warning"></i>
+                            <div>
+                                <div class="health-metric-label">Redis Depth</div>
+                                <div class="fw-bold fs-5" id="health-redis-depth">--</div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -276,15 +392,72 @@
 
     async function updateHealth() {
         try {
+            // Fetch basic health metrics
             const response = await fetch(healthUrl);
             if (!response.ok) {
                 throw new Error("health fetch failed");
             }
             const data = await response.json();
+            
+            // Update basic metrics (these are fast, non-Docker metrics)
             document.getElementById("health-redis-depth").textContent = data.redis_stream_depth ?? 0;
-            document.getElementById("health-db-size").textContent = `${data.database_size_mb ?? 0} MB`;
+            document.getElementById("health-db-size").textContent = data.database_size_display ?? "0 KB";
             document.getElementById("health-cpu").textContent = `${data.cpu_percent ?? "N/A"}${data.cpu_percent != null ? "%" : ""}`;
             document.getElementById("health-memory").textContent = `${data.memory_mb ?? "N/A"}${data.memory_mb != null ? " MB" : ""}`;
+            
+            // Fetch comprehensive health score (includes Docker metrics)
+            try {
+                const scoreResponse = await fetch("/api/analytics/system-health");
+                if (scoreResponse.ok) {
+                    const scoreData = await scoreResponse.json();
+                    
+                    // Update health score
+                    const score = scoreData.health_score ?? 0;
+                    document.getElementById("health-score-value").textContent = score;
+                    
+                    // Update health indicator bar
+                    const indicator = document.getElementById("health-indicator-fill");
+                    if (indicator) {
+                        indicator.style.width = `${score}%`;
+                    }
+                    
+                    // Update component metrics
+                    const components = scoreData.components || {};
+                    
+                    // Containers
+                    if (components.containers) {
+                        const details = components.containers.details || {};
+                        document.getElementById("health-containers").textContent = 
+                            `${details.running ?? 0}/${details.total ?? 0}`;
+                    }
+                    
+                    // APIs
+                    if (components.api_endpoints) {
+                        const details = components.api_endpoints.details || {};
+                        document.getElementById("health-apis").textContent = 
+                            `${details.online ?? 0}/${details.total ?? 0}`;
+                    }
+                    
+                    // Update CPU/Memory from Docker stats if available
+                    if (components.resources) {
+                        const details = components.resources.details || {};
+                        if (details.avg_cpu_percent !== undefined) {
+                            document.getElementById("health-cpu").textContent = 
+                                `${details.avg_cpu_percent.toFixed(1)}%`;
+                        }
+                        if (details.avg_memory_percent !== undefined) {
+                            document.getElementById("health-memory").textContent = 
+                                `${details.avg_memory_percent.toFixed(1)}%`;
+                        }
+                    }
+                }
+            } catch (scoreError) {
+                console.debug("System health score unavailable:", scoreError);
+                // Fallback: show basic metrics only
+                document.getElementById("health-score-value").textContent = "--";
+                document.getElementById("health-containers").textContent = "--";
+                document.getElementById("health-apis").textContent = "--";
+            }
         } catch (error) {
             console.error(error);
         }

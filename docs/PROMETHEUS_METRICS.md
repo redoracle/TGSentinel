@@ -217,6 +217,7 @@ The `/metrics` endpoint dynamically updates gauges before export:
    ```
 
 3. Check Sentinel logs for errors:
+
    ```bash
    docker compose logs sentinel | grep -i metric
    ```
@@ -251,13 +252,13 @@ The old log-based metrics system has been replaced. If you were parsing logs for
 
 **Old (deprecated):**
 
-```
+```bash
 metric messages_ingested{chat_id=123} 1 ts=1700000000
 ```
 
 **New (Prometheus):**
 
-```
+```bash
 tgsentinel_messages_ingested_total{chat_id="123",chat_name="test"} 1
 ```
 

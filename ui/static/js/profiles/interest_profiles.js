@@ -36,6 +36,7 @@
     let allInterestProfiles = [];
     let filteredInterestProfiles = [];
     let interestProfileEndpoints = {};
+    let interestProfilesLoading = false;
     
     // ============= PUBLIC API =============
     
@@ -53,6 +54,8 @@
      * @returns {Promise<void>}
      */
     async function loadInterestProfiles(retryCount = 0) {
+        interestProfilesLoading = true;
+        renderInterestProfiles([]);
         try {
             const response = await fetch(interestProfileEndpoints.list);
             if (!response.ok) throw new Error("Failed to load interest profiles");
@@ -60,6 +63,7 @@
             
             allInterestProfiles = data.profiles || [];
             filteredInterestProfiles = [...allInterestProfiles];
+            interestProfilesLoading = false;
             
             // Update profile count
             const countEl = document.getElementById("interest-profiles-count");
@@ -82,6 +86,8 @@
             } else {
                 window.SharedUtils.showToast("Failed to load interest profiles", "error");
             }
+            interestProfilesLoading = false;
+            renderInterestProfiles(filteredInterestProfiles);
         }
     }
     
@@ -117,11 +123,25 @@
         const listEl = document.getElementById("interest-profiles-list");
         if (!listEl) return;
         
+        if (interestProfilesLoading) {
+            listEl.innerHTML = `
+                <div class="text-center text-muted p-4">
+                    <svg width="48" height="48" fill="currentColor" class="bi bi-collection mb-2" viewBox="0 0 16 16">
+                        <path d="M2.5 3.5a.5.5 0 0 1 0-1h11a.5.5 0 0 1 0 1h-11zm2-2a.5.5 0 0 1 0-1h7a.5.5 0 0 1 0 1h-7zM0 13a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 16 13V6a1.5 1.5 0 0 0-1.5-1.5h-13A1.5 1.5 0 0 0 0 6v7zm1.5.5A.5.5 0 0 1 1 13V6a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-.5.5h-13z"/>
+                    </svg>
+                    <p class="mb-2">Loading interest profiles...</p>
+                    <small>Create your first profile to get started</small>
+                    <div class="spinner-border text-primary mt-3" role="status" aria-label="Loading interest profiles"></div>
+                </div>
+            `;
+            return;
+        }
+
         if (!profiles || profiles.length === 0) {
             listEl.innerHTML = `
-                <div class="alert-profiles-empty">
-                    <svg fill="currentColor" viewBox="0 0 16 16">
-                        <path d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2Z"/>
+                <div class="text-center text-muted p-4">
+                    <svg width="48" height="48" fill="currentColor" class="bi bi-collection mb-2" viewBox="0 0 16 16">
+                        <path d="M2.5 3.5a.5.5 0 0 1 0-1h11a.5.5 0 0 1 0 1h-11zm2-2a.5.5 0 0 1 0-1h7a.5.5 0 0 1 0 1h-7zM0 13a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 16 13V6a.5.5 0 0 0-1.5-1.5h-13A1.5 1.5 0 0 0 0 6v7zm1.5.5A.5.5 0 0 1 1 13V6a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-.5.5h-13z"/>
                     </svg>
                     <p class="mb-2">No interest profiles yet</p>
                     <small>Create your first profile to get started</small>
@@ -138,16 +158,19 @@
             const sampleCount = (profile.positive_samples || []).length + (profile.negative_samples || []).length;
             
             return `
-                <button type="button" class="list-group-item list-group-item-action alert-profile-item ${currentInterestProfile && currentInterestProfile.id === profile.id ? 'active' : ''}" 
+                <div class="list-group-item list-group-item-action alert-profile-item ${currentInterestProfile && currentInterestProfile.id === profile.id ? 'active' : ''}" 
                         data-profile-id="${profile.id}"
-                        onclick="window.InterestProfiles.selectInterestProfile(${profile.id})">
+                        role="button"
+                        tabindex="0"
+                        onclick="window.InterestProfiles.selectInterestProfile(${profile.id})"
+                        onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.InterestProfiles.selectInterestProfile(${profile.id});}">
                     <div class="d-flex w-100 justify-content-between align-items-start">
-                        <div class="flex-grow-1 min-w-0 me-2">
+                        <div class="alert-profile-item-content flex-grow-1 min-w-0 me-2">
                             <div class="d-flex align-items-center gap-2 mb-1">
                                 <h6 class="mb-0 text-truncate">${window.SharedUtils.escapeHtml(profile.name)}</h6>
                                 <span class="badge ${isEnabled ? 'bg-success' : 'bg-secondary'} badge-sm">${isEnabled ? 'ON' : 'OFF'}</span>
                             </div>
-                            ${profile.description ? `<p class="mb-1 small text-muted text-truncate">${window.SharedUtils.escapeHtml(profile.description)}</p>` : ''}
+                            ${profile.description ? `<p class="mb-1 small text-muted alert-profile-description">${window.SharedUtils.escapeHtml(profile.description)}</p>` : ''}
                             <div class="d-flex gap-2 flex-wrap">
                                 <small class="text-muted">ID: ${profile.id}</small>
                                 ${sampleCount > 0 ? `<small class="text-muted">📝 ${sampleCount} samples</small>` : ''}
@@ -157,14 +180,14 @@
                                 ${profile.threshold ? `<small class="text-muted">θ=${profile.threshold.toFixed(2)}</small>` : ''}
                             </div>
                         </div>
-                        <div class="d-flex flex-column align-items-end gap-2">
+                        <div class="alert-profile-item-actions d-flex flex-column align-items-end gap-2">
                             <div class="form-check form-switch mb-0" onclick="event.stopPropagation()">
                                 <input class="form-check-input" type="checkbox" 
                                        ${isEnabled ? 'checked' : ''}
                                        onchange="window.InterestProfiles.toggleInterestProfile(${profile.id}, event)"
                                        title="Enable/Disable">
                             </div>
-                            <div class="btn-group btn-group-sm" role="group" onclick="event.stopPropagation()">
+                            <div class="btn-group btn-group-sm alert-profile-actions" role="group" onclick="event.stopPropagation()">
                                 <button type="button" class="btn btn-outline-secondary" 
                                         onclick="window.InterestProfiles.exportInterestProfile(${profile.id})"
                                         title="Export as JSON">
@@ -183,7 +206,7 @@
                             </div>
                         </div>
                     </div>
-                </button>
+                </div>
             `;
         }).join('');
     }
@@ -533,7 +556,7 @@
      * @param {number} profileId - ID of profile to export
      */
     function exportInterestProfile(profileId) {
-        const profile = allInterestProfiles.find(p => p.id === profileId);
+        const profile = allInterestProfiles.find(p => String(p.id) === String(profileId));
         if (!profile) {
             window.SharedUtils.showToast("Profile not found", "error");
             return;
@@ -565,14 +588,23 @@
             return;
         }
         
+        // Compute a client-side next ID to avoid overwriting existing entries
+        const existingIds = allInterestProfiles
+            .map(p => parseInt(p.id, 10))
+            .filter(id => Number.isFinite(id) && id >= 3000 && id < 4000);
+        const nextId = existingIds.length ? Math.max(...existingIds) + 1 : 3000;
+
         // Create a copy with modified name
+        const { id: _omitId, created_at: _omitCreated, updated_at: _omitUpdated, ...rest } = profile;
         const copy = {
-            ...profile,
-            id: undefined, // New profile gets auto-generated ID
+            ...rest,
+            id: nextId,
             name: `${profile.name} (Copy)`,
-            enabled: false // Start disabled
+            enabled: false, // Start disabled
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
         };
-        
+
         try {
             const response = await fetch(interestProfileEndpoints.upsert, {
                 method: "POST",

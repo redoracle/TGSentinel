@@ -111,6 +111,45 @@ def system_health():
     )
 
 
+@dashboard_bp.route("/api/sentinel/stats", methods=["GET"])
+def sentinel_stats_proxy():
+    """Proxy for Sentinel /api/stats endpoint."""
+    sentinel_api_url = os.getenv("SENTINEL_API_BASE_URL", "http://sentinel:8080/api")
+
+    try:
+        # Forward query parameters if any
+        hours = request.args.get("hours", default=24, type=int)
+        response = requests.get(
+            f"{sentinel_api_url}/stats", params={"hours": hours}, timeout=5
+        )
+
+        if not response.ok:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": f"Sentinel API error: {response.status_code}",
+                    }
+                ),
+                response.status_code,
+            )
+
+        # Return the response from Sentinel
+        return jsonify(response.json())
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Failed to fetch stats from Sentinel: {e}")
+        return (
+            jsonify(
+                {
+                    "status": "error",
+                    "message": f"Failed to communicate with Sentinel: {str(e)}",
+                }
+            ),
+            503,
+        )
+
+
 @dashboard_bp.route("/alerts/recent", methods=["GET"])
 def recent_alerts():
     """Get recent alerts."""

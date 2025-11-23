@@ -566,7 +566,7 @@ TG Sentinel uses a four-tier test taxonomy organized by scope and execution spee
 
 ### Test Structure
 
-```
+```bash
 tests/
 ├── unit/
 │   ├── tgsentinel/      # Sentinel service unit tests
@@ -652,7 +652,7 @@ Progress is a **state machine**, not derived from logs. Logs are supplementary d
 
 ### Progress State Machine
 
-```
+```bash
 PENDING → RUNNING → SUCCESS | FAILED | CANCELLED
 ```
 
@@ -660,7 +660,7 @@ PENDING → RUNNING → SUCCESS | FAILED | CANCELLED
 
 **Progress State** (Hash):
 
-```
+```bash
 tgsentinel:jobs:{job_id}:progress
 ```
 
@@ -678,7 +678,7 @@ Fields:
 
 **Logs Stream** (Supplementary):
 
-```
+```bash
 tgsentinel:jobs:{job_id}:logs
 ```
 
@@ -690,19 +690,19 @@ tgsentinel:jobs:{job_id}:logs
 
 **Start Job**:
 
-```
+```bash
 POST /api/jobs → {"job_id": "uuid"}
 ```
 
 **Get Status** (Polling fallback):
 
-```
+```bash
 GET /api/jobs/{job_id}/status → progress hash
 ```
 
 **Get Logs**:
 
-```
+```bash
 GET /api/jobs/{job_id}/logs?offset=N
 ```
 

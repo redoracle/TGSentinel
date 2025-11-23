@@ -96,7 +96,7 @@
                                 <a class="nav-link" href="#configuration">Configuration/Settings</a>
                                 <a class="nav-link ms-3" href="#telegram-config">Telegram Settings</a>
                                 <a class="nav-link ms-3" href="#alerts-config">Alert Configuration</a>
-                                <a class="nav-link ms-3" href="#scoring-config">Scoring Configuration</a>
+                                <a class="nav-link ms-3" href="#advanced-config">Advanced Settings</a>
                                 <a class="nav-link ms-3" href="#channels-api">Channels Management</a>
                                 <a class="nav-link ms-3" href="#users-api">Users Management</a>
                                 <a class="nav-link ms-3" href="#system-config">System Settings</a>
@@ -2884,76 +2884,84 @@ Where:
                     <li><strong>Rate Limiting:</strong> Max alerts per hour/day to prevent spam</li>
                     <li><strong>Cooldown Period:</strong> Silence alerts from same source for specified time</li>
                 </ul>
+
+                <h4 class="mt-3">Feedback Learning</h4>
+                <p>Enable the system to learn from your feedback on alerts to improve future accuracy:</p>
+                <ul>
+                    <li><strong>Feedback Learning Toggle:</strong> When enabled, the system learns from your 👍/👎 reactions on alerts</li>
+                    <li><strong>How It Works:</strong> Your feedback is stored and used to adjust scoring weights over time</li>
+                    <li><strong>Feedback Accuracy:</strong> View feedback statistics in the Analytics dashboard</li>
+                    <li><strong>Privacy:</strong> Feedback data is stored locally and never leaves your instance</li>
+                </ul>
+                <div class="alert alert-info mt-3">
+                    <strong>💡 Tip:</strong> Regularly provide feedback on alerts to help the system better understand your preferences and reduce false positives.
+                </div>
             </section>
 
-            <section id="scoring-config" class="mb-5">
-                <h3 class="section-header">Scoring Configuration</h3>
-                <p>Fine-tune the scoring algorithm that determines message importance.</p>
+            <section id="advanced-config" class="mb-5">
+                <h3 class="section-header">Advanced Settings</h3>
+                <p>Global system configuration for semantic matching and message processing.</p>
                 
-                <h4 class="mt-3">Keyword Weights</h4>
-                <p>Adjust multipliers for different keyword categories:</p>
+                <div class="alert alert-info">
+                    <strong>📌 Note:</strong> For keyword matching, scoring thresholds, and detection rules, use the <a href="/profiles" class="alert-link">Profiles</a> page to configure Alert Profiles and Interest Profiles.
+                </div>
+
+                <h4 class="mt-3">Embedding Model</h4>
+                <p>Choose the AI model used for semantic similarity matching across all Interest Profiles:</p>
                 <div class="table-responsive">
                     <table class="table table-striped">
                         <thead>
                             <tr>
-                                <th>Category</th>
-                                <th>Default Weight</th>
-                                <th>Description</th>
+                                <th>Model</th>
+                                <th>Characteristics</th>
+                                <th>Best For</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr>
-                                <td>Critical</td>
-                                <td>5.0</td>
-                                <td>Highest priority multiplier</td>
+                                <td><code>all-MiniLM-L6-v2</code></td>
+                                <td>Fast, efficient, 80MB</td>
+                                <td>Real-time processing, resource-constrained environments</td>
                             </tr>
                             <tr>
-                                <td>Security</td>
-                                <td>4.0</td>
-                                <td>Security-related terms</td>
+                                <td><code>bge-small-en</code></td>
+                                <td>More accurate, 130MB</td>
+                                <td>Better semantic understanding, can handle more complex queries</td>
                             </tr>
                             <tr>
-                                <td>Urgency</td>
-                                <td>3.5</td>
-                                <td>Time-sensitive indicators</td>
-                            </tr>
-                            <tr>
-                                <td>Financial</td>
-                                <td>3.0</td>
-                                <td>Market and trading terms</td>
-                            </tr>
-                            <tr>
-                                <td>Technical</td>
-                                <td>2.5</td>
-                                <td>Development and tech</td>
-                            </tr>
-                            <tr>
-                                <td>Project</td>
-                                <td>2.0</td>
-                                <td>Project-specific terms</td>
-                            </tr>
-                            <tr>
-                                <td>Community</td>
-                                <td>1.5</td>
-                                <td>Community engagement</td>
-                            </tr>
-                            <tr>
-                                <td>General</td>
-                                <td>1.0</td>
-                                <td>General interest terms</td>
+                                <td>Custom</td>
+                                <td>User-provided model</td>
+                                <td>Specialized use cases, domain-specific embeddings</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
+                <div class="alert alert-warning mt-3">
+                    <strong>⚠️ Performance Impact:</strong> Changing the embedding model requires restarting the Sentinel service and may take a few minutes to load the new model.
+                </div>
 
-                <h4 class="mt-3">Pattern Multipliers</h4>
-                <ul>
-                    <li><strong>Questions:</strong> Messages containing question marks</li>
-                    <li><strong>Mentions:</strong> Messages with @username mentions</li>
-                    <li><strong>Links:</strong> Messages containing URLs</li>
-                    <li><strong>Forwards:</strong> Forwarded message boost/penalty</li>
-                    <li><strong>VIP Senders:</strong> Multiplier for priority users</li>
+                <h4 class="mt-3">Decay Window</h4>
+                <p>Global time-based relevance decay for all messages:</p>
+                <ul><li><strong>Default:</strong> 24 hours - Messages older than 24 hours gradually lose importance</li>
+                    <li><strong>Purpose:</strong> Prevents alert fatigue by reducing relevance of older topics</li>
+                    <li><strong>How It Works:</strong> Importance score decreases linearly over the decay window</li>
+                    <li><strong>Customization:</strong> Set between 1 hour (aggressive decay) to 168 hours/7 days (slow decay)</li>
                 </ul>
+                <div class="alert alert-success mt-3">
+                    <strong>💡 Best Practice:</strong> Use 24 hours for fast-moving topics (crypto, trading) and 48-72 hours for slower news cycles (research, development updates).
+                </div>
+
+                <h4 class="mt-3">Profile-Based Configuration</h4>
+                <p>The following settings have been moved to per-profile configuration for better flexibility:</p>
+                <ul>
+                    <li><strong>Similarity Thresholds:</strong> Now configured per Interest Profile in the Profiles page</li>
+                    <li><strong>Keyword Categories:</strong> Managed via Alert Profiles (Critical, Security, Urgency, Financial, etc.)</li>
+                    <li><strong>Detection Rules:</strong> Set per Alert Profile (questions, mentions, links, forwards)</li>
+                    <li><strong>Scoring Weights:</strong> Each profile can have its own weight and priority settings</li>
+                </ul>
+                <div class="alert alert-primary mt-3">
+                    <strong>🎯 Recommendation:</strong> Visit the <a href="/profiles" class="alert-link">Profiles</a> page to create and manage Alert Profiles (keyword-based) and Interest Profiles (semantic matching) for granular control over message detection and scoring.
+                </div>
             </section>
 
             <section id="channels-api" class="mb-5">
@@ -3695,7 +3703,7 @@ Where:
             'configuration': 'manual',
             'telegram-config': 'manual',
             'alerts-config': 'manual',
-            'scoring-config': 'manual',
+            'advanced-config': 'manual',
             'channels-api': 'manual',
             'users-api': 'manual',
             'system-config': 'manual',

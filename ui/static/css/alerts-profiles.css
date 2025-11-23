@@ -248,6 +248,32 @@
   border-bottom: none;
 }
 
+.alert-profile-item-content {
+  min-width: 0;
+}
+
+.alert-profile-item-actions {
+  flex-shrink: 0;
+  align-items: flex-end;
+  gap: 0.35rem;
+}
+
+.alert-profile-actions {
+  display: none;
+}
+
+.alert-profile-item:hover .alert-profile-actions {
+  display: flex;
+}
+
+.alert-profile-description {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
 /* Profile Metadata */
 .alert-profile-metadata {
   display: flex;
@@ -345,6 +371,70 @@
   color: var(--primary-color);
 }
 
+/* Alert List Items (matching Profile List design) */
+.alerts-list-container {
+  max-height: 600px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(102, 126, 234, 0.5) transparent;
+}
+
+.alerts-list-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.alerts-list-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.alerts-list-container::-webkit-scrollbar-thumb {
+  background: rgba(102, 126, 234, 0.5);
+  border-radius: 3px;
+}
+
+.alerts-list-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(102, 126, 234, 0.7);
+}
+
+.alert-list-item {
+  position: relative;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: transparent;
+  transition: all 0.2s ease;
+  padding: 0.875rem 1rem;
+  cursor: default;
+}
+
+.alert-list-item:hover {
+  background: rgba(102, 126, 234, 0.08);
+  border-color: rgba(102, 126, 234, 0.2);
+}
+
+.alert-list-item:last-child {
+  border-bottom: none;
+}
+
+.alert-list-item .channel-link {
+  color: var(--primary-color);
+  transition: color 0.2s ease;
+}
+
+.alert-list-item .channel-link:hover {
+  color: var(--primary-color-light);
+  text-decoration: underline;
+}
+
+.alert-list-item .btn-feedback {
+  transition: all 0.2s ease;
+}
+
+.alert-list-item .btn-feedback:hover {
+  background: rgba(102, 126, 234, 0.2);
+  border-color: var(--primary-color);
+  transform: scale(1.1);
+}
+
 /* Empty State */
 .alert-profiles-empty {
   display: flex;
@@ -361,6 +451,12 @@
   height: 64px;
   margin-bottom: 1rem;
   opacity: 0.3;
+}
+
+.alert-profiles-loading .spinner-border {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-width: 0.2rem;
 }
 
 /* Search Bar Styling */
@@ -679,5 +775,3 @@
   width: 200px;
   height: 30px;
 }
-
-

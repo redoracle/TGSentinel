@@ -135,17 +135,34 @@ class DataService:
             except Exception as exc:
                 logger.debug("Redis depth unavailable: %s", exc)
 
-        # UI DB size
-        ui_db_size_mb = 0.0
+        # Database size - fetch from Sentinel via internal service call
+        # (UI container cannot access Sentinel's database volume)
+        db_size_mb = 0.0
+        db_size_kb = 0.0
+        db_size_display = "0 KB"
         try:
-            ui_db_path = os.getenv("UI_DB_URI", "sqlite:////app/data/ui.db").replace(
-                "sqlite:///", ""
+            import requests
+
+            # Internal service-to-service call to Sentinel
+            # SENTINEL_API_BASE_URL already includes /api path
+            sentinel_base_url = os.getenv(
+                "SENTINEL_API_BASE_URL", "http://sentinel:8080/api"
             )
-            ui_db_file = Path(ui_db_path)
-            if ui_db_file.exists():
-                ui_db_size_mb = round(ui_db_file.stat().st_size / (1024 * 1024), 2)
-        except Exception:
-            pass
+            response = requests.get(f"{sentinel_base_url}/stats", timeout=2)
+            if response.ok:
+                stats = response.json()
+                # The stats endpoint returns database info
+                db_size_bytes = stats.get("data", {}).get("database_size_bytes", 0)
+                if db_size_bytes > 0:
+                    db_size_kb = db_size_bytes / 1024
+                    db_size_mb = db_size_bytes / (1024 * 1024)
+                    # Format display based on size
+                    if db_size_mb >= 1.0:
+                        db_size_display = f"{db_size_mb:.2f} MB"
+                    else:
+                        db_size_display = f"{db_size_kb:.2f} KB"
+        except Exception as exc:
+            logger.debug(f"Database size fetch from Sentinel failed: {exc}")
 
         cpu_pct = None
         memory_mb = None
@@ -159,7 +176,8 @@ class DataService:
 
         payload = {
             "redis_stream_depth": redis_depth,
-            "database_size_mb": ui_db_size_mb,
+            "database_size_mb": db_size_mb,
+            "database_size_display": db_size_display,
             "redis_online": redis_online,
             "cpu_percent": cpu_pct,
             "memory_mb": memory_mb,

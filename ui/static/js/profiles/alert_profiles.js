@@ -26,6 +26,7 @@
     let allAlertProfiles = [];
     let filteredAlertProfiles = [];
     let alertProfileEndpoints = {};
+    let alertProfilesLoading = false;
     
     /**
      * Initialize the Alert Profiles module
@@ -39,6 +40,8 @@
      * Load all alert profiles from the server
      */
     async function loadAlertProfiles() {
+        alertProfilesLoading = true;
+        renderAlertProfiles([]);
         try {
             const response = await fetch(alertProfileEndpoints.list);
             if (!response.ok) throw new Error("Failed to load alert profiles");
@@ -46,6 +49,7 @@
             
             allAlertProfiles = data.profiles || [];
             filteredAlertProfiles = [...allAlertProfiles];
+            alertProfilesLoading = false;
             
             // Update profile count
             const countEl = document.getElementById("alert-profiles-count");
@@ -57,6 +61,8 @@
         } catch (error) {
             console.error("Failed to load alert profiles:", error);
             window.SharedUtils.showToast("Failed to load alert profiles", "error");
+            alertProfilesLoading = false;
+            renderAlertProfiles(filteredAlertProfiles);
         }
     }
     
@@ -68,6 +74,20 @@
         const listEl = document.getElementById("alert-profiles-list");
         if (!listEl) return;
         
+        if (alertProfilesLoading) {
+            listEl.innerHTML = `
+                <div class="text-center text-muted p-4 alert-profiles-loading">
+                    <svg width="48" height="48" fill="currentColor" class="bi bi-collection mb-2" viewBox="0 0 16 16">
+                        <path d="M2.5 3.5a.5.5 0 0 1 0-1h11a.5.5 0 0 1 0 1h-11zm2-2a.5.5 0 0 1 0-1h7a.5.5 0 0 1 0 1h-7zM0 13a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 16 13V6a1.5 1.5 0 0 0-1.5-1.5h-13A1.5 1.5 0 0 0 0 6v7zm1.5.5A.5.5 0 0 1 1 13V6a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-.5.5h-13z"/>
+                    </svg>
+                    <p class="mb-2">Loading alert profiles...</p>
+                    <small>Create your first profile to get started</small>
+                    <div class="spinner-border text-primary mt-3" role="status" aria-label="Loading alert profiles"></div>
+                </div>
+            `;
+            return;
+        }
+
         if (!profiles || profiles.length === 0) {
             listEl.innerHTML = `
                 <div class="text-center text-muted p-4">
@@ -92,6 +112,9 @@
                                (profile.community_keywords || []).length +
                                (profile.general_keywords || []).length;
             
+            const entityCount = (profile.channels || []).length + (profile.users || []).length;
+            const scheduleCount = (profile.digest_schedules || []).length;
+            
             const hasActivity = profile.last_triggered_at;
             const activityIndicator = hasActivity ? '<span class="alert-profile-activity" title="Recently triggered"></span>' : '';
             
@@ -100,98 +123,56 @@
                 'Never';
             
             return `
-                <a href="#" class="list-group-item list-group-item-action alert-profile-item" 
-                   data-profile-id="${profile.id}"
-                   data-profile-name="${window.SharedUtils.escapeHtml(profile.name)}"
-                   data-enabled="${profile.enabled}">
-                    ${activityIndicator}
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div class="flex-grow-1 pe-2">
+                <div class="list-group-item list-group-item-action alert-profile-item ${currentAlertProfile && currentAlertProfile.id === profile.id ? 'active' : ''}" 
+                        data-profile-id="${profile.id}"
+                        role="button"
+                        tabindex="0"
+                        onclick="window.AlertProfiles.loadAlertProfile('${profile.id}')"
+                        onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.AlertProfiles.loadAlertProfile('${profile.id}');}">
+                    <div class="d-flex w-100 justify-content-between align-items-start">
+                        <div class="alert-profile-item-content flex-grow-1 min-w-0 me-2">
                             <div class="d-flex align-items-center gap-2 mb-1">
-                                <h6 class="mb-0">${window.SharedUtils.escapeHtml(profile.name)}</h6>
-                                <span class="badge bg-secondary" style="font-size: 0.7em;">ID: ${profile.id}</span>
+                                <h6 class="mb-0 text-truncate">${window.SharedUtils.escapeHtml(profile.name)}</h6>
+                                <span class="badge ${profile.enabled ? 'bg-success' : 'bg-secondary'} badge-sm">${profile.enabled ? 'ON' : 'OFF'}</span>
                             </div>
-                            ${profile.description ? `<small class="text-muted d-block mb-2">${window.SharedUtils.escapeHtml(profile.description)}</small>` : ''}
-                            <div class="alert-profile-metadata">
-                                ${keywordCount > 0 ? `
-                                    <span class="alert-profile-meta-badge">
-                                        <svg fill="currentColor" viewBox="0 0 16 16">
-                                            <path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.267.267 0 0 1 .02-.022z"/>
-                                        </svg>
-                                        ${keywordCount} rules
-                                    </span>
-                                ` : ''}
-                                <span class="alert-profile-meta-badge">
-                                    <svg fill="currentColor" viewBox="0 0 16 16">
-                                        <path d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71V3.5z"/>
-                                        <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0z"/>
-                                    </svg>
-                                    ${lastUpdated}
-                                </span>
+                            ${profile.description ? `<p class="mb-1 small text-muted alert-profile-description">${window.SharedUtils.escapeHtml(profile.description)}</p>` : ''}
+                            <div class="d-flex gap-2 flex-wrap">
+                                <small class="text-muted">ID: ${profile.id}</small>
+                                ${keywordCount > 0 ? `<small class="text-muted">🔑 ${keywordCount}</small>` : ''}
+                                ${entityCount > 0 ? `<small class="text-muted">👥 ${entityCount}</small>` : ''}
+                                ${scheduleCount > 0 ? `<small class="text-muted">📅 ${scheduleCount}</small>` : ''}
+                                <small class="text-muted">⏰ ${lastUpdated}</small>
                             </div>
                         </div>
-                        <div class="d-flex flex-column align-items-end gap-2">
-                            <div class="alert-profile-toggle-wrapper">
-                                <div class="form-check form-switch mb-0">
-                                    <input class="form-check-input alert-profile-toggle" type="checkbox" 
-                                           data-profile-id="${profile.id}" 
-                                           ${profile.enabled ? 'checked' : ''}
-                                           onclick="event.stopPropagation()"
-                                           title="${profile.enabled ? 'Disable' : 'Enable'} profile">
-                                </div>
+                        <div class="alert-profile-item-actions d-flex flex-column align-items-end gap-2">
+                            <div class="form-check form-switch mb-0" onclick="event.stopPropagation()">
+                                <input class="form-check-input" type="checkbox" 
+                                       ${profile.enabled ? 'checked' : ''}
+                                       onchange="window.AlertProfiles.toggleAlertProfile('${profile.id}', this.checked)"
+                                       title="Enable/Disable">
                             </div>
-                            <div class="alert-profile-actions">
-                                <button class="alert-profile-action-btn" 
-                                        data-action="export" 
-                                        data-profile-id="${profile.id}"
-                                        onclick="event.stopPropagation(); window.AlertProfiles.exportAlertProfile('${profile.id}')"
-                                        title="Export profile">
-                                    <svg width="12" height="12" fill="currentColor" viewBox="0 0 16 16">
-                                        <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
-                                        <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+                            <div class="btn-group btn-group-sm alert-profile-actions" role="group" onclick="event.stopPropagation()">
+                                <button type="button" class="btn btn-outline-secondary" 
+                                        onclick="window.AlertProfiles.exportAlertProfile('${profile.id}')"
+                                        title="Export as JSON">
+                                    <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                                        <path d="M8.5 6.5a.5.5 0 0 0-1 0v3.793L6.354 9.146a.5.5 0 1 0-.708.708l2 2a.5.5 0 0 0 .708 0l2-2a.5.5 0 0 0-.708-.708L8.5 10.293V6.5z"/>
+                                        <path d="M14 14V4.5L9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2zM9.5 3A1.5 1.5 0 0 0 11 4.5h2V14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h5.5v2z"/>
                                     </svg>
                                 </button>
-                                <button class="alert-profile-action-btn" 
-                                        data-action="duplicate" 
-                                        data-profile-id="${profile.id}"
-                                        onclick="event.stopPropagation(); window.AlertProfiles.duplicateAlertProfile('${profile.id}')"
-                                        title="Duplicate profile">
-                                    <svg width="12" height="12" fill="currentColor" viewBox="0 0 16 16">
+                                <button type="button" class="btn btn-outline-secondary" 
+                                        onclick="window.AlertProfiles.duplicateAlertProfile('${profile.id}')"
+                                        title="Duplicate">
+                                    <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
                                         <path d="M4 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V2zm2-1a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H6zM2 5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-1h1v1a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h1v1H2z"/>
                                     </svg>
                                 </button>
                             </div>
                         </div>
                     </div>
-                </a>
+                </div>
             `;
         }).join('');
-        
-        // Attach click handlers
-        listEl.querySelectorAll('.alert-profile-item').forEach(item => {
-            item.addEventListener('click', (e) => {
-                e.preventDefault();
-                loadAlertProfile(item.dataset.profileId);
-            });
-        });
-        
-        listEl.querySelectorAll('.alert-profile-toggle').forEach(toggle => {
-            toggle.addEventListener('change', async (e) => {
-                e.stopPropagation();
-                const previousState = !toggle.checked;
-                toggle.disabled = true;
-                
-                try {
-                    await toggleAlertProfile(toggle.dataset.profileId, toggle.checked);
-                } catch (error) {
-                    toggle.checked = previousState;
-                    console.error('Failed to toggle alert profile:', error);
-                    window.SharedUtils.showToast('Failed to toggle profile. Please try again.', 'error');
-                } finally {
-                    toggle.disabled = false;
-                }
-            });
-        });
     }
     
     /**
@@ -230,7 +211,7 @@
      * @param {string} profileId - Profile ID to export
      */
     function exportAlertProfile(profileId) {
-        const profile = allAlertProfiles.find(p => p.id === profileId);
+        const profile = allAlertProfiles.find(p => String(p.id) === String(profileId));
         if (!profile) return;
         
         const dataStr = JSON.stringify(profile, null, 2);
@@ -252,13 +233,18 @@
      * @param {string} profileId - Profile ID to duplicate
      */
     async function duplicateAlertProfile(profileId) {
-        const profile = allAlertProfiles.find(p => p.id === profileId);
-        if (!profile) return;
+        const profile = allAlertProfiles.find(p => String(p.id) === String(profileId));
+        if (!profile) {
+            window.SharedUtils.showToast("Profile not found", "error");
+            return;
+        }
         
+        // Remove identifiers so backend creates a new record
+        const { id: _omitId, created_at: _omitCreated, updated_at: _omitUpdated, ...rest } = profile;
         const duplicatedProfile = {
-            ...profile,
-            id: `${profile.id}-copy-${Date.now()}`,
+            ...rest,
             name: `${profile.name} (Copy)`,
+            enabled: false,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
         };
