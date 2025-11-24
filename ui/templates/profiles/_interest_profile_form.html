@@ -56,6 +56,28 @@
         <small class="text-muted">Select specific channels/users or leave empty to apply to all monitored entities</small>
     </div>
     
+    <!-- Webhook Integration -->
+    <div class="border-top pt-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h3 class="h6 mb-0">
+                <svg width="16" height="16" fill="currentColor" class="bi bi-send me-1" viewBox="0 0 16 16">
+                    <path d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11ZM6.636 10.07l2.761 4.338L14.13 2.576 6.636 10.07Zm6.787-8.201L1.591 6.602l4.339 2.76 7.494-7.493Z"/>
+                </svg>
+                Webhook Notifications
+            </h3>
+            <a href="/docs#webhooks-api" class="btn btn-outline-primary btn-sm" title="View webhook documentation" target="_blank" rel="noopener">
+                <i class="bi bi-info-circle"></i>
+            </a>
+        </div>
+        <div>
+            <label class="form-label" for="interest-webhooks">Notify Webhooks (optional)</label>
+            <select class="form-select" id="interest-webhooks" name="webhooks" multiple size="5" aria-busy="true">
+                <option disabled selected>Loading webhooks...</option>
+            </select>
+            <small class="text-muted">Select one or more webhooks. Alerts matching this profile will be sent to selected webhooks.</small>
+        </div>
+    </div>
+    
     <!-- Advanced Section (Collapsible) -->
     <div class="border-top pt-3">
         <div class="d-flex justify-content-between align-items-center">
@@ -78,16 +100,8 @@
                     <div class="col-md-6">
                         <label class="form-label" for="similarity-threshold">Similarity Threshold</label>
                         <input class="form-control" id="similarity-threshold" name="threshold" type="number" min="0" max="1" step="0.01" value="0.42" placeholder="0.42">
-                        <small class="form-text">Score threshold (0.0 - 1.0) for matches</small>
+                        <small class="form-text">Score threshold (0.0 - 1.0) for semantic matches</small>
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label" for="profile-weight">Profile Weight</label>
-                        <input class="form-control" id="profile-weight" name="weight" type="number" min="0" max="10" step="0.1" value="1.0" placeholder="1.0">
-                        <small class="form-text">Importance multiplier for this profile</small>
-                    </div>
-                </div>
-                
-                <div class="row">
                     <div class="col-md-6">
                         <label class="form-label" for="profile-enabled">Status</label>
                         <select class="form-select" id="profile-enabled" name="enabled">
@@ -96,22 +110,24 @@
                         </select>
                         <small class="form-text">Active/inactive state</small>
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label" for="profile-priority">Priority</label>
-                        <select class="form-select" id="profile-priority" name="priority">
-                            <option value="low">Low</option>
-                            <option value="normal" selected>Normal</option>
-                            <option value="high">High</option>
-                            <option value="critical">Critical</option>
-                        </select>
-                        <small class="form-text">Alert priority level</small>
-                    </div>
                 </div>
                 
                 <div>
-                    <label class="form-label" for="profile-keywords">Keywords (comma-separated)</label>
-                    <input class="form-control" id="profile-keywords" name="keywords" type="text" placeholder="keyword1, keyword2, keyword3">
-                    <small class="form-text">Boost scoring for messages containing these keywords</small>
+                    <label class="form-label" for="interest-vip-senders">VIP Senders (comma-separated user IDs)</label>
+                    <input class="form-control" id="interest-vip-senders" name="vip_senders" type="text" 
+                           placeholder="123456789, 987654321"
+                           pattern="^\s*\d+(\s*,\s*\d+)*\s*$"
+                           title="Numeric Telegram user IDs separated by commas (spaces are trimmed automatically)">
+                    <small class="form-text">Always alert when these users post content matching this interest. Enter numeric IDs separated by commas. Whitespace will be trimmed. Duplicates will be removed. Max 100 IDs.</small>
+                </div>
+                
+                <div>
+                    <label class="form-label" for="interest-excluded-users">Excluded Users (comma-separated user IDs)</label>
+                    <input class="form-control" id="interest-excluded-users" name="excluded_users" type="text" 
+                           placeholder="111111111, 222222222"
+                           pattern="^\s*\d+(\s*,\s*\d+)*\s*$"
+                           title="Numeric Telegram user IDs separated by commas (spaces are trimmed automatically)">
+                    <small class="form-text">Never alert for these users, even if semantically matching (blacklist). Enter numeric IDs separated by commas. Whitespace will be trimmed. Duplicates will be removed. Max 100 IDs.</small>
                 </div>
                 
                 <div>
@@ -248,7 +264,7 @@
                     </div>
                     <div class="col-md-6">
                         <label class="form-label" for="interest-digest-target-channel">Target Channel (for channel/both mode)</label>
-                        <input type="text" class="form-control form-control-sm" id="interest-digest-target-channel" name="interest_digest_target_channel" placeholder="@my_alerts_channel" value="{{ alert_channel }}">
+                        <input type="text" class="form-control form-control-sm" id="interest-digest-target-channel" name="interest_digest_target_channel" placeholder="@my_alerts_channel" value="{{ alert_channel }}" data-default-channel="{{ alert_channel }}">
                         <small class="form-text">Channel username or ID</small>
                     </div>
                 </div>

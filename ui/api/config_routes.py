@@ -4,10 +4,10 @@ import json
 import logging
 import os
 import re
-import requests
 from pathlib import Path
 from typing import Any
 
+import requests
 from flask import Blueprint, jsonify, request, send_file
 from werkzeug.utils import secure_filename
 

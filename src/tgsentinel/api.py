@@ -30,6 +30,9 @@ from flask_cors import CORS
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import text
 
+from tgsentinel.heuristics import run_heuristics
+from tgsentinel.semantic import score_text as semantic_score_text
+
 logger = logging.getLogger("tgsentinel.api")
 
 # Global state shared with main worker
@@ -1971,6 +1974,321 @@ def create_api_app() -> Flask:
                 500,
             )
 
+    @app.route("/api/webhooks/history", methods=["GET"])
+    def webhooks_history():
+        """Get recent webhook delivery history.
+
+        Query Parameters:
+            limit: Maximum number of records to return (default: 10, max: 100)
+
+        Returns:
+            JSON with recent webhook deliveries including status, timing, and errors
+        """
+        if _engine is None:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "data": None,
+                        "error": "Database not available",
+                    }
+                ),
+                503,
+            )
+
+        try:
+            limit = request.args.get("limit", default=10, type=int)
+            # Cap limit to prevent excessive queries
+            limit = min(limit, 100)
+
+            from tgsentinel.store import get_recent_webhook_deliveries
+
+            deliveries = get_recent_webhook_deliveries(_engine, limit=limit)
+
+            return (
+                jsonify(
+                    {
+                        "status": "ok",
+                        "data": {
+                            "deliveries": deliveries,
+                            "count": len(deliveries),
+                        },
+                        "error": None,
+                    }
+                ),
+                200,
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to fetch webhook history: {e}", exc_info=True)
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "data": None,
+                        "error": f"Failed to fetch webhook history: {str(e)}",
+                    }
+                ),
+                500,
+            )
+
+    @app.route("/api/analytics/keywords", methods=["GET"])
+    def analytics_keywords():
+        """Get keyword analytics from alerted messages.
+
+        Query Parameters:
+            hours: Number of hours to look back (default: 24)
+
+        Returns:
+            JSON with keyword counts and metadata
+        """
+        if _engine is None:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "data": None,
+                        "error": "Database not available",
+                    }
+                ),
+                503,
+            )
+
+        try:
+            hours = request.args.get("hours", default=24, type=int)
+            if hours < 1 or hours > 168:  # Max 1 week
+                hours = 24
+
+            cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+            with _engine.begin() as con:
+                # Fetch all triggers and aggregate in Python for accurate counts
+                result = con.execute(
+                    text(
+                        """
+                        SELECT triggers
+                        FROM messages
+                        WHERE alerted = 1
+                          AND triggers IS NOT NULL
+                          AND triggers != ''
+                          AND datetime(created_at) >= datetime(:cutoff)
+                    """
+                    ),
+                    {"cutoff": cutoff},
+                )
+
+                # Count individual keywords across all messages
+                from collections import Counter
+
+                keyword_counts = Counter()
+
+                for row in result:
+                    try:
+                        triggers_list = json.loads(row[0]) if row[0] else []
+                        for trigger in triggers_list:
+                            keyword_counts[str(trigger)] += 1
+                    except (
+                        json.JSONDecodeError,
+                        ValueError,
+                        TypeError,
+                        AttributeError,
+                    ):
+                        if row[0]:
+                            keyword_counts[str(row[0])] += 1
+
+                # Get top 20 keywords
+                keywords = [
+                    {"keyword": keyword, "count": count}
+                    for keyword, count in keyword_counts.most_common(20)
+                ]
+
+            return (
+                jsonify(
+                    {
+                        "status": "ok",
+                        "data": {"keywords": keywords[:20]},  # Top 20
+                        "error": None,
+                    }
+                ),
+                200,
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to fetch keyword analytics: {e}", exc_info=True)
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "data": None,
+                        "error": f"Failed to fetch keyword analytics: {str(e)}",
+                    }
+                ),
+                500,
+            )
+
+    @app.route("/api/analytics/channels", methods=["GET"])
+    def analytics_channels():
+        """Get channel impact analytics from alerted messages.
+
+        Query Parameters:
+            hours: Number of hours to look back (default: 24)
+
+        Returns:
+            JSON with channel alert counts
+        """
+        if _engine is None:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "data": None,
+                        "error": "Database not available",
+                    }
+                ),
+                503,
+            )
+
+        try:
+            hours = request.args.get("hours", default=24, type=int)
+            if hours < 1 or hours > 168:  # Max 1 week
+                hours = 24
+
+            cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+            with _engine.begin() as con:
+                result = con.execute(
+                    text(
+                        """
+                        SELECT chat_title, COUNT(*) as alert_count
+                        FROM messages
+                        WHERE alerted = 1
+                          AND chat_title IS NOT NULL
+                          AND datetime(created_at) >= datetime(:cutoff)
+                        GROUP BY chat_title
+                        ORDER BY alert_count DESC
+                        LIMIT 20
+                    """
+                    ),
+                    {"cutoff": cutoff},
+                )
+
+                channels = [
+                    {"channel": row[0], "alerts": row[1]} for row in result.fetchall()
+                ]
+
+            return (
+                jsonify(
+                    {"status": "ok", "data": {"channels": channels}, "error": None}
+                ),
+                200,
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to fetch channel analytics: {e}", exc_info=True)
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "data": None,
+                        "error": f"Failed to fetch channel analytics: {str(e)}",
+                    }
+                ),
+                500,
+            )
+
+    @app.route("/api/analytics/metrics", methods=["GET"])
+    def analytics_metrics():
+        """Get time-series performance metrics.
+
+        Query Parameters:
+            hours: Number of hours to look back (default: 2, max: 168)
+            interval_minutes: Time bucket interval in minutes (default: 2, min: 1, max: 60)
+                             Timestamps are floored to multiples of this interval for aggregation.
+
+        Returns:
+            JSON with time-series data (timestamps, alert_counts, avg_scores)
+        """
+        if _engine is None:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "data": None,
+                        "error": "Database not available",
+                    }
+                ),
+                503,
+            )
+
+        try:
+            hours = request.args.get("hours", default=2, type=int)
+            interval_minutes = request.args.get("interval_minutes", default=2, type=int)
+
+            if hours < 1 or hours > 168:  # Max 1 week
+                hours = 2
+            if interval_minutes < 1 or interval_minutes > 60:
+                interval_minutes = 2
+
+            cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+            interval_seconds = interval_minutes * 60
+
+            with _engine.begin() as con:
+                # Get time-bucketed metrics with dynamic interval
+                # Floor each timestamp to multiples of interval_seconds
+                result = con.execute(
+                    text(
+                        """
+                        SELECT 
+                            datetime(
+                                (CAST(strftime('%s', created_at) AS INTEGER) / :interval_seconds) * :interval_seconds,
+                                'unixepoch'
+                            ) as time_bucket,
+                            COUNT(*) as alert_count,
+                            AVG(score) as avg_score
+                        FROM messages
+                        WHERE alerted = 1
+                          AND datetime(created_at) >= datetime(:cutoff)
+                        GROUP BY time_bucket
+                        ORDER BY time_bucket ASC
+                    """
+                    ),
+                    {"cutoff": cutoff, "interval_seconds": interval_seconds},
+                )
+
+                metrics = []
+                for row in result.fetchall():
+                    metrics.append(
+                        {
+                            "timestamp": row[0],
+                            "alert_count": row[1],
+                            "avg_score": round(row[2], 2) if row[2] else 0.0,
+                        }
+                    )
+
+            return (
+                jsonify({"status": "ok", "data": {"metrics": metrics}, "error": None}),
+                200,
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to fetch performance metrics: {e}", exc_info=True)
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "data": None,
+                        "error": f"Failed to fetch performance metrics: {str(e)}",
+                    }
+                ),
+                500,
+            )
+
     @app.route("/api/feedback", methods=["POST"])
     def submit_feedback():
         """Record user feedback (thumbs up/down) for an alert.
@@ -2629,6 +2947,7 @@ def create_api_app() -> Flask:
                         "id": getattr(ch, "id", None),
                         "name": getattr(ch, "name", ""),
                         "vip_senders": getattr(ch, "vip_senders", []),
+                        "excluded_users": getattr(ch, "excluded_users", []),
                         "keywords": getattr(ch, "keywords", []),
                         "reaction_threshold": getattr(ch, "reaction_threshold", 5),
                         "reply_threshold": getattr(ch, "reply_threshold", 3),
@@ -3078,7 +3397,7 @@ def create_api_app() -> Flask:
             query = text(
                 """
                 SELECT msg_id, chat_id, chat_title, sender_name, message_text, 
-                       score, created_at
+                       score, created_at, sender_id
                 FROM messages
                 WHERE created_at >= :cutoff
                 ORDER BY created_at DESC
@@ -3099,19 +3418,34 @@ def create_api_app() -> Flask:
                         "message_text": row[4],
                         "score": row[5],
                         "created_at": row[6],
+                        "sender_id": row[7],
                     }
                     for row in result
                 ]
+
+            # Get VIP and excluded users from profile
+            vip_senders = set(profile.get("vip_senders", []))
+            excluded_users = set(profile.get("excluded_users", []))
 
             # Score messages using semantic model
             matches = []
             threshold = profile.get("threshold", 0.42)
 
             logger.info(
-                f"[API] Backtest: scoring {len(messages)} messages with threshold {threshold}"
+                f"[API] Backtest: scoring {len(messages)} messages with threshold {threshold}, "
+                f"VIP senders: {len(vip_senders)}, excluded users: {len(excluded_users)}"
             )
 
             for msg in messages:
+                sender_id = msg.get("sender_id", 0)
+
+                # Skip excluded users
+                if sender_id in excluded_users:
+                    logger.debug(
+                        f"[API] Backtest: skipping message {msg.get('msg_id')} from excluded user {sender_id}"
+                    )
+                    continue
+
                 message_text = msg.get("message_text", "")
                 if not message_text:
                     logger.debug(
@@ -3131,25 +3465,35 @@ def create_api_app() -> Flask:
                     )
                     continue
 
-                if score >= threshold:
+                # VIP senders: lower the threshold for matching
+                effective_threshold = (
+                    threshold * 0.7 if sender_id in vip_senders else threshold
+                )
+
+                if score >= effective_threshold:
                     matches.append(
                         {
                             "message_id": msg["msg_id"],
                             "chat_id": msg["chat_id"],
                             "chat_title": msg["chat_title"],
                             "sender_name": msg["sender_name"],
+                            "sender_id": sender_id,
                             "score": round(score, 3),
                             "original_score": round(msg.get("score", 0.0), 2),
                             "text_preview": message_text[:100]
                             + ("..." if len(message_text) > 100 else ""),
                             "timestamp": msg["created_at"],
+                            "is_vip": sender_id in vip_senders,
                         }
                     )
 
             # Calculate statistics
+            vip_matches = sum(1 for m in matches if m.get("is_vip", False))
             stats = {
                 "total_messages": len(messages),
                 "matched_messages": len(matches),
+                "vip_matches": vip_matches,
+                "excluded_count": len(excluded_users),
                 "match_rate": (
                     round(len(matches) / len(messages) * 100, 1)
                     if len(messages) > 0
@@ -3184,6 +3528,546 @@ def create_api_app() -> Flask:
             logger.error(
                 f"[API] Error backtesting interest profile: {exc}", exc_info=True
             )
+            return (
+                jsonify({"status": "error", "message": str(exc)}),
+                500,
+            )
+
+    @app.route("/api/profiles/alert/backtest", methods=["POST"])
+    def backtest_alert_profile():
+        """Backtest an alert profile using stored message history.
+
+        The Sentinel service owns the message store and heuristic scoring pipeline,
+        so the UI delegates backtesting here to mirror production alert decisions.
+        """
+
+        try:
+            if not request.is_json:
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "Content-Type must be application/json",
+                        }
+                    ),
+                    400,
+                )
+
+            payload = request.get_json()
+            profile_id_raw = (
+                payload.get("profile_id")
+                if payload.get("profile_id") is not None
+                else payload.get("id")
+            )
+
+            if profile_id_raw is None or str(profile_id_raw).strip() == "":
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "Profile ID is required",
+                        }
+                    ),
+                    400,
+                )
+
+            profile_id = str(profile_id_raw).strip()
+
+            try:
+                hours_back = int(payload.get("hours_back", 24))
+            except (TypeError, ValueError):
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "hours_back must be an integer",
+                        }
+                    ),
+                    400,
+                )
+
+            try:
+                max_messages = int(payload.get("max_messages", 100))
+            except (TypeError, ValueError):
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "max_messages must be an integer",
+                        }
+                    ),
+                    400,
+                )
+
+            if not (0 <= hours_back <= 168):
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "hours_back must be between 0 and 168",
+                        }
+                    ),
+                    400,
+                )
+
+            if not (1 <= max_messages <= 1000):
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "max_messages must be between 1 and 1000",
+                        }
+                    ),
+                    400,
+                )
+
+            channel_filter_raw = payload.get("channel_filter")
+            channel_filter = None
+            if channel_filter_raw not in (None, ""):
+                try:
+                    channel_filter = int(channel_filter_raw)
+                except (TypeError, ValueError):
+                    return (
+                        jsonify(
+                            {
+                                "status": "error",
+                                "message": "channel_filter must be an integer",
+                            }
+                        ),
+                        400,
+                    )
+
+            profile_payload = payload.get("profile")
+            if profile_payload is not None and not isinstance(profile_payload, dict):
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "profile must be an object when provided",
+                        }
+                    ),
+                    400,
+                )
+
+            profile_data: Dict[str, Any] = {}
+            if profile_payload is None:
+                config_dir = Path(os.getenv("CONFIG_DIR", "/app/config"))
+                profiles_path = config_dir / "profiles_alert.yml"
+
+                if not profiles_path.exists():
+                    return (
+                        jsonify(
+                            {
+                                "status": "error",
+                                "message": "Alert profiles file not found",
+                            }
+                        ),
+                        404,
+                    )
+
+                with open(profiles_path, "r", encoding="utf-8") as fp:
+                    loaded_profiles = yaml.safe_load(fp) or {}
+
+                base_profiles: Dict[str, Any] = {}
+                if isinstance(loaded_profiles, dict):
+                    nested_profiles = loaded_profiles.get("profiles")
+                    if isinstance(nested_profiles, dict):
+                        base_profiles = dict(nested_profiles)
+                    else:
+                        base_profiles = dict(loaded_profiles)
+
+                candidate_profile = base_profiles.get(profile_id) or base_profiles.get(
+                    str(profile_id)
+                )
+
+                if not isinstance(candidate_profile, dict):
+                    return (
+                        jsonify(
+                            {
+                                "status": "error",
+                                "message": f"Profile {profile_id} not found",
+                            }
+                        ),
+                        404,
+                    )
+
+                profile_data = dict(candidate_profile)
+            else:
+                profile_data = dict(profile_payload)
+
+            profile_name = str(profile_data.get("name", profile_id))
+
+            def _as_list(value: Any) -> list[str]:
+                if isinstance(value, list):
+                    return [str(item) for item in value if isinstance(item, str)]
+                if isinstance(value, str):
+                    value = value.strip()
+                    return [value] if value else []
+                return []
+
+            def _collect(keys: list[str]) -> list[str]:
+                combined: list[str] = []
+                for key in keys:
+                    combined.extend(_as_list(profile_data.get(key, [])))
+                dedup: list[str] = []
+                seen: set[str] = set()
+                for keyword in combined:
+                    if keyword not in seen:
+                        seen.add(keyword)
+                        dedup.append(keyword)
+                return dedup
+
+            keywords = _collect(
+                [
+                    "keywords",
+                    "general_keywords",
+                    "technical_keywords",
+                    "community_keywords",
+                ]
+            )
+            urgency_keywords = _collect(["urgency_keywords", "critical_keywords"])
+            importance_keywords = _collect(["importance_keywords", "project_keywords"])
+            opportunity_keywords = _collect(
+                ["opportunity_keywords", "financial_keywords"]
+            )
+            security_keywords = _collect(["security_keywords"])
+            risk_keywords = _collect(["risk_keywords"])
+            release_keywords = _collect(["release_keywords"])
+            action_keywords = _collect(["action_keywords"])
+            decision_keywords = _collect(["decision_keywords"])
+
+            has_profile_keywords = any(
+                [
+                    keywords,
+                    action_keywords,
+                    decision_keywords,
+                    urgency_keywords,
+                    importance_keywords,
+                    release_keywords,
+                    security_keywords,
+                    risk_keywords,
+                    opportunity_keywords,
+                ]
+            )
+
+            vip_senders = set()
+            vip_raw = _as_list(profile_data.get("vip_senders", []))
+            for sender in vip_raw:
+                try:
+                    sender_id = int(sender)
+                    if sender_id <= 0:
+                        logger.warning(
+                            f"[PROFILE] Skipping non-positive VIP sender ID: {sender}"
+                        )
+                        continue
+                    vip_senders.add(sender_id)
+                except (TypeError, ValueError):
+                    logger.warning(
+                        f"[PROFILE] Skipping invalid VIP sender ID: {sender}"
+                    )
+                    continue
+
+            # Enforce max count limit
+            if len(vip_senders) > 100:
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "error": f"Too many VIP senders ({len(vip_senders)}). Maximum allowed is 100.",
+                        }
+                    ),
+                    400,
+                )
+
+            excluded_users = set()
+            excluded_raw = _as_list(profile_data.get("excluded_users", []))
+            for user in excluded_raw:
+                try:
+                    user_id = int(user)
+                    if user_id <= 0:
+                        logger.warning(
+                            f"[PROFILE] Skipping non-positive excluded user ID: {user}"
+                        )
+                        continue
+                    excluded_users.add(user_id)
+                except (TypeError, ValueError):
+                    logger.warning(
+                        f"[PROFILE] Skipping invalid excluded user ID: {user}"
+                    )
+                    continue
+
+            # Enforce max count limit
+            if len(excluded_users) > 100:
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "error": f"Too many excluded users ({len(excluded_users)}). Maximum allowed is 100.",
+                        }
+                    ),
+                    400,
+                )
+
+            reaction_threshold = 0
+            reply_threshold = 0
+            try:
+                reaction_threshold = int(profile_data.get("reaction_threshold", 0) or 0)
+            except (TypeError, ValueError):
+                reaction_threshold = 0
+            try:
+                reply_threshold = int(profile_data.get("reply_threshold", 0) or 0)
+            except (TypeError, ValueError):
+                reply_threshold = 0
+
+            detect_codes = bool(profile_data.get("detect_codes", True))
+            detect_documents = bool(profile_data.get("detect_documents", True))
+            prioritize_pinned = bool(profile_data.get("prioritize_pinned", True))
+            prioritize_admin = bool(profile_data.get("prioritize_admin", True))
+            detect_polls = bool(profile_data.get("detect_polls", True))
+
+            if not _engine:
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "Database not initialized",
+                        }
+                    ),
+                    500,
+                )
+
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=hours_back)
+            cutoff_str = cutoff.strftime("%Y-%m-%d %H:%M:%S")
+
+            base_query = """
+                SELECT chat_id, msg_id, chat_title, sender_name, message_text,
+                       score, triggers, alerted, sender_id, created_at
+                FROM messages
+                WHERE datetime(created_at) >= :cutoff
+            """
+
+            params: Dict[str, Any] = {"cutoff": cutoff_str, "limit": max_messages}
+            if channel_filter is not None:
+                base_query += " AND chat_id = :channel_id"
+                params["channel_id"] = channel_filter
+
+            base_query += " ORDER BY created_at DESC LIMIT :limit"
+
+            with _engine.connect() as conn:
+                result = conn.execute(text(base_query), params)
+                rows = result.fetchall()
+
+            messages = []
+            for row in rows:
+                data_row = row._mapping
+                messages.append(
+                    {
+                        "chat_id": data_row.get("chat_id"),
+                        "msg_id": data_row.get("msg_id"),
+                        "chat_title": data_row.get("chat_title"),
+                        "sender_name": data_row.get("sender_name"),
+                        "message_text": data_row.get("message_text", ""),
+                        "score": data_row.get("score", 0.0) or 0.0,
+                        "triggers": data_row.get("triggers", ""),
+                        "alerted": bool(data_row.get("alerted", 0)),
+                        "sender_id": data_row.get("sender_id") or 0,
+                        "created_at": data_row.get("created_at"),
+                    }
+                )
+
+            total_messages = len(messages)
+
+            default_threshold = 5.0
+            if _config and getattr(_config, "alerts", None):
+                default_threshold = getattr(_config.alerts, "min_score", 5.0) or 5.0
+
+            threshold_value = profile_data.get("min_score")
+            alert_threshold = default_threshold
+            if threshold_value is not None:
+                try:
+                    alert_threshold = float(threshold_value)
+                except (TypeError, ValueError):
+                    alert_threshold = default_threshold
+
+            similarity_threshold = (
+                getattr(_config, "similarity_threshold", 0.42) if _config else 0.42
+            )
+
+            matches = []
+            matched_messages = 0
+            true_positives = 0
+            false_positives = 0
+            false_negatives = 0
+
+            for msg in messages:
+                sender_id = int(msg.get("sender_id", 0) or 0)
+
+                # Skip messages from excluded users (blacklist)
+                if sender_id in excluded_users:
+                    continue
+
+                text_content = msg.get("message_text", "") or ""
+
+                heuristics = run_heuristics(
+                    text=text_content,
+                    sender_id=sender_id,
+                    mentioned=False,
+                    reactions=0,
+                    replies=0,
+                    vip=vip_senders,
+                    keywords=keywords,
+                    react_thr=reaction_threshold,
+                    reply_thr=reply_threshold,
+                    is_private=bool(msg.get("chat_id", 0) and msg.get("chat_id") > 0),
+                    is_reply_to_user=False,
+                    has_media=False,
+                    media_type=None,
+                    is_pinned=False,
+                    is_poll=False,
+                    sender_is_admin=False,
+                    has_forward=False,
+                    action_keywords=action_keywords,
+                    decision_keywords=decision_keywords,
+                    urgency_keywords=urgency_keywords,
+                    importance_keywords=importance_keywords,
+                    release_keywords=release_keywords,
+                    security_keywords=security_keywords,
+                    risk_keywords=risk_keywords,
+                    opportunity_keywords=opportunity_keywords,
+                    detect_codes=detect_codes,
+                    detect_documents=detect_documents,
+                    prioritize_pinned=prioritize_pinned,
+                    prioritize_admin=prioritize_admin,
+                    detect_polls=detect_polls,
+                )
+
+                score = heuristics.pre_score
+                semantic_score = semantic_score_text(text_content)
+                if semantic_score is not None:
+                    score += semantic_score
+
+                meets_threshold = score >= alert_threshold
+                has_semantic_match = (
+                    semantic_score is not None
+                    and semantic_score >= similarity_threshold
+                )
+
+                would_alert = (
+                    has_profile_keywords
+                    and meets_threshold
+                    and (heuristics.important or has_semantic_match)
+                )
+
+                actually_alerted = bool(msg.get("alerted", False))
+
+                if would_alert:
+                    matched_messages += 1
+                    if actually_alerted:
+                        true_positives += 1
+                    else:
+                        false_positives += 1
+                elif actually_alerted:
+                    false_negatives += 1
+
+                if would_alert or actually_alerted:
+                    original_triggers_raw = msg.get("triggers", "") or ""
+                    original_triggers = [
+                        trig.strip()
+                        for trig in original_triggers_raw.split(",")
+                        if trig.strip()
+                    ]
+
+                    match_entry = {
+                        "message_id": msg.get("msg_id"),
+                        "chat_id": msg.get("chat_id"),
+                        "chat_title": msg.get("chat_title"),
+                        "sender_name": msg.get("sender_name"),
+                        "score": round(score, 2),
+                        "semantic_score": (
+                            round(semantic_score, 3)
+                            if semantic_score is not None
+                            else None
+                        ),
+                        "original_score": round(msg.get("score", 0.0), 2),
+                        "triggers": heuristics.reasons,
+                        "original_triggers": original_triggers,
+                        "trigger_annotations": heuristics.trigger_annotations,
+                        "text_preview": text_content[:100]
+                        + ("..." if len(text_content) > 100 else ""),
+                        "timestamp": msg.get("created_at"),
+                        "would_alert": would_alert,
+                        "actually_alerted": actually_alerted,
+                    }
+                    matches.append(match_entry)
+
+            avg_score = 0.0
+            if matches:
+                scored_matches = [
+                    m["score"] for m in matches if isinstance(m["score"], (int, float))
+                ]
+                if scored_matches:
+                    avg_score = round(sum(scored_matches) / len(scored_matches), 2)
+
+            match_rate = 0.0
+            if total_messages > 0:
+                match_rate = round(matched_messages / total_messages * 100, 1)
+
+            precision = 0.0
+            if (true_positives + false_positives) > 0:
+                precision = round(
+                    true_positives / (true_positives + false_positives) * 100, 1
+                )
+
+            stats = {
+                "total_messages": total_messages,
+                "matched_messages": matched_messages,
+                "match_rate": match_rate,
+                "avg_score": avg_score,
+                "true_positives": true_positives,
+                "false_positives": false_positives,
+                "false_negatives": false_negatives,
+                "precision": precision,
+                "threshold": alert_threshold,
+            }
+
+            recommendations = []
+            if stats["false_positives"] > stats["true_positives"]:
+                recommendations.append(
+                    "⚠️ High false positive rate - consider tightening keyword matches"
+                )
+            if stats["match_rate"] > 50:
+                recommendations.append(
+                    "📊 Very high match rate - profile may be too broad"
+                )
+            if stats["match_rate"] < 5:
+                recommendations.append(
+                    "📉 Low match rate - consider adding more keywords or lowering thresholds"
+                )
+            if stats["precision"] < 70:
+                recommendations.append("🎯 Low precision - review keyword relevance")
+
+            result = {
+                "status": "ok",
+                "profile_id": profile_id,
+                "profile_name": profile_name,
+                "test_date": datetime.now(timezone.utc).isoformat(),
+                "parameters": {
+                    "hours_back": hours_back,
+                    "max_messages": max_messages,
+                    "channel_filter": channel_filter,
+                },
+                "matches": matches[:50],
+                "stats": stats,
+                "recommendations": recommendations,
+            }
+
+            logger.info(
+                f"[API] Backtest completed for alert profile {profile_id}: {stats}"
+            )
+            return jsonify(result)
+
+        except Exception as exc:
+            logger.error(f"[API] Error backtesting alert profile: {exc}", exc_info=True)
             return (
                 jsonify({"status": "error", "message": str(exc)}),
                 500,

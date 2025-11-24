@@ -13,12 +13,13 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import logging
 import os
-import requests
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import requests
 from flask import Blueprint, jsonify, make_response, request
 
 # Import dependency container
@@ -118,7 +119,7 @@ def sentinel_stats_proxy():
 
     try:
         # Forward query parameters if any
-        hours = request.args.get("hours", default=24, type=int)
+        hours = min(max(request.args.get("hours", default=24, type=int), 1), 168)
         response = requests.get(
             f"{sentinel_api_url}/stats", params={"hours": hours}, timeout=5
         )
@@ -134,8 +135,28 @@ def sentinel_stats_proxy():
                 response.status_code,
             )
 
-        # Return the response from Sentinel
-        return jsonify(response.json())
+        # Return the response from Sentinel, but guard against non-JSON or invalid JSON bodies
+        content_type = response.headers.get("Content-Type", "")
+        media_type = content_type.split(";")[0].strip().lower()
+        if media_type == "application/json" or media_type.endswith("+json"):
+            try:
+                data = response.json()
+                return jsonify(data)
+            except Exception as parse_exc:  # catch JSONDecodeError or ValueError
+                logger.error(
+                    "Failed to parse JSON from Sentinel stats response: %s", parse_exc
+                )
+                # Fall back to raw text body with original status and content-type
+                raw = response.text
+                resp = make_response(raw, response.status_code)
+                resp.headers["Content-Type"] = content_type or "text/plain"
+                return resp
+        else:
+            # Non-JSON response: return raw body preserving status and content-type
+            raw = response.text
+            resp = make_response(raw, response.status_code)
+            resp.headers["Content-Type"] = content_type or "text/plain"
+            return resp
 
     except requests.exceptions.RequestException as e:
         logger.error(f"Failed to fetch stats from Sentinel: {e}")
@@ -216,7 +237,16 @@ def config_threshold():
                 # Normalize Content-Type by extracting media type (ignore charset and other parameters)
                 content_type = response.headers.get("content-type", "")
                 media_type = content_type.split(";")[0].strip().lower()
-                error_data = response.json() if media_type == "application/json" else {}
+                error_data = {}
+                if media_type == "application/json" or media_type.endswith("+json"):
+                    try:
+                        error_data = response.json() or {}
+                    except Exception as parse_exc:
+                        logger.debug(
+                            "Failed to parse JSON from Sentinel error response: %s",
+                            parse_exc,
+                        )
+                        error_data = {}
                 return (
                     jsonify(
                         {
@@ -270,7 +300,29 @@ def config_threshold():
                     response.status_code,
                 )
 
-            config_data = response.json().get("data", {})
+            # Safely parse JSON from Sentinel
+            config_data = {}
+            content_type = response.headers.get("Content-Type", "")
+            media_type = content_type.split(";")[0].strip().lower()
+            if media_type == "application/json" or media_type.endswith("+json"):
+                try:
+                    parsed = response.json()
+                    if isinstance(parsed, dict):
+                        # parsed should be a dict with a top-level "data" key
+                        config_data = parsed.get("data", {}) or {}
+                    else:
+                        logger.debug(
+                            "Sentinel config response JSON was not an object, type=%s",
+                            type(parsed),
+                        )
+                        config_data = {}
+                except Exception as parse_exc:
+                    logger.debug(
+                        "Failed to parse JSON from Sentinel config response: %s",
+                        parse_exc,
+                    )
+                    config_data = {}
+
             min_score = config_data.get("alerts", {}).get("min_score", 5.0)
 
             return jsonify({"status": "ok", "threshold": float(min_score)})
@@ -290,120 +342,128 @@ def config_threshold():
 
 @dashboard_bp.route("/analytics/metrics", methods=["GET"])
 def analytics_metrics():
-    """Get real-time analytics metrics."""
-    deps = get_deps()
-    from ui.core import query_one
+    """Get real-time analytics metrics.
 
-    cutoff = (datetime.now(timezone.utc) - timedelta(hours=1)).strftime(
-        "%Y-%m-%d %H:%M:%S"
-    )
-    result = (
-        query_one(
-            deps.engine,
-            "SELECT COUNT(*) AS total_count FROM messages WHERE datetime(created_at) >= :cutoff",
-            {"cutoff": cutoff},
+    Proxies performance metrics to Sentinel API which owns the database.
+    """
+    try:
+        sentinel_api_url = os.getenv(
+            "SENTINEL_API_BASE_URL", "http://sentinel:8080/api"
         )
-        if deps.engine
-        else None
-    )
-    processed = result.get("total_count", 0) if result else 0
-    # Calculate actual messages per minute with decimal precision
-    messages_per_min = round(int(processed) / 60.0, 2)
+        hours = request.args.get("hours", default=2, type=int)
+        interval_minutes = request.args.get("interval_minutes", default=2, type=int)
 
-    latency = round(float(os.getenv("SEMANTIC_LATENCY_MS", "120")) / 1000, 3)
-    health = (
-        deps.data_service.compute_health(psutil=psutil, redis_module=redis)
-        if deps.data_service
-        else {}
-    )
+        response = requests.get(
+            f"{sentinel_api_url}/analytics/metrics",
+            params={"hours": hours, "interval_minutes": interval_minutes},
+            timeout=5,
+        )
 
-    # Get CPU and memory values with proper fallbacks
-    cpu_val = health.get("cpu_percent")
-    memory_val = health.get("memory_mb")
+        if response.ok:
+            try:
+                data = response.json()
+                if data.get("status") == "ok":
+                    metrics = data.get("data", {}).get("metrics", [])
+                    return jsonify({"metrics": metrics})
+            except (json.JSONDecodeError, ValueError) as parse_error:
+                logger.error(
+                    f"Failed to parse JSON from Sentinel metrics API: {parse_error}. "
+                    f"Response content: {response.text[:200]}"
+                )
+                return jsonify({"metrics": []})
 
-    return jsonify(
-        {
-            "messages_per_min": messages_per_min,
-            "semantic_latency": latency,
-            "cpu": cpu_val if cpu_val is not None else "N/A",
-            "memory": memory_val if memory_val is not None else "N/A",
-            "redis_stream_depth": health.get("redis_stream_depth", 0),
-        }
-    )
+        logger.warning(f"Sentinel metrics API returned status {response.status_code}")
+        return jsonify({"metrics": []})
+
+    except requests.exceptions.RequestException as exc:
+        logger.error(f"Failed to fetch performance metrics from Sentinel: {exc}")
+        return jsonify({"metrics": []})
 
 
 @dashboard_bp.route("/analytics/keywords", methods=["GET"])
 def analytics_keywords():
-    """Return keyword match counts from recent messages in the database.
+    """Return keyword match counts from recent messages.
 
-    Uses the union of configured channel keywords and counts case-insensitive
-    occurrences in the `messages.message_text` field within the last 24 hours.
+    Proxies request to Sentinel API which owns the database.
     """
-    deps = get_deps()
-    from ui.core import query_one
-
-    # Fetch keywords from Sentinel API
-    sentinel_api_url = os.getenv("SENTINEL_API_BASE_URL", "http://sentinel:8080/api")
-    kw_set: set[str] = set()
-
     try:
-        response = requests.get(f"{sentinel_api_url}/config", timeout=5)
+        sentinel_api_url = os.getenv(
+            "SENTINEL_API_BASE_URL", "http://sentinel:8080/api"
+        )
+        hours = request.args.get("hours", default=24, type=int)
+
+        response = requests.get(
+            f"{sentinel_api_url}/analytics/keywords",
+            params={"hours": hours},
+            timeout=5,
+        )
+
         if response.ok:
-            config_data = response.json().get("data", {})
-            channels = config_data.get("channels", [])
-            for channel in channels:
-                for kw in channel.get("keywords", []) or []:
-                    if isinstance(kw, str) and kw.strip():
-                        kw_set.add(kw.strip())
-        else:
-            # Fallback to local config
-            from ui.utils.serializers import serialize_channels
+            try:
+                data = response.json()
+                if data.get("status") == "ok":
+                    keywords = data.get("data", {}).get("keywords", [])
+                    return jsonify({"keywords": keywords})
+            except (json.JSONDecodeError, ValueError) as json_exc:
+                logger.error(
+                    f"Failed to parse JSON from Sentinel keywords API: {json_exc}. "
+                    f"Response content: {response.text[:200]}"
+                )
+                return jsonify({"keywords": []})
 
-            for channel in serialize_channels(deps.config):
-                for kw in channel.get("keywords", []) or []:
-                    if isinstance(kw, str) and kw.strip():
-                        kw_set.add(kw.strip())
-    except requests.exceptions.RequestException:
-        # Fallback to local config
-        from ui.utils.serializers import serialize_channels
-
-        for channel in serialize_channels(deps.config):
-            for kw in channel.get("keywords", []) or []:
-                if isinstance(kw, str) and kw.strip():
-                    kw_set.add(kw.strip())
-
-    if not kw_set:
+        logger.warning(f"Sentinel keywords API returned status {response.status_code}")
         return jsonify({"keywords": []})
 
-    cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).strftime(
-        "%Y-%m-%d %H:%M:%S"
-    )
+    except requests.exceptions.RequestException as exc:
+        logger.error(f"Failed to fetch keyword analytics from Sentinel: {exc}")
+        return jsonify({"keywords": []})
 
-    # Count matches per keyword using SQL LIKE (case-insensitive via lower())
-    results: list[dict[str, int | str]] = []
-    for kw in sorted(kw_set):
-        try:
-            result = (
-                query_one(
-                    deps.engine,
-                    """
-                SELECT COUNT(*) AS keyword_count FROM messages
-                WHERE datetime(created_at) >= :cutoff
-                  AND lower(COALESCE(message_text, '')) LIKE '%' || lower(:kw) || '%'
-                """,
-                    {"cutoff": cutoff, "kw": kw},
+
+@dashboard_bp.route("/analytics/channels", methods=["GET"])
+def analytics_channels():
+    """Return alert counts per channel from the last 24 hours.
+
+    Proxies request to Sentinel API which owns the database.
+    """
+    try:
+        sentinel_api_url = os.getenv(
+            "SENTINEL_API_BASE_URL", "http://sentinel:8080/api"
+        )
+        hours = request.args.get("hours", default=24, type=int)
+
+        response = requests.get(
+            f"{sentinel_api_url}/analytics/channels",
+            params={"hours": hours},
+            timeout=5,
+        )
+
+        if response.ok:
+            try:
+                data = response.json()
+                if data.get("status") == "ok":
+                    channels = data.get("data", {}).get("channels", [])
+                    # Normalize format for UI
+                    return jsonify(
+                        {
+                            "channels": [
+                                {"channel": ch["channel"], "count": ch["alerts"]}
+                                for ch in channels
+                            ]
+                        }
+                    )
+            except (json.JSONDecodeError, ValueError) as parse_error:
+                logger.error(
+                    f"Failed to parse JSON from Sentinel channels API: {parse_error}. "
+                    f"Response content: {response.text[:200]}"
                 )
-                if deps.engine
-                else None
-            )
-            count = result.get("keyword_count", 0) if result else 0
-        except Exception:
-            count = 0
-        results.append({"keyword": kw, "count": int(count or 0)})
+                return jsonify({"channels": []})
 
-    # Sort descending by count
-    results.sort(key=lambda x: x["count"], reverse=True)
-    return jsonify({"keywords": results})
+        logger.warning(f"Sentinel channels API returned status {response.status_code}")
+        return jsonify({"channels": []})
+
+    except requests.exceptions.RequestException as exc:
+        logger.error(f"Failed to fetch channel analytics from Sentinel: {exc}")
+        return jsonify({"channels": []})
 
 
 @dashboard_bp.get("/export_alerts")

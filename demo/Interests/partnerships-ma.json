@@ -1,0 +1,45 @@
+{
+  "id": 3007,
+  "name": "Strategic Partnerships & M&A",
+  "description": "Detect discussions about partnerships, acquisitions, and strategic business moves",
+  "enabled": false,
+  "threshold": 0.47,
+  "positive_samples": [
+    "Major acquisition announced: Company X acquires competitor for $500M",
+    "Strategic partnership formed to expand into Asian markets",
+    "Merger discussion: two leading players joining forces",
+    "Exclusive distribution agreement signed with major retailer",
+    "Investment round led by top-tier VC firm at $2B valuation",
+    "Joint venture announced to develop next-generation technology",
+    "Acquisition target identified with strong synergies"
+  ],
+  "negative_samples": [
+    "Networking event tomorrow",
+    "Looking for partnership opportunities",
+    "General business discussion",
+    "Company culture update",
+    "Team building activity"
+  ],
+  "keywords": [
+    "acquisition",
+    "merger",
+    "partnership",
+    "M&A",
+    "investment",
+    "strategic",
+    "deal"
+  ],
+  "channels": [],
+  "users": [],
+  "vip_senders": [],
+  "excluded_users": [],
+  "tags": ["business", "strategy", "m&a", "partnerships"],
+  "digest_schedules": [
+    {
+      "schedule_type": "daily",
+      "daily_hour": 10,
+      "top_n": 10,
+      "min_score": 0.47
+    }
+  ]
+}

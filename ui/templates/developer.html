@@ -108,6 +108,49 @@
     </div>
 </section>
 
+<section class="card mb-4" aria-labelledby="webhook-history-heading">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#webhook-history-body" aria-expanded="true" aria-controls="webhook-history-body">
+            <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
+            <div>
+                <h2 class="card-title mb-0" id="webhook-history-heading">Webhook Delivery History</h2>
+                <small class="text-muted">Recent webhook deliveries and their status</small>
+            </div>
+        </button>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-history" title="Refresh delivery history">
+                <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+        </div>
+    </div>
+    <div class="collapse show card-body" id="webhook-history-body">
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0" id="webhook-history-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Time</th>
+                        <th scope="col">Service</th>
+                        <th scope="col">Profile</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Response</th>
+                        <th scope="col">Error</th>
+                    </tr>
+                </thead>
+                <tbody id="webhook-history-body-table">
+                    <tr id="webhook-history-loading">
+                        <td colspan="6" class="text-center text-muted">
+                            <div class="spinner-border spinner-border-sm me-2" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            Loading delivery history...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
 <section class="card" aria-labelledby="developer-console-heading">
         <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
         <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#developer-console-body" aria-expanded="true" aria-controls="developer-console-body">
@@ -268,8 +311,9 @@
                 console.error("Failed to load developer settings:", err);
             });
 
-        // Load webhooks on page load
+        // Load webhooks and history on page load
         loadWebhooks();
+        loadWebhookHistory();
 
         // Add webhook button
         document.getElementById("btn-add-webhook")?.addEventListener("click", () => {
@@ -676,5 +720,158 @@
             tbody.appendChild(errorRow);
         }
     }
+
+    // =========================================================================
+    // Webhook Delivery History
+    // =========================================================================
+
+    async function loadWebhookHistory() {
+        const tbody = document.getElementById("webhook-history-body-table");
+        if (!tbody) {
+            console.error("Webhook history tbody not found");
+            return;
+        }
+
+        try {
+            const response = await fetch("/api/webhooks/history?limit=10");
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const result = await response.json();
+            
+            // Clear loading message
+            tbody.innerHTML = "";
+
+            if (!result.data || !result.data.deliveries || result.data.deliveries.length === 0) {
+                const emptyRow = document.createElement("tr");
+                const emptyCell = document.createElement("td");
+                emptyCell.colSpan = 6;
+                emptyCell.className = "text-center text-muted py-3";
+                emptyCell.textContent = "No webhook deliveries yet";
+                emptyRow.appendChild(emptyCell);
+                tbody.appendChild(emptyRow);
+                return;
+            }
+
+            // Populate table with delivery records
+            result.data.deliveries.forEach((delivery) => {
+                const row = document.createElement("tr");
+
+                // Time column
+                const timeCell = document.createElement("td");
+                timeCell.className = "text-nowrap";
+                const deliveryTime = new Date(delivery.created_at);
+                timeCell.textContent = deliveryTime.toLocaleString();
+                timeCell.title = deliveryTime.toISOString();
+                row.appendChild(timeCell);
+
+                // Service column
+                const serviceCell = document.createElement("td");
+                serviceCell.textContent = delivery.webhook_service || "—";
+                row.appendChild(serviceCell);
+
+                // Profile column
+                const profileCell = document.createElement("td");
+                profileCell.className = "text-truncate";
+                profileCell.style.maxWidth = "150px";
+                profileCell.textContent = delivery.profile_name || "—";
+                profileCell.title = delivery.profile_name || "";
+                row.appendChild(profileCell);
+
+                // Status column with color coding
+                const statusCell = document.createElement("td");
+                const statusBadge = document.createElement("span");
+                statusBadge.className = "badge";
+                
+                switch (delivery.status) {
+                    case "success":
+                        statusBadge.classList.add("bg-success");
+                        statusBadge.textContent = "Success";
+                        break;
+                    case "failed":
+                        statusBadge.classList.add("bg-danger");
+                        statusBadge.textContent = "Failed";
+                        break;
+                    case "retry_1":
+                    case "retry_2":
+                    case "retry_3":
+                        statusBadge.classList.add("bg-warning", "text-dark");
+                        statusBadge.textContent = `Retry ${delivery.attempt || delivery.status.split('_')[1]}`;
+                        break;
+                    default:
+                        statusBadge.classList.add("bg-secondary");
+                        statusBadge.textContent = delivery.status || "Unknown";
+                }
+                
+                statusCell.appendChild(statusBadge);
+                row.appendChild(statusCell);
+
+                // Response column (HTTP status + timing)
+                const responseCell = document.createElement("td");
+                responseCell.className = "text-nowrap";
+                
+                if (delivery.http_status) {
+                    const statusCode = document.createElement("code");
+                    statusCode.textContent = `HTTP ${delivery.http_status}`;
+                    statusCode.className = delivery.http_status < 400 ? "text-success" : "text-danger";
+                    responseCell.appendChild(statusCode);
+                    
+                    if (delivery.response_time_ms) {
+                        responseCell.appendChild(document.createTextNode(" "));
+                        const timing = document.createElement("span");
+                        timing.className = "text-muted";
+                        timing.textContent = `(${delivery.response_time_ms}ms)`;
+                        responseCell.appendChild(timing);
+                    }
+                } else {
+                    responseCell.textContent = "—";
+                }
+                
+                row.appendChild(responseCell);
+
+                // Error column
+                const errorCell = document.createElement("td");
+                errorCell.className = "text-truncate";
+                errorCell.style.maxWidth = "200px";
+                
+                if (delivery.error_message) {
+                    errorCell.textContent = delivery.error_message;
+                    errorCell.title = delivery.error_message;
+                    errorCell.classList.add("text-danger");
+                } else {
+                    errorCell.textContent = "—";
+                }
+                
+                row.appendChild(errorCell);
+
+                tbody.appendChild(row);
+            });
+
+        } catch (error) {
+            console.error("Error loading webhook history:", error);
+            tbody.innerHTML = "";
+            
+            const errorRow = document.createElement("tr");
+            const errorCell = document.createElement("td");
+            errorCell.colSpan = 6;
+            errorCell.className = "text-center text-danger py-3";
+            errorCell.textContent = `Failed to load webhook history: ${error.message}`;
+            errorRow.appendChild(errorCell);
+            tbody.appendChild(errorRow);
+        }
+    }
+
+    // Refresh button handler
+    document.getElementById("btn-refresh-history")?.addEventListener("click", () => {
+        loadWebhookHistory();
+    });
+
+    // Auto-refresh every 30 seconds
+    setInterval(() => {
+        loadWebhookHistory();
+    }, 30000);
+
 </script>
 {% endblock %}

@@ -40,44 +40,49 @@
         
         <div class="row g-3">
             <div class="col-md-6">
-                <label class="form-label" for="alert-critical-keywords">Critical Keywords</label>
-                <textarea class="form-control font-monospace" id="alert-critical-keywords" name="critical_keywords" rows="3" placeholder="exploit, breach, hack"></textarea>
-                <small class="text-muted">Comma-separated. Highest priority.</small>
+                <label class="form-label" for="alert-action-keywords">Action Keywords <span class="badge bg-primary">1.0</span></label>
+                <textarea class="form-control font-monospace" id="alert-action-keywords" name="action_keywords" rows="3" placeholder="please review, confirm, approve"></textarea>
+                <small class="text-muted">Messages requiring direct action.</small>
             </div>
             <div class="col-md-6">
-                <label class="form-label" for="alert-security-keywords">Security Keywords</label>
-                <textarea class="form-control font-monospace" id="alert-security-keywords" name="security_keywords" rows="3" placeholder="vulnerability, attack, malicious"></textarea>
-                <small class="text-muted">Security-related terms.</small>
+                <label class="form-label" for="alert-decision-keywords">Decision Keywords <span class="badge bg-primary">1.1</span></label>
+                <textarea class="form-control font-monospace" id="alert-decision-keywords" name="decision_keywords" rows="3" placeholder="vote, decide, proposal"></textarea>
+                <small class="text-muted">Decisions, voting, direction changes.</small>
             </div>
             <div class="col-md-6">
-                <label class="form-label" for="alert-urgency-keywords">Urgency Keywords</label>
+                <label class="form-label" for="alert-urgency-keywords">Urgency Keywords <span class="badge bg-primary">1.5</span></label>
                 <textarea class="form-control font-monospace" id="alert-urgency-keywords" name="urgency_keywords" rows="3" placeholder="urgent, asap, critical"></textarea>
                 <small class="text-muted">Time-sensitive indicators.</small>
             </div>
             <div class="col-md-6">
-                <label class="form-label" for="alert-financial-keywords">Financial Keywords</label>
-                <textarea class="form-control font-monospace" id="alert-financial-keywords" name="financial_keywords" rows="3" placeholder="price, market, trading"></textarea>
-                <small class="text-muted">Market and financial terms.</small>
+                <label class="form-label" for="alert-importance-keywords">Importance Keywords <span class="badge bg-warning">0.9</span></label>
+                <textarea class="form-control font-monospace" id="alert-importance-keywords" name="importance_keywords" rows="3" placeholder="important, crucial, essential"></textarea>
+                <small class="text-muted">Key importance indicators.</small>
             </div>
             <div class="col-md-6">
-                <label class="form-label" for="alert-technical-keywords">Technical Keywords</label>
-                <textarea class="form-control font-monospace" id="alert-technical-keywords" name="technical_keywords" rows="3" placeholder="update, upgrade, release"></textarea>
-                <small class="text-muted">Development and tech terms.</small>
+                <label class="form-label" for="alert-release-keywords">Release Keywords <span class="badge bg-secondary">0.8</span></label>
+                <textarea class="form-control font-monospace" id="alert-release-keywords" name="release_keywords" rows="3" placeholder="release, launch, update, upgrade"></textarea>
+                <small class="text-muted">Project and interest updates.</small>
             </div>
             <div class="col-md-6">
-                <label class="form-label" for="alert-project-keywords">Project Keywords</label>
-                <textarea class="form-control font-monospace" id="alert-project-keywords" name="project_keywords" rows="3" placeholder="marketing, alert, governance"></textarea>
-                <small class="text-muted">Project-specific terms.</small>
+                <label class="form-label" for="alert-security-keywords">Security Keywords <span class="badge bg-warning">1.2</span></label>
+                <textarea class="form-control font-monospace" id="alert-security-keywords" name="security_keywords" rows="3" placeholder="vulnerability, attack, breach"></textarea>
+                <small class="text-muted">Security-related terms.</small>
             </div>
             <div class="col-md-6">
-                <label class="form-label" for="alert-community-keywords">Community Keywords</label>
-                <textarea class="form-control font-monospace" id="alert-community-keywords" name="community_keywords" rows="3" placeholder="announcement, airdrop, vote"></textarea>
-                <small class="text-muted">Community engagement terms.</small>
+                <label class="form-label" for="alert-risk-keywords">Risk Keywords <span class="badge bg-danger">1.0</span></label>
+                <textarea class="form-control font-monospace" id="alert-risk-keywords" name="risk_keywords" rows="3" placeholder="risk, threat, incident"></textarea>
+                <small class="text-muted">Risk or incident messages.</small>
             </div>
             <div class="col-md-6">
-                <label class="form-label" for="alert-general-keywords">General Keywords</label>
-                <textarea class="form-control font-monospace" id="alert-general-keywords" name="general_keywords" rows="3" placeholder="news, update, important"></textarea>
-                <small class="text-muted">General interest terms.</small>
+                <label class="form-label" for="alert-opportunity-keywords">Opportunity Keywords <span class="badge bg-info">0.6</span></label>
+                <textarea class="form-control font-monospace" id="alert-opportunity-keywords" name="opportunity_keywords" rows="3" placeholder="opportunity, deal, offer"></textarea>
+                <small class="text-muted">Opportunity-driven messages.</small>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="alert-keywords">General Keywords <span class="badge bg-secondary">0.8</span></label>
+                <textarea class="form-control font-monospace" id="alert-keywords" name="keywords" rows="3" placeholder="news, update, important"></textarea>
+                <small class="text-muted">Legacy custom keywords.</small>
             </div>
         </div>
     </div>
@@ -91,48 +96,148 @@
             </a>
         </div>
         
-        <div class="row g-3">
-            <div class="col-md-4">
-                <label class="form-label" for="alert-min-score">Minimum Score</label>
-                <input class="form-control" id="alert-min-score" name="min_score" type="number" min="0" max="10" step="0.1" value="1.0">
-                <small class="text-muted">Threshold for alerts (0-10)</small>
+        <div class="row g-3 mt-2">
+            <div class="col-md-3">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="alert-detect-questions" name="detect_questions">
+                    <label class="form-check-label" for="alert-detect-questions">
+                        <div>Detect Questions</div>
+                        <div><span class="badge bg-info">0.5</span></div>
+                    </label>
+                </div>
             </div>
-            <div class="col-md-4">
-                <label class="form-label" for="alert-vip-senders">VIP Senders</label>
-                <input class="form-control font-monospace" id="alert-vip-senders" name="vip_senders" type="text" placeholder="@username1, @username2">
-                <small class="text-muted">Always alert from these</small>
+            <div class="col-md-3">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="alert-detect-mentions" name="detect_mentions">
+                    <label class="form-check-label" for="alert-detect-mentions">
+                        <div>Detect Mentions</div>
+                        <div><span class="badge bg-success">1.0</span></div>
+                    </label>
+                </div>
             </div>
-            <div class="col-md-4">
-                <label class="form-label" for="alert-excluded-users">Excluded Users</label>
-                <input class="form-control font-monospace" id="alert-excluded-users" name="excluded_users" type="text" placeholder="@spammer, @bot">
-                <small class="text-muted">Never alert from these</small>
+            <div class="col-md-3">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="alert-detect-links" name="detect_links">
+                    <label class="form-check-label" for="alert-detect-links">
+                        <div>Detect Links</div>
+                        <div><span class="badge bg-info">0.5</span></div>
+                    </label>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="alert-require-forwarded" name="require_forwarded">
+                    <label class="form-check-label" for="alert-require-forwarded">
+                        <div>Only Forwards</div>
+                        <div><span class="badge bg-info">0.5</span></div>
+                    </label>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Advanced Detection Settings -->
+        <div class="row g-3 mt-2">
+            <div class="col-md-3">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="alert-detect-codes" name="detect_codes">
+                    <label class="form-check-label" for="alert-detect-codes">
+                        <div>Detect Code</div>
+                        <div><span class="badge bg-warning">1.3</span></div>
+                    </label>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="alert-detect-documents" name="detect_documents">
+                    <label class="form-check-label" for="alert-detect-documents">
+                        <div>Detect Docs</div>
+                        <div><span class="badge bg-info">0.7</span></div>
+                    </label>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="alert-detect-polls" name="detect_polls">
+                    <label class="form-check-label" for="alert-detect-polls">
+                        <div>Detect Polls</div>
+                        <div><span class="badge bg-success">1.0</span></div>
+                    </label>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="alert-prioritize-pinned" name="prioritize_pinned">
+                    <label class="form-check-label" for="alert-prioritize-pinned">
+                        <div>Prioritize Pinned</div>
+                        <div><span class="badge bg-success">1.2</span></div>
+                    </label>
+                </div>
             </div>
         </div>
         
         <div class="row g-3 mt-2">
             <div class="col-md-3">
                 <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="alert-detect-questions" name="detect_questions">
-                    <label class="form-check-label" for="alert-detect-questions">Detect Questions</label>
+                    <input class="form-check-input" type="checkbox" id="alert-prioritize-admin" name="prioritize_admin">
+                    <label class="form-check-label" for="alert-prioritize-admin">
+                        <div>Prioritize Admin</div>
+                        <div><span class="badge bg-secondary">0.9</span></div>
+                    </label>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="alert-detect-mentions" name="detect_mentions">
-                    <label class="form-check-label" for="alert-detect-mentions">Detect Mentions</label>
+        </div>
+        
+        <!-- Score Threshold and User Filters -->
+        <div class="row g-3 mt-3">
+            <div class="col-md-4">
+                <label class="form-label" for="alert-min-score">Minimum Score</label>
+                <input class="form-control" id="alert-min-score" name="min_score" type="number" min="0" max="50" step="0.1" value="5.0">
+                <small class="text-muted" id="alert-min-score-help">Threshold for alerts (0 - <span id="alert-threshold-max">0</span>)</small>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" for="alert-vip-senders">VIP Senders <span class="badge bg-success">1.0</span></label>
+                <input class="form-control font-monospace" id="alert-vip-senders" name="vip_senders" type="text" 
+                       placeholder="123456789, 987654321"
+                       pattern="^\s*\d+(\s*,\s*\d+)*\s*$"
+                       title="Numeric Telegram user IDs separated by commas (spaces are trimmed automatically)">
+                <small class="text-muted">Always alert from these (numeric Telegram IDs). Max 100 IDs.</small>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" for="alert-excluded-users">Excluded Users</label>
+                <input class="form-control font-monospace" id="alert-excluded-users" name="excluded_users" type="text" 
+                       placeholder="123456789, 987654321"
+                       pattern="^\s*\d+(\s*,\s*\d+)*\s*$"
+                       title="Numeric Telegram user IDs separated by commas (spaces are trimmed automatically)">
+                <small class="text-muted">Never alert from these (numeric Telegram IDs). Max 100 IDs.</small>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Maximum Score Calculator -->
+    <div class="border-top pt-3">
+        <div class="alert alert-info mb-0">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="mb-1">
+                        <svg width="16" height="16" fill="currentColor" class="bi bi-calculator me-1" viewBox="0 0 16 16">
+                            <path d="M12 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h8zM4 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H4z"/>
+                            <path d="M4 2.5a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5v-2zm0 4a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm0 3a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm0 3a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm3-6a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm0 3a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm0 3a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm3-6a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm0 3a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v4a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-4z"/>
+                        </svg>
+                        Maximum Possible Score for This Profile
+                    </h6>
+                    <small class="text-muted">Based on enabled toggles and configured keywords</small>
+                </div>
+                <div class="text-end">
+                    <span class="badge bg-primary fs-5" id="alert-max-score-display">0.0</span>
+                    <br>
+                    <small class="text-muted">points</small>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="alert-detect-links" name="detect_links">
-                    <label class="form-check-label" for="alert-detect-links">Detect Links</label>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="alert-require-forwarded" name="require_forwarded">
-                    <label class="form-check-label" for="alert-require-forwarded">Only Forwards</label>
-                </div>
+            <div class="mt-2">
+                <small class="text-muted">
+                    <strong>Note:</strong> Scores are additive (OR logic). Any enabled detection that triggers adds points to the total. 
+                    A message triggers an alert if its total score ≥ Minimum Score threshold.
+                </small>
             </div>
         </div>
     </div>
@@ -155,6 +260,28 @@
             <div id="entities-badges-alert" class="d-flex flex-wrap gap-2"></div>
         </div>
         <small class="text-muted">Select specific channels/users or leave empty to apply to all monitored entities configured in the settings section.</small>
+    </div>
+    
+    <!-- Webhook Integration -->
+    <div class="border-top pt-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h3 class="h6 mb-0">
+                <svg width="16" height="16" fill="currentColor" class="bi bi-send me-1" viewBox="0 0 16 16">
+                    <path d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11ZM6.636 10.07l2.761 4.338L14.13 2.576 6.636 10.07Zm6.787-8.201L1.591 6.602l4.339 2.76 7.494-7.493Z"/>
+                </svg>
+                Webhook Notifications
+            </h3>
+            <a href="/docs#webhooks-api" class="btn btn-outline-primary btn-sm" title="View webhook documentation" target="_blank" rel="noopener">
+                <i class="bi bi-info-circle"></i>
+            </a>
+        </div>
+        <div>
+            <label class="form-label" for="alert-webhooks">Notify Webhooks (optional)</label>
+            <select class="form-select" id="alert-webhooks" name="webhooks" multiple size="5" aria-busy="true">
+                <option disabled selected>Loading webhooks...</option>
+            </select>
+            <small class="text-muted">Select one or more webhooks. Alerts matching this profile will be sent to selected webhooks.</small>
+        </div>
     </div>
     
     <!-- Digest Configuration for Alert Profiles -->

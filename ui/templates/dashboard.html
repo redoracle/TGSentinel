@@ -78,7 +78,7 @@
             <div class="card-body">
                 <p class="card-text text-uppercase" id="metric-ingested-label">Messages Ingested</p>
                 <h3 class="card-title mb-1" id="metric-ingested">{{ summary.messages_ingested | default(0) }}</h3>
-                <small>Last 24 hours</small>
+                <small>All messages in database</small>
             </div>
         </div>
     </div>
@@ -374,6 +374,13 @@
     const activityUrl = "{{ url_for('dashboard.dashboard_activity') }}";
     const alertsUrl = "{{ url_for('dashboard.recent_alerts') }}";
 
+    function formatCount(count) {
+        if (count >= 1000) {
+            return (count / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+        }
+        return count.toString();
+    }
+
     async function updateSummary() {
         try {
             const response = await fetch(summaryUrl);
@@ -381,8 +388,8 @@
                 throw new Error("summary fetch failed");
             }
             const data = await response.json();
-            document.getElementById("metric-ingested").textContent = data.messages_ingested ?? 0;
-            document.getElementById("metric-alerts").textContent = data.alerts_sent ?? 0;
+            document.getElementById("metric-ingested").textContent = formatCount(data.messages_ingested ?? 0);
+            document.getElementById("metric-alerts").textContent = formatCount(data.alerts_sent ?? 0);
             document.getElementById("metric-importance").textContent = (data.avg_importance ?? 0).toFixed(2);
             document.getElementById("metric-feedback").textContent = `${(data.feedback_accuracy ?? 0).toFixed(1)}%`;
         } catch (error) {

@@ -76,15 +76,51 @@ def _find_matched_keywords(text: str, keywords: list[str]) -> list[str]:
 
 
 def _detect_code_patterns(text: str) -> bool:
-    """Detect OTP codes, passwords, tokens in message."""
+    """Detect code snippets in message (multi-line code blocks, not single words).
+
+    This looks for actual programming code patterns:
+    - Code fence markers (```, ~~~)
+    - Consistent indentation (4+ spaces/tabs)
+    - Programming language syntax (function, class, def, const, import, etc.)
+
+    Requires at least 2-3 lines to avoid false positives on abbreviations like "EVM", "API".
+    """
     if not text:
         return False
-    # OTP patterns: 6-digit codes, verification codes
-    if re.search(r"\b\d{6}\b", text):
+
+    lines = text.split("\n")
+
+    # 1. Code fence markers (markdown code blocks)
+    if re.search(r"```|~~~", text):
         return True
-    # Common OTP/verification phrases
-    if re.search(r"(verification code|otp|one[-\s]time|passcode|token)", text, re.I):
+
+    # 2. Consistent indentation pattern (4+ spaces or tabs, at least 3 lines)
+    indented_lines = [line for line in lines if re.match(r"^(    |\t)", line)]
+    if len(indented_lines) >= 3:
         return True
+
+    # 3. Programming syntax patterns (must have at least 2 lines + syntax keyword)
+    if len(lines) >= 2:
+        # Common programming keywords across languages
+        programming_keywords = [
+            r"\bfunction\s+\w+\s*\(",  # function declarations
+            r"\bclass\s+\w+",  # class definitions
+            r"\bdef\s+\w+\s*\(",  # Python functions
+            r"\b(const|let|var)\s+\w+\s*=",  # JS/TS variables
+            r"\bimport\s+\w+",  # imports
+            r"\bfrom\s+\w+\s+import",  # Python imports
+            r"\bpub\s+fn\s+\w+",  # Rust functions
+            r"\bfunc\s+\w+\s*\(",  # Go functions
+            r"\breturn\s+[^;]+;",  # return statements
+            r"=>\s*\{",  # arrow functions
+            r"\{[^}]*\}",  # code blocks (single-line and multiline)
+        ]
+
+        text_lower = text.lower()
+        for pattern in programming_keywords:
+            if re.search(pattern, text, re.IGNORECASE | re.MULTILINE | re.DOTALL):
+                return True
+
     return False
 
 
@@ -100,6 +136,33 @@ def _detect_question_patterns(text: str) -> bool:
             re.I,
         ):
             return True
+    return False
+
+
+def _detect_url_patterns(text: str) -> bool:
+    """Detect URLs in message text.
+
+    Matches common URL patterns including:
+    - http:// and https:// URLs
+    - www. prefixed domains
+    - Common TLDs without protocol (e.g., example.com)
+    - Telegram t.me links
+    """
+    if not text:
+        return False
+
+    # Common URL patterns
+    url_patterns = [
+        r"https?://[^\s]+",  # http:// or https:// URLs
+        r"www\.[^\s]+",  # www. prefixed
+        r"t\.me/[^\s]+",  # Telegram links
+        r"\b[a-zA-Z0-9-]+\.(com|org|net|io|dev|co|me|xyz|app|tech)[^\s]*",  # Common TLDs
+    ]
+
+    for pattern in url_patterns:
+        if re.search(pattern, text, re.IGNORECASE):
+            return True
+
     return False
 
 
@@ -134,6 +197,8 @@ def run_heuristics(
     # Detection flags
     detect_codes: bool = True,
     detect_documents: bool = True,
+    detect_links: bool = False,
+    require_forwarded: bool = False,
     prioritize_pinned: bool = True,
     prioritize_admin: bool = True,
     detect_polls: bool = True,
@@ -154,6 +219,17 @@ def run_heuristics(
     """
     reasons, score = [], 0.0
     trigger_annotations: dict[str, list[str]] = {}  # Track which keywords triggered
+
+    # === FILTER: Required Forward Check ===
+    # If require_forwarded is True and message is not forwarded, short-circuit to zero score
+    if require_forwarded and not has_forward:
+        return HeuristicResult(
+            important=False,
+            reasons=["filtered-no-forward"],
+            content_hash=content_hash(text or ""),
+            pre_score=0.0,
+            trigger_annotations={},
+        )
 
     # === CATEGORY 3: Direct Mentions and Replies (HIGHEST PRIORITY) ===
     if mentioned:
@@ -244,6 +320,11 @@ def run_heuristics(
         # Common types: document, photo, voice, video_note, video, audio, sticker, animation, video_message
         reasons.append(f"media-{media_type}")
         score += 0.7
+
+    # === URL/Link Detection ===
+    if detect_links and _detect_url_patterns(text):
+        reasons.append("contains-link")
+        score += 0.5
 
     # === CATEGORY 8: Risk or Incident Messages ===
     risk_kw = risk_keywords if risk_keywords else []

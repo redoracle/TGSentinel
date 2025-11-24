@@ -1,0 +1,35 @@
+{
+  "name": "Personal Important Only",
+  "description": "Filter for personally important messages: mentions, questions directed at you, and urgent keywords",
+  "enabled": false,
+  "min_score": 3.0,
+  "critical_keywords": ["urgent", "asap", "important", "critical", "emergency"],
+  "security_keywords": [],
+  "urgency_keywords": ["deadline", "due", "today", "tomorrow", "now"],
+  "financial_keywords": [],
+  "technical_keywords": [],
+  "project_keywords": [],
+  "community_keywords": [],
+  "general_keywords": [],
+  "detect_questions": true,
+  "detect_mentions": true,
+  "detect_links": false,
+  "require_forwarded": false,
+  "detect_codes": false,
+  "detect_documents": false,
+  "detect_polls": false,
+  "prioritize_pinned": true,
+  "prioritize_admin": false,
+  "vip_senders": [],
+  "excluded_users": [],
+  "channels": [],
+  "users": [],
+  "tags": ["personal", "productivity", "signal-over-noise"],
+  "digest_schedules": [
+    {
+      "schedule_type": "hourly",
+      "top_n": 10,
+      "min_score": 3.0
+    }
+  ]
+}

@@ -65,12 +65,18 @@ class FakeTelegramClient:
     async def send_message(self, target: str, text: str):
         self.sent.append((target, text))
 
+    async def get_me(self):
+        class User:
+            id = 42
+
+        return User()
+
 
 def build_config() -> AppCfg:
     channel = ChannelRule(
         id=-100123,
         name="Test Channel",
-        keywords=[],
+        keywords=["critical"],
         vip_senders=[],
         reaction_threshold=1,
         reply_threshold=0,
@@ -91,7 +97,9 @@ def build_config() -> AppCfg:
         telegram_session="data/test.session",
         api_id=123456,
         api_hash="hash",
-        alerts=AlertsCfg(digest=DigestCfg(hourly=False, daily=False, top_n=5)),
+        alerts=AlertsCfg(
+            min_score=0.0, digest=DigestCfg(hourly=False, daily=False, top_n=5)
+        ),
         channels=[channel],
         monitored_users=[],
         interests=[],

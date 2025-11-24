@@ -49,7 +49,7 @@
                     <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
                     <div>
                         <h2 class="card-title mb-0" id="performance-chart-heading">Performance Metrics</h2>
-                        <small class="text-muted">Real-time system performance trends</small>
+                        <small class="text-muted">Recent system performance (last 24 hours)</small>
                     </div>
                 </button>
                 <div class="d-flex gap-2">
@@ -480,6 +480,7 @@
 <script>
     const metricsEndpoint = "{{ url_for('dashboard.analytics_metrics') }}";
     const keywordsEndpoint = "{{ url_for('dashboard.analytics_keywords') }}";
+    const channelsEndpoint = "{{ url_for('dashboard.analytics_channels') }}";
     const anomaliesEndpoint = "{{ url_for('analytics.api_analytics_anomalies') }}";
 
     // Utility function to escape HTML and prevent XSS
@@ -499,14 +500,6 @@
     let keywordChart;
     let channelChart;
 
-    // Rolling window for historical metrics (stores last 6 data points = 12 minutes at 2min refresh)
-    const MAX_HISTORY_POINTS = 6;
-    let metricsHistory = {
-        timestamps: [],
-        messagesPerMin: [],
-        latency: []
-    };
-
     function ensureChart(ctx, config) {
         if (!ctx) {
             return null;
@@ -518,59 +511,60 @@
         return ctx._chartRef;
     }
 
-    function updateMetricsHistory(messagesPerMin, latency) {
-        // Add new data point
-        const now = new Date();
-        const timeLabel = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-        
-        metricsHistory.timestamps.push(timeLabel);
-        metricsHistory.messagesPerMin.push(messagesPerMin);
-        metricsHistory.latency.push(latency);
-
-        // Keep only last MAX_HISTORY_POINTS
-        if (metricsHistory.timestamps.length > MAX_HISTORY_POINTS) {
-            metricsHistory.timestamps.shift();
-            metricsHistory.messagesPerMin.shift();
-            metricsHistory.latency.shift();
-        }
-    }
-
     async function refreshPerformance() {
         try {
-            const response = await fetch(metricsEndpoint);
+            // Fetch time-series metrics from Sentinel (last 24 hours)
+            const response = await fetch(`${metricsEndpoint}?hours=24&interval_minutes=60`);
             if (!response.ok) {
                 throw new Error("metrics fetch failed");
             }
             const payload = await response.json();
             
-            const messagesPerMin = payload.messages_per_min ?? 0;
-            const latency = payload.semantic_latency ?? 0;
+            // Extract time-series data
+            const metrics = payload.metrics ?? [];
+            
+            if (metrics.length === 0) {
+                console.warn("No metrics data available");
+                document.getElementById("metric-mpm").textContent = "0";
+                document.getElementById("metric-latency").textContent = "0.000s";
+                return;
+            }
+            
+            // Calculate current (latest) values for KPI display
+            const latest = metrics[metrics.length - 1];
+            const messagesPerMin = (latest.alert_count / 60).toFixed(2);
+            const avgScore = latest.avg_score ?? 0;
             
             // Update KPI displays
             document.getElementById("metric-mpm").textContent = messagesPerMin;
-            document.getElementById("metric-latency").textContent = `${latency.toFixed(3)}s`;
+            document.getElementById("metric-latency").textContent = `${avgScore.toFixed(2)}`;
 
-            // Update historical data
-            updateMetricsHistory(messagesPerMin, latency);
+            // Prepare data for chart (use all time buckets)
+            const timestamps = metrics.map(m => {
+                const dt = new Date(m.timestamp);
+                return dt.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            });
+            const alertCounts = metrics.map(m => m.alert_count);
+            const avgScores = metrics.map(m => m.avg_score ?? 0);
 
-            // Render chart with real historical data
+            // Render chart with time-series data
             const ctx = document.getElementById("performance-chart");
             performanceChart = ensureChart(ctx, {
                 type: "line",
                 data: {
-                    labels: metricsHistory.timestamps,
+                    labels: timestamps,
                     datasets: [
                         {
-                            label: "Messages/min",
-                            data: metricsHistory.messagesPerMin,
+                            label: "Alerts",
+                            data: alertCounts,
                             borderColor: "#7d8bff",
                             backgroundColor: "rgba(125, 139, 255, 0.1)",
                             fill: true,
                             tension: 0.4,
                         },
                         {
-                            label: "Latency (s)",
-                            data: metricsHistory.latency,
+                            label: "Avg Score",
+                            data: avgScores,
                             borderColor: "#f5576c",
                             backgroundColor: "rgba(245, 87, 108, 0.1)",
                             fill: true,
@@ -618,6 +612,13 @@
             }
             const payload = await response.json();
             const keywords = payload.keywords || [];
+            
+            // Show empty state if no keywords
+            if (keywords.length === 0) {
+                const emptyMsg = '<div class="text-center text-muted p-4"><p>No keywords configured</p><small>Add keywords to channel configurations to see data here</small></div>';
+                document.getElementById('keyword-heatmap-body').innerHTML = emptyMsg;
+                return;
+            }
             const labels = keywords.map((item) => item.keyword);
             const values = keywords.map((item) => item.count);
 
@@ -672,6 +673,40 @@
                     maxBarThickness: 22,
                 },
             });
+        } catch (error) {
+            console.error(error);
+            showToast("Keyword analytics unavailable", "error");
+        }
+    }
+
+    async function refreshChannels() {
+        try {
+            const response = await fetch(channelsEndpoint);
+            if (!response.ok) {
+                throw new Error("channels fetch failed");
+            }
+            const payload = await response.json();
+            const channels = payload.channels || [];
+            
+            // Show empty state if no channels
+            if (channels.length === 0) {
+                const emptyMsg = '<div class="text-center text-muted p-4"><p>No channel data</p><small>No alerts triggered in the last 24 hours</small></div>';
+                document.getElementById('channel-impact-body').innerHTML = emptyMsg;
+                return;
+            }
+            
+            const labels = channels.map((item) => item.channel);
+            const values = channels.map((item) => item.count);
+
+            // Generate colors dynamically
+            const basePalette = ["#667eea", "#764ba2", "#00f2fe", "#f5576c", "#feca57"];
+            const backgroundColor = values.map((_, index) => {
+                if (index < basePalette.length) {
+                    return basePalette[index];
+                }
+                const hue = (index * 137.5) % 360;
+                return `hsla(${hue}, 65%, 60%, 0.8)`;
+            });
 
             const channelCtx = document.getElementById("channel-chart");
             channelChart = ensureChart(channelCtx, {
@@ -680,7 +715,7 @@
                     labels,
                     datasets: [
                         {
-                            label: "Keyword share",
+                            label: "Alerts",
                             data: values,
                             backgroundColor: backgroundColor,
                             borderColor: "rgba(255,255,255,0.2)",
@@ -723,7 +758,6 @@
                                             return {
                                                 text: `${label} (${percentage}%)`,
                                                 fillStyle: dataset.backgroundColor[i],
-                                                // Explicitly force white legend text for all Chart.js versions
                                                 color: '#ffffff',
                                                 fontColor: '#ffffff',
                                                 hidden: false,
@@ -740,7 +774,7 @@
             });
         } catch (error) {
             console.error(error);
-            showToast("Keyword analytics unavailable", "error");
+            showToast("Channel analytics unavailable", "error");
         }
     }
 
@@ -1185,7 +1219,7 @@
 
     document.addEventListener("DOMContentLoaded", () => {
         document.getElementById("btn-refresh-performance")?.addEventListener("click", refreshPerformance);
-        document.getElementById("btn-refresh-keywords")?.addEventListener("click", () => { refreshKeywords(); refreshAnomalies(); });
+        document.getElementById("btn-refresh-keywords")?.addEventListener("click", () => { refreshKeywords(); refreshChannels(); refreshAnomalies(); });
         document.getElementById("btn-refresh-containers")?.addEventListener("click", () => { refreshSystemHealth(); refreshContainers(); });
         document.getElementById("btn-refresh-endpoints")?.addEventListener("click", refreshEndpoints);
         document.getElementById("btn-refresh-metrics")?.addEventListener("click", refreshLiveMetrics);
@@ -1196,6 +1230,7 @@
         refreshLiveMetrics();
         refreshPerformance();
         refreshKeywords();
+        refreshChannels();
         refreshAnomalies();
         startIntervals();
     });

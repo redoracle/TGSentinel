@@ -23,81 +23,81 @@ from typing import Any, Callable, Dict, Iterable, List, Tuple, cast
 
 # Import shared utilities (handle both package and direct imports)
 try:
+    from .auth import (
+        check_session_missing,
+        clear_login_context,
+        finalize_relogin_handshake,
+        get_login_context_file_path,
+        invalidate_session,
+        load_login_context,
+        read_handshake_state,
+        request_relogin_handshake,
+        resolve_session_path,
+        store_login_context,
+        submit_auth_request,
+        validate_session_file,
+        wait_for_worker_authorization,
+    )
+    from .redis_cache import (
+        credential_fingerprint,
+        get_avatar_url,
+        get_stream_name,
+        load_cached_user_info,
+        publish_ui_credentials,
+        wait_for_cached_user_info,
+    )
+    from .services.data_service import DataService
+    from .services.profiles_service import ProfileService, init_profile_service
     from .utils import (
+        fallback_avatar,
+        fallback_username,
+        format_display_phone,
         format_timestamp,
-        truncate,
         mask_phone,
         normalize_phone,
-        format_display_phone,
         normalize_tags,
-        fallback_username,
-        fallback_avatar,
+        truncate,
     )
     from .utils.serializers import serialize_channels
     from .utils.validators import validate_config_payload
-    from .services.data_service import DataService
-    from .services.profiles_service import ProfileService, init_profile_service
-    from .redis_cache import (
-        load_cached_user_info,
-        wait_for_cached_user_info,
-        get_avatar_url,
-        credential_fingerprint,
-        publish_ui_credentials,
-        get_stream_name,
-    )
-    from .auth import (
-        validate_session_file,
-        resolve_session_path,
-        invalidate_session,
+except ImportError:
+    from auth import (
         check_session_missing,
-        read_handshake_state,
-        request_relogin_handshake,
+        clear_login_context,
         finalize_relogin_handshake,
         get_login_context_file_path,
-        store_login_context,
+        invalidate_session,
         load_login_context,
-        clear_login_context,
+        read_handshake_state,
+        request_relogin_handshake,
+        resolve_session_path,
+        store_login_context,
         submit_auth_request,
+        validate_session_file,
         wait_for_worker_authorization,
     )
-except ImportError:
+    from redis_cache import (
+        credential_fingerprint,
+        get_avatar_url,
+        get_stream_name,
+        load_cached_user_info,
+        publish_ui_credentials,
+        wait_for_cached_user_info,
+    )
+    from services.data_service import DataService
+    from services.profiles_service import ProfileService, init_profile_service
     from utils import (
+        fallback_avatar,
+        fallback_username,
+        format_display_phone,
         format_timestamp,
-        truncate,
         mask_phone,
         normalize_phone,
-        format_display_phone,
         normalize_tags,
-        fallback_username,
-        fallback_avatar,
+        truncate,
     )
     from utils.serializers import serialize_channels
     from utils.validators import validate_config_payload
-    from services.data_service import DataService
-    from services.profiles_service import ProfileService, init_profile_service
-    from redis_cache import (
-        load_cached_user_info,
-        wait_for_cached_user_info,
-        get_avatar_url,
-        credential_fingerprint,
-        publish_ui_credentials,
-        get_stream_name,
-    )
-    from auth import (
-        validate_session_file,
-        resolve_session_path,
-        invalidate_session,
-        check_session_missing,
-        read_handshake_state,
-        request_relogin_handshake,
-        finalize_relogin_handshake,
-        get_login_context_file_path,
-        store_login_context,
-        load_login_context,
-        clear_login_context,
-        submit_auth_request,
-        wait_for_worker_authorization,
-    )
 
 # When this module is imported as top-level ``app`` (e.g. tests that do
 # ``import app`` after adding the ``ui`` folder to sys.path), ensure that
@@ -213,21 +213,22 @@ except Exception:  # pragma: no cover - redis is optional
 # Removing import to prevent accidental dual-writer violations
 TelegramClient = None  # type: ignore
 
-import gc
-import yaml
 import fcntl
+import gc
 import shutil
 import tempfile
+import time
+
+import yaml
 from flask import (
     Flask,
     jsonify,
+    redirect,
     render_template,
     request,
     send_from_directory,
     session,
-    redirect,
 )
-import time
 
 try:
     from flask_cors import CORS  # type: ignore
@@ -273,6 +274,7 @@ except Exception:  # pragma: no cover - optional dependency
     SocketIO = _SocketIOShim  # type: ignore
 
 from functools import wraps
+
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
@@ -618,15 +620,15 @@ def init_app() -> None:
             # Use relative import when running as module, absolute when needed
             try:
                 from ui.routes.session import (
-                    session_bp,
                     inject_dependencies,
                     inject_helpers,
+                    session_bp,
                 )
             except ImportError:
                 from routes.session import (
-                    session_bp,
                     inject_dependencies,
                     inject_helpers,
+                    session_bp,
                 )
 
             # Inject dependencies into blueprint
@@ -701,10 +703,13 @@ def init_app() -> None:
             try:
                 from ui.api.analytics_routes import (
                     analytics_bp,
-                    init_blueprint as init_analytics,
                 )
+                from ui.api.analytics_routes import init_blueprint as init_analytics
             except ImportError:
-                from api.analytics_routes import analytics_bp, init_blueprint as init_analytics  # type: ignore
+                from api.analytics_routes import analytics_bp
+                from api.analytics_routes import (
+                    init_blueprint as init_analytics,  # type: ignore
+                )
 
             # Inject dependencies into analytics blueprint
             init_analytics(
@@ -732,10 +737,13 @@ def init_app() -> None:
             try:
                 from ui.api.console_routes import (
                     console_bp,
-                    init_blueprint as init_console,
                 )
+                from ui.api.console_routes import init_blueprint as init_console
             except ImportError:
-                from api.console_routes import console_bp, init_blueprint as init_console  # type: ignore
+                from api.console_routes import console_bp
+                from api.console_routes import (
+                    init_blueprint as init_console,  # type: ignore
+                )
 
             # Inject dependencies into console blueprint
             init_console(
@@ -759,12 +767,15 @@ def init_app() -> None:
         # Register telegram blueprint
         try:
             try:
+                from ui.api.telegram_routes import init_blueprint as init_telegram
                 from ui.api.telegram_routes import (
                     telegram_bp,
-                    init_blueprint as init_telegram,
                 )
             except ImportError:
-                from api.telegram_routes import telegram_bp, init_blueprint as init_telegram  # type: ignore
+                from api.telegram_routes import (
+                    init_blueprint as init_telegram,  # type: ignore
+                )
+                from api.telegram_routes import telegram_bp
 
             # Inject dependencies into telegram blueprint
             init_telegram(
@@ -786,10 +797,13 @@ def init_app() -> None:
             try:
                 from ui.api.developer_routes import (
                     developer_bp,
-                    init_blueprint as init_developer,
                 )
+                from ui.api.developer_routes import init_blueprint as init_developer
             except ImportError:
-                from api.developer_routes import developer_bp, init_blueprint as init_developer  # type: ignore
+                from api.developer_routes import developer_bp
+                from api.developer_routes import (
+                    init_blueprint as init_developer,  # type: ignore
+                )
 
             # Inject dependencies
             init_developer(
@@ -848,11 +862,14 @@ def init_app() -> None:
         try:
             try:
                 from ui.routes.profiles import (
-                    profiles_bp,
                     init_profiles_routes,
+                    profiles_bp,
                 )
             except ImportError:
-                from routes.profiles import profiles_bp, init_profiles_routes  # type: ignore
+                from routes.profiles import (  # type: ignore
+                    init_profiles_routes,
+                    profiles_bp,
+                )
 
             # Inject dependencies into profiles blueprint
             init_profiles_routes(
@@ -878,7 +895,10 @@ def init_app() -> None:
                     init_channels_routes,
                 )
             except ImportError:
-                from routes.channels import channels_bp, init_channels_routes  # type: ignore
+                from routes.channels import (  # type: ignore
+                    channels_bp,
+                    init_channels_routes,
+                )
 
             # Inject dependencies into channels blueprint
             with app.app_context():
@@ -898,11 +918,11 @@ def init_app() -> None:
         try:
             try:
                 from ui.routes.users import (
-                    users_bp,
                     set_reload_config_fn,
+                    users_bp,
                 )
             except ImportError:
-                from routes.users import users_bp, set_reload_config_fn  # type: ignore
+                from routes.users import set_reload_config_fn, users_bp  # type: ignore
 
             # Inject dependencies into users blueprint
             set_reload_config_fn(reload_config)
@@ -944,7 +964,10 @@ def init_app() -> None:
             try:
                 from ui.api.static_routes import init_static_directories, static_bp
             except ImportError:
-                from api.static_routes import init_static_directories, static_bp  # type: ignore
+                from api.static_routes import (  # type: ignore
+                    init_static_directories,
+                    static_bp,
+                )
 
             app.register_blueprint(static_bp)
             logger.info("Registered static routes blueprint")
@@ -1001,11 +1024,11 @@ def init_app() -> None:
         # Initialize digest service and register digest routes blueprint
         try:
             try:
-                from ui.services.digest_service import DigestService
                 from ui.routes.digest import digest_bp, init_digest_routes
+                from ui.services.digest_service import DigestService
             except ImportError:
-                from services.digest_service import DigestService  # type: ignore
                 from routes.digest import digest_bp, init_digest_routes  # type: ignore
+                from services.digest_service import DigestService  # type: ignore
 
             # Initialize digest service with Sentinel API base URL
             sentinel_api_base_url = os.getenv(
@@ -1153,7 +1176,8 @@ def init_app() -> None:
             if app.config.get("TESTING") or UI_SKIP_AUTH:
                 return None
 
-            from flask import request as req_obj, render_template
+            from flask import render_template
+            from flask import request as req_obj
 
             path = req_obj.path
 
@@ -1259,7 +1283,8 @@ def _ensure_init(func: Callable[..., Any]) -> Callable[..., Any]:
                 # Skip gating completely when in auth bypass mode (dev only)
                 if UI_SKIP_AUTH:
                     return func(*args, **kwargs)
-                from flask import request as _rq, render_template as _rt  # type: ignore
+                from flask import render_template as _rt
+                from flask import request as _rq  # type: ignore
 
                 path = _rq.path
 

@@ -53,7 +53,9 @@
                                 <a class="nav-link" href="#sentinel-session">Session Management</a>
                                 <a class="nav-link" href="#sentinel-status">Health & Status</a>
                                 <a class="nav-link" href="#sentinel-database">Database Operations</a>
+                                <a class="nav-link" href="#sentinel-profiles">Profiles & Digests</a>
                                 <a class="nav-link" href="#sentinel-assets">Media & Stats</a>
+                                <a class="nav-link" href="#sentinel-analytics">Analytics</a>
                             </nav>
                         </div>
                         <div class="docs-nav-list" data-docs-nav="ui">
@@ -144,7 +146,7 @@
                             <tr>
                                 <td><span class="method-badge method-get">GET</span></td>
                                 <td><code>/metrics</code></td>
-                                <td>Prometheus metrics endpoint for monitoring and alerting.</td>
+                                <td>Prometheus metrics (worker authorization, Redis depth, DB counts).</td>
                             </tr>
                             <tr>
                                 <td><span class="method-badge method-get">GET</span></td>
@@ -154,7 +156,7 @@
                             <tr>
                                 <td><span class="method-badge method-get">GET</span></td>
                                 <td><code>/api/status</code></td>
-                                <td>Authorization flag, connection status, cached user_info, last_sync.</td>
+                                <td>Authorization flag, connection status, cached <code>user_info</code>, <code>last_sync</code>.</td>
                             </tr>
                             <tr>
                                 <td><span class="method-badge method-get">GET</span></td>
@@ -164,7 +166,7 @@
                             <tr>
                                 <td><span class="method-badge method-post">POST</span></td>
                                 <td><code>/api/config</code></td>
-                                <td>Update configuration with deep merge (writes to YAML).</td>
+                                <td>Deep-merge configuration update (validates then writes YAML atomically).</td>
                             </tr>
                             <tr>
                                 <td><span class="method-badge method-post">POST</span></td>
@@ -179,37 +181,117 @@
                             <tr>
                                 <td><span class="method-badge method-get">GET</span></td>
                                 <td><code>/api/avatar/&lt;prefix&gt;/&lt;int:entity_id&gt;</code></td>
-                                <td>Streams JPEG avatar from Redis cache for users/chats.</td>
+                                <td>Serves avatars from Redis cache (<code>prefix</code> user|chat).</td>
                             </tr>
                             <tr>
                                 <td><span class="method-badge method-get">GET</span></td>
                                 <td><code>/api/alerts</code></td>
-                                <td>Placeholder alert feed (extend within sentinel handlers).</td>
+                                <td>Paginated alerted messages (<code>limit</code>, <code>offset</code>, <code>unread_only</code>).</td>
                             </tr>
                             <tr>
                                 <td><span class="method-badge method-get">GET</span></td>
                                 <td><code>/api/digests</code></td>
-                                <td>Returns recent message digests with metadata.</td>
+                                <td>Digest stats grouped by date (items + avg_score).</td>
                             </tr>
                             <tr>
-                                <td><span class="method-badge method-post">POST</span></td>
-                                <td><code>/api/feedback</code></td>
-                                <td>Submit user feedback (thumbs up/down) for alert quality.</td>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><code>/api/digest/schedules</code></td>
+                                <td>All configured digest schedules across profiles (with last run info).</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><code>/api/digest/schedules/&lt;profile_id&gt;</code></td>
+                                <td>Digest config for a single global profile.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span> / <span class="method-badge method-put">PUT</span></td>
+                                <td><code>/api/config/profiles/&lt;profile_id&gt;/digest</code></td>
+                                <td>Read/update digest config in <code>config/profiles.yml</code>.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span> / <span class="method-badge method-put">PUT</span></td>
+                                <td><code>/api/config/channels/&lt;id&gt;/digest</code></td>
+                                <td>Channel-level digest config (tgsentinel.yml).</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span> / <span class="method-badge method-put">PUT</span></td>
+                                <td><code>/api/config/channels/&lt;id&gt;/overrides/digest</code></td>
+                                <td>Channel-specific digest overrides (tgsentinel.yml → overrides.digest).</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span> / <span class="method-badge method-put">PUT</span></td>
+                                <td><code>/api/config/users/&lt;id&gt;/digest</code></td>
+                                <td>Monitored user digest config (tgsentinel.yml).</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span> / <span class="method-badge method-put">PUT</span></td>
+                                <td><code>/api/config/users/&lt;id&gt;/overrides/digest</code></td>
+                                <td>User-specific digest overrides (tgsentinel.yml → overrides.digest).</td>
                             </tr>
                             <tr>
                                 <td><span class="method-badge method-get">GET</span></td>
                                 <td><code>/api/stats</code></td>
-                                <td>Placeholder metrics (messages_processed, alerts_sent, uptime_seconds).</td>
+                                <td>Stats window (<code>hours</code>): messages_ingested, alerts_sent, avg_importance, feedback_accuracy.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-post">POST</span></td>
+                                <td><code>/api/feedback</code></td>
+                                <td>Persist thumbs up/down feedback for a message.</td>
                             </tr>
                             <tr>
                                 <td><span class="method-badge method-post">POST</span></td>
                                 <td><code>/api/database/vacuum</code></td>
-                                <td>Optimize database by reclaiming unused space (SQLite VACUUM).</td>
+                                <td><strong>Admin</strong> async VACUUM with Redis lock (<code>?maintenance_window=true</code> required).</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><code>/api/database/vacuum/status/&lt;job_id&gt;</code></td>
+                                <td><strong>Admin</strong> background VACUUM job status.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-post">POST</span></td>
+                                <td><code>/api/database/vacuum/cleanup</code></td>
+                                <td><strong>Admin</strong> prune old VACUUM job records.</td>
                             </tr>
                             <tr>
                                 <td><span class="method-badge method-post">POST</span></td>
                                 <td><code>/api/database/cleanup</code></td>
-                                <td>Delete old messages based on retention policy.</td>
+                                <td>Delete old messages (<code>?days</code> with defaults/guards).</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-post">POST</span></td>
+                                <td><code>/api/profiles/interest/backtest</code></td>
+                                <td>Backtest semantic interest profile against recent messages.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-post">POST</span></td>
+                                <td><code>/api/profiles/interest/test_similarity</code></td>
+                                <td>Score a sample against interest profile positive samples.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><code>/api/profiles/&lt;profile_type&gt;</code></td>
+                                <td>List alert/global/interest profiles from YAML.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><code>/api/profiles/&lt;profile_type&gt;/&lt;profile_id&gt;</code></td>
+                                <td>Fetch a single profile.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-post">POST</span> / <span class="method-badge method-put">PUT</span></td>
+                                <td><code>/api/profiles/&lt;profile_type&gt;</code></td>
+                                <td>Replace all profiles of a type (atomic write).</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-post">POST</span></td>
+                                <td><code>/api/profiles/&lt;profile_type&gt;/&lt;profile_id&gt;/toggle</code></td>
+                                <td>Flip enabled flag for a profile.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-delete">DELETE</span></td>
+                                <td><code>/api/profiles/&lt;profile_type&gt;/&lt;profile_id&gt;</code></td>
+                                <td>Delete a profile.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -400,25 +482,25 @@ curl -X POST {{ sentinel_api_base_url | default('http://localhost:8080') }}/api/
                                 <strong class="ms-2 section-url">/api/database/vacuum</strong>
                             </div>
                         </div>
-                        <p class="mb-2 alert-info">Runs SQLite VACUUM on <code>sentinel.db</code> to reclaim unused space and optimize database file structure. This operation rebuilds the database file and can take time proportional to database size.</p>
-                        <h6>Request Body:</h6>
-                        <pre class="code-block"><code class="language-json">{}</code></pre>
-                        <h6 class="alert alert-info">Response Example (Success):</h6>
+                        <p class="mb-2 alert-info">Asynchronous VACUUM with Redis distributed lock. Requires <code>X-Admin-Token</code> header and <code>?maintenance_window=true</code> acknowledgment. Returns a job id and continues in the background.</p>
+                        <h6>Request:</h6>
+                        <pre class="code-block"><code class="language-bash">curl -X POST "{{ sentinel_api_base_url | default('http://localhost:8080') }}/api/database/vacuum?maintenance_window=true" \
+  -H "X-Admin-Token: $ADMIN_TOKEN"</code></pre>
+                        <h6 class="alert alert-info">Response (202 Accepted):</h6>
                         <pre class="code-block"><code class="language-json">{
-  "status": "ok",
-  "message": "VACUUM completed",
-  "details": {
-    "size_before_mb": 125.4,
-    "size_after_mb": 98.2,
-    "space_freed_mb": 27.2
-  }
+  "status": "accepted",
+  "data": {
+    "job_id": "0c6c74cb-77d1-49a2-9e2f-98e3b8a5d7ad",
+    "message": "VACUUM operation started in background",
+    "status_url": "/api/database/vacuum/status/0c6c74cb-77d1-49a2-9e2f-98e3b8a5d7ad"
+  },
+  "error": null
 }</code></pre>
-                        <h6>Usage Pattern:</h6>
-                        <pre class="code-block"><code class="language-bash">curl -X POST {{ sentinel_api_base_url | default('http://localhost:8080') }}/api/database/vacuum \
-  -H "Content-Type: application/json" \
-  -d '{}'</code></pre>
+                        <div class="alert alert-secondary mt-3">
+                            Track progress via <code>GET /api/database/vacuum/status/&lt;job_id&gt;</code> (also admin-protected) and prune history with <code>POST /api/database/vacuum/cleanup</code>.
+                        </div>
                         <div class="alert alert-warning mt-3">
-                            <strong>Note:</strong> VACUUM requires exclusive database access and may take several seconds to minutes on large databases. Run during maintenance windows.
+                            <strong>Note:</strong> VACUUM requires exclusive database access and temporary disk space (~2x DB). Run during maintenance windows only.
                         </div>
                     </div>
                 </div>
@@ -431,34 +513,108 @@ curl -X POST {{ sentinel_api_base_url | default('http://localhost:8080') }}/api/
                                 <strong class="ms-2 section-url">/api/database/cleanup</strong>
                             </div>
                         </div>
-                        <p class="mb-2 alert-info">Deletes old message records from <code>sentinel.db</code> based on retention policy. Removes messages older than the configured retention period while preserving recent data for analysis.</p>
-                        <h6>Request Body (Optional - uses defaults from config):</h6>
-                        <pre class="code-block"><code class="language-json">{
-  "retention_days": 90
-}</code></pre>
-                        <h6 class="alert alert-info">Response Example (Success):</h6>
+                        <p class="mb-2 alert-info">Deletes old messages using <code>?days=&lt;retention&gt;</code> (default 30, max 365) plus config-based caps (<code>system.database.max_messages</code>, <code>preserve_alerted_multiplier</code>).</p>
+                        <h6>Usage Pattern:</h6>
+                        <pre class="code-block"><code class="language-bash"># Default (30 days)
+curl -X POST "{{ sentinel_api_base_url | default('http://localhost:8080') }}/api/database/cleanup"
+
+# Custom retention
+curl -X POST "{{ sentinel_api_base_url | default('http://localhost:8080') }}/api/database/cleanup?days=90"</code></pre>
+                        <h6 class="alert alert-info">Response Example:</h6>
                         <pre class="code-block"><code class="language-json">{
   "status": "ok",
-  "message": "Cleanup completed",
-  "details": {
-    "messages_deleted": 15420,
-    "retention_days": 90,
-    "oldest_remaining": "2024-08-19T00:00:00Z"
-  }
+  "data": {
+    "deleted_by_age": 1200,
+    "deleted_by_count": 0,
+    "total_deleted": 1200,
+    "remaining_count": 4820,
+    "retention_days": 90
+  },
+  "error": null
 }</code></pre>
-                        <h6>Usage Pattern:</h6>
-                        <pre class="code-block"><code class="language-bash"># Use default retention period
-curl -X POST {{ sentinel_api_base_url | default('http://localhost:8080') }}/api/database/cleanup \
-  -H "Content-Type: application/json" \
-  -d '{}'
-
-# Specify custom retention period (30 days)
-curl -X POST {{ sentinel_api_base_url | default('http://localhost:8080') }}/api/database/cleanup \
-  -H "Content-Type: application/json" \
-  -d '{"retention_days": 30}'</code></pre>
                         <div class="alert alert-info mt-3">
                             <strong>Tip:</strong> Run cleanup before VACUUM for maximum space reclamation. Typical workflow: cleanup (delete old data) → vacuum (reclaim space).
                         </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="sentinel-profiles" class="mb-5">
+                <h2 class="section-header">Profiles & Digest Scheduling</h2>
+                <p>Sentinel owns profile YAML files and digest schedules. Use these endpoints to inspect or update them from the UI or automation.</p>
+
+                <div class="endpoint-card card method-get">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                                <strong class="ms-2 section-url">/api/digest/schedules</strong>
+                            </div>
+                        </div>
+                        <p class="mb-2 alert-info">Lists enabled digest schedules across all global profiles including last/next run hints from Redis.</p>
+                        <pre class="code-block"><code class="language-json">{
+  "status": "ok",
+  "data": {
+    "schedules": [
+      {"schedule": "daily", "profiles": ["3000-general"], "last_run": "2025-01-07T00:03:00Z"}
+    ],
+    "count": 1
+  }
+}</code></pre>
+                    </div>
+                </div>
+
+                <div class="endpoint-card card method-put">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <span class="method-badge method-get" aria-label="HTTP GET method">GET</span> /
+                                <span class="method-badge method-put" aria-label="HTTP PUT method">PUT</span>
+                                <strong class="ms-2 section-url">/api/config/profiles/&lt;profile_id&gt;/digest</strong>
+                            </div>
+                        </div>
+                        <p class="mb-2 alert-info">Read or update digest settings for a global profile (writes <code>config/profiles.yml</code> atomically with validation and config reload).</p>
+                        <pre class="code-block"><code class="language-json">{
+  "schedules": [{"schedule": "daily", "enabled": true, "daily_hour": 8, "top_n": 15}],
+  "mode": "dm",
+  "target_channel": null,
+  "top_n": 15,
+  "min_score": 0.4
+}</code></pre>
+                        <p class="mb-0">Channel/user level variants live at <code>/api/config/channels/&lt;id&gt;/digest</code>, <code>/api/config/channels/&lt;id&gt;/overrides/digest</code>, <code>/api/config/users/&lt;id&gt;/digest</code>, and <code>/api/config/users/&lt;id&gt;/overrides/digest</code>.</p>
+                    </div>
+                </div>
+
+                <div class="endpoint-card card method-post">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <span class="method-badge method-post" aria-label="HTTP POST method">POST</span>
+                                <strong class="ms-2 section-url">/api/profiles/interest/backtest</strong>
+                            </div>
+                        </div>
+                        <p class="mb-2 alert-info">Scores recent messages (<=1000) with the semantic model loaded in Sentinel to estimate match rates for an interest profile draft.</p>
+                        <pre class="code-block"><code class="language-json">{
+  "profile_name": "threat-intel",
+  "profile": {"threshold": 0.42, "positive_samples": ["cve", "0day", "poc"]},
+  "hours_back": 24,
+  "max_messages": 200
+}</code></pre>
+                    </div>
+                </div>
+
+                <div class="endpoint-card card method-post">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <span class="method-badge method-post" aria-label="HTTP POST method">POST</span>
+                                <strong class="ms-2 section-url">/api/profiles/&lt;type&gt;</strong>
+                            </div>
+                        </div>
+                        <p class="mb-2 alert-info">Unified CRUD for <code>alert</code>, <code>global</code>, and <code>interest</code> YAML profiles. Combine with <code>GET /api/profiles/&lt;type&gt;</code> to read and <code>.../&lt;id&gt;/toggle</code> to enable/disable.</p>
+                        <pre class="code-block"><code class="language-json">{
+  "alert_profile_1": {"enabled": true, "keywords": ["urgent", "alert"]}
+}</code></pre>
                     </div>
                 </div>
             </section>
@@ -535,12 +691,31 @@ curl {{ sentinel_api_base_url | default('http://localhost:8080') }}/api/avatar/c
                                 <strong class="ms-2 section-url">/api/alerts</strong>
                             </div>
                         </div>
-                        <p class="mb-2 alert-info">Returns recent alerts generated by the Sentinel worker. Currently returns placeholder data; extend for production use.</p>
+                        <p class="mb-2 alert-info">Paginated alerted messages ordered by <code>created_at</code>. Supports <code>limit</code> (max 1000), <code>offset</code>, and <code>unread_only</code> query params.</p>
                         <h6 class="alert alert-info">Response Example:</h6>
                         <pre class="code-block"><code class="language-json">{
   "status": "ok",
   "data": {
-    "alerts": []
+    "alerts": [
+      {
+        "alert_id": "-100123_42",
+        "chat_id": -100123,
+        "message_id": 42,
+        "chat_title": "Research Leads",
+        "sender_name": "Analyst Bot",
+        "message_text": "New high priority message...",
+        "score": 0.93,
+        "triggers": "interest:security, keyword:zero-day",
+        "sender_id": 99999,
+        "timestamp": "2025-01-07 12:00:00",
+        "read": false,
+        "dismissed": false
+      }
+    ],
+    "count": 1,
+    "total": 128,
+    "limit": 25,
+    "offset": 0
   },
   "error": null
 }</code></pre>
@@ -555,20 +730,16 @@ curl {{ sentinel_api_base_url | default('http://localhost:8080') }}/api/avatar/c
                                 <strong class="ms-2 section-url">/api/digests</strong>
                             </div>
                         </div>
-                        <p class="mb-2 alert-info">Returns recent digest summaries with metadata including timestamp, item count, and average importance scores.</p>
+                        <p class="mb-2 alert-info">Daily digest statistics. Optional <code>limit</code> (default 14, max 365) query param.</p>
                         <h6 class="alert alert-info">Response Example:</h6>
                         <pre class="code-block"><code class="language-json">{
   "status": "ok",
   "data": {
     "digests": [
-      {
-        "timestamp": "2025-11-18T12:00:00Z",
-        "type": "hourly",
-        "items": 42,
-        "avg_importance": 0.67,
-        "top_channels": ["Channel Alpha", "Channel Beta"]
-      }
-    ]
+      {"date": "2025-01-07", "items": 18, "avg_score": 0.71},
+      {"date": "2025-01-06", "items": 11, "avg_score": 0.63}
+    ],
+    "count": 2
   },
   "error": null
 }</code></pre>
@@ -599,7 +770,11 @@ curl {{ sentinel_api_base_url | default('http://localhost:8080') }}/api/avatar/c
                         <h6 class="alert alert-info">Response:</h6>
                         <pre class="code-block"><code class="language-json">{
   "status": "ok",
-  "message": "Feedback recorded",
+  "data": {
+    "chat_id": -1001234567890,
+    "msg_id": 12345,
+    "label": "up"
+  },
   "error": null
 }</code></pre>
                     </div>
@@ -613,19 +788,151 @@ curl {{ sentinel_api_base_url | default('http://localhost:8080') }}/api/avatar/c
                                 <strong class="ms-2 section-url">/api/stats</strong>
                             </div>
                         </div>
-                        <p class="mb-2 alert-info">Returns worker operational statistics including message counts, alert counts, and uptime. Use this for dashboards and status pages.</p>
+                        <p class="mb-2 alert-info">Rolling stats over <code>hours</code> (default 24, max 168): messages ingested, alerts sent, average importance, inferred feedback accuracy, and DB size.</p>
                         <h6 class="alert alert-info">Response Example:</h6>
                         <pre class="code-block"><code class="language-json">{
   "status": "ok",
   "data": {
-    "messages_processed": 15240,
-    "alerts_sent": 432,
-    "uptime_seconds": 86400.5,
-    "last_message_at": "2025-11-18T12:45:00Z",
-    "connected_chats": 8
+    "messages_ingested": 542,
+    "alerts_sent": 112,
+    "avg_importance": 0.64,
+    "feedback_accuracy": 88.5,
+    "database_size_bytes": 73400320
   },
   "error": null
 }</code></pre>
+                    </div>
+                </div>
+            </section>
+            
+            <section id="sentinel-analytics" class="mb-5">
+                <h2 class="section-header">Analytics Endpoints</h2>
+                <p>Time-series and aggregated analytics from the message database. These endpoints power the Analytics dashboard and provide insights into alert patterns, keyword effectiveness, and channel activity.</p>
+                
+                <div class="endpoint-card card method-get">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                                <strong class="ms-2 section-url">/api/analytics/keywords</strong>
+                            </div>
+                        </div>
+                        <p class="mb-2 alert-info">Returns keyword/trigger match counts from alerted messages. Analyzes the <code>triggers</code> field to show which keywords are generating alerts.</p>
+                        <h6>Query Parameters:</h6>
+                        <ul>
+                            <li><code>hours</code>: Lookback period in hours (default: 24, max: 168)</li>
+                        </ul>
+                        <h6 class="alert alert-info">Response Example:</h6>
+                        <pre class="code-block"><code class="language-json">{
+  "status": "ok",
+  "data": {
+    "keywords": [
+      {
+        "keyword": "private-chat, reactions, replies",
+        "count": 20
+      },
+      {
+        "keyword": "private-chat, reactions, replies, keywords",
+        "count": 10
+      },
+      {
+        "keyword": "private-chat, reactions, keywords",
+        "count": 8
+      }
+    ]
+  },
+  "error": null
+}</code></pre>
+                        <h6>Example Usage:</h6>
+                        <pre class="code-block"><code class="language-bash"># Get keyword analytics for last 24 hours
+curl {{ sentinel_api_base_url | default('http://localhost:8080') }}/api/analytics/keywords
+
+# Get keyword analytics for last week
+curl "{{ sentinel_api_base_url | default('http://localhost:8080') }}/api/analytics/keywords?hours=168"</code></pre>
+                    </div>
+                </div>
+                
+                <div class="endpoint-card card method-get">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                                <strong class="ms-2 section-url">/api/analytics/channels</strong>
+                            </div>
+                        </div>
+                        <p class="mb-2 alert-info">Returns alert counts grouped by channel. Shows which channels are generating the most alerts.</p>
+                        <h6>Query Parameters:</h6>
+                        <ul>
+                            <li><code>hours</code>: Lookback period in hours (default: 24, max: 168)</li>
+                        </ul>
+                        <h6 class="alert alert-info">Response Example:</h6>
+                        <pre class="code-block"><code class="language-json">{
+  "status": "ok",
+  "data": {
+    "channels": [
+      {
+        "channel": "Algorand Foundation Announcements (Official)",
+        "alerts": 45
+      },
+      {
+        "channel": "Crypto Research Group",
+        "alerts": 12
+      }
+    ]
+  },
+  "error": null
+}</code></pre>
+                        <h6>Example Usage:</h6>
+                        <pre class="code-block"><code class="language-bash"># Get channel analytics for last 24 hours
+curl {{ sentinel_api_base_url | default('http://localhost:8080') }}/api/analytics/channels
+
+# Get channel analytics for last 48 hours
+curl "{{ sentinel_api_base_url | default('http://localhost:8080') }}/api/analytics/channels?hours=48"</code></pre>
+                    </div>
+                </div>
+                
+                <div class="endpoint-card card method-get">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                                <strong class="ms-2 section-url">/api/analytics/metrics</strong>
+                            </div>
+                        </div>
+                        <p class="mb-2 alert-info">Returns time-series performance metrics for charting. Provides alert counts and average scores bucketed by time.</p>
+                        <h6>Query Parameters:</h6>
+                        <ul>
+                            <li><code>hours</code>: Lookback period in hours (default: 2, max: 168)</li>
+                            <li><code>interval_minutes</code>: Time bucket size in minutes (default: 2, max: 60)</li>
+                        </ul>
+                        <h6 class="alert alert-info">Response Example:</h6>
+                        <pre class="code-block"><code class="language-json">{
+  "status": "ok",
+  "data": {
+    "metrics": [
+      {
+        "timestamp": "2025-11-23 19:47:00",
+        "alert_count": 45,
+        "avg_score": 1.81
+      },
+      {
+        "timestamp": "2025-11-23 20:00:00",
+        "alert_count": 12,
+        "avg_score": 2.15
+      }
+    ]
+  },
+  "error": null
+}</code></pre>
+                        <h6>Example Usage:</h6>
+                        <pre class="code-block"><code class="language-bash"># Get metrics for last 24 hours (hourly buckets)
+curl "{{ sentinel_api_base_url | default('http://localhost:8080') }}/api/analytics/metrics?hours=24&interval_minutes=60"
+
+# Get metrics for last 2 hours (2-minute buckets)
+curl "{{ sentinel_api_base_url | default('http://localhost:8080') }}/api/analytics/metrics?hours=2&interval_minutes=2"</code></pre>
+                        <div class="alert alert-warning mt-3">
+                            <strong>Note:</strong> This endpoint is used by the Analytics dashboard's Performance Metrics chart. The time-series data enables visualization of alert patterns over time.
+                        </div>
                     </div>
                 </div>
             </section>
@@ -649,6 +956,87 @@ curl {{ sentinel_api_base_url | default('http://localhost:8080') }}/api/avatar/c
 curl -X GET {{ api_base_url }}/api/system/health \
   -H "Content-Type: application/json"
             </code></pre>
+
+            <h3 class="mt-4">Endpoint Map (UI Container)</h3>
+            <p class="mb-3">UI routes proxy Sentinel, manage YAML, and drive dashboards. Use these paths when talking to the UI container.</p>
+            <div class="table-responsive">
+                <table class="table table-sm table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>Category</th>
+                            <th>Base Path</th>
+                            <th>Key Endpoints</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Session</td>
+                            <td><code>/api/session</code></td>
+                            <td><code>/info</code>, <code>/upload</code>, <code>/logout</code>, <code>/logout-complete</code>, <code>/relogin</code>, <code>/login/start</code>, <code>/login/resend</code>, <code>/login/verify</code></td>
+                        </tr>
+                        <tr>
+                            <td>Dashboard & Alerts</td>
+                            <td><code>/api</code></td>
+                            <td><code>/dashboard/summary</code>, <code>/dashboard/activity</code>, <code>/system/health</code>, <code>/api/sentinel/stats</code>, <code>/alerts/recent</code>, <code>/alerts/digests</code>, <code>/export_alerts</code>, <code>/config/threshold</code>, <code>/analytics/metrics</code>, <code>/analytics/keywords</code></td>
+                        </tr>
+                        <tr>
+                            <td>Worker Status</td>
+                            <td><code>/api/worker</code></td>
+                            <td><code>/status</code>, <code>/logout-progress</code>, <code>/login-progress</code></td>
+                        </tr>
+                        <tr>
+                            <td>Digest Proxy</td>
+                            <td><code>/api/digest</code></td>
+                            <td><code>/profiles/&lt;profile_id&gt;/config</code>, <code>/channels/&lt;id&gt;/config</code>, <code>/channels/&lt;id&gt;/overrides/config</code>, <code>/users/&lt;id&gt;/config</code>, <code>/users/&lt;id&gt;/overrides/config</code></td>
+                        </tr>
+                        <tr>
+                            <td>Profiles</td>
+                            <td><code>/api/profiles</code></td>
+                            <td><code>/export</code>, <code>/train</code>, <code>/test</code>, <code>/toggle</code>, <code>/get</code>, <code>/save</code>, <code>/delete</code>, <code>/import</code>, <code>/interest/backtest</code>, alert/interest CRUD (<code>/alert/*</code>, <code>/interest/*</code>)</td>
+                        </tr>
+                        <tr>
+                            <td>Config & Inventory</td>
+                            <td><code>/api/config</code></td>
+                            <td><code>/current</code>, <code>/channels/&lt;chat_id&gt;</code> (<code>DELETE</code>/<code>PATCH</code>), <code>/users/&lt;user_id&gt;</code> (<code>DELETE</code>); channels CRUD lives under <code>/api/config/channels</code> and users under <code>/api/config/users</code></td>
+                        </tr>
+                        <tr>
+                            <td>Admin</td>
+                            <td><code>/api</code></td>
+                            <td><code>/config/rules/test</code>, <code>/config/users/test</code>, <code>/config/stats/reset</code>, <code>/config/export</code>, <code>/config/clean-db</code>, <code>/alerts/feedback</code>, <code>/sentinel/restart</code></td>
+                        </tr>
+                        <tr>
+                            <td>Analytics</td>
+                            <td><code>/api</code></td>
+                            <td><code>/analytics/anomalies</code>, <code>/analytics/containers</code>, <code>/analytics/endpoints</code>, <code>/analytics/prometheus</code>, <code>/analytics/system-health</code>, <code>/console/diagnostics</code></td>
+                        </tr>
+                        <tr>
+                            <td>Developer & Webhooks</td>
+                            <td><code>/api</code></td>
+                            <td><code>/webhooks</code>, <code>/webhooks/test-all</code>, <code>/webhooks/&lt;service_name&gt;/test</code>, <code>/webhooks/&lt;service_name&gt;</code> (<code>PATCH</code>/<code>DELETE</code>), <code>/events/integration</code>, <code>/developer/settings</code>, <code>/api-keys/revoke</code></td>
+                        </tr>
+                        <tr>
+                            <td>Telegram</td>
+                            <td><code>/api/telegram</code></td>
+                            <td><code>/chats</code>, <code>/users</code> (cached chat/user roster)</td>
+                        </tr>
+                        <tr>
+                            <td>Console</td>
+                            <td><code>/api/console</code></td>
+                            <td><code>/command</code> (run limited maintenance commands)</td>
+                        </tr>
+                        <tr>
+                            <td>UI Lock</td>
+                            <td><code>/api/ui/lock</code></td>
+                            <td><code>POST /api/ui/lock</code> (lock/unlock), <code>GET /api/ui/lock/status</code></td>
+                        </tr>
+                        <tr>
+                            <td>Participants</td>
+                            <td><code>/api/participant/info</code></td>
+                            <td>Participant metadata surfaced to the UI</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </section>
 
         <!-- Authentication -->
@@ -2472,14 +2860,18 @@ volumes:
                     <div class="card-body">
                         <h5>Configuration Options</h5>
                         <ul>
-                            <li><strong>Similarity Threshold:</strong> Range 0.0-1.0, controls how closely messages must match</li>
-                            <li><strong>Profile Weight:</strong> Multiplier for this profile's importance (0-10)</li>
-                            <li><strong>Priority:</strong> Low, Normal, High, or Critical alert priority</li>
-                            <li><strong>Keywords:</strong> Optional keywords to boost scoring for specific terms</li>
+                            <li><strong>Similarity Threshold:</strong> Range 0.0-1.0, controls how closely messages must match your positive examples (per-profile setting used in backtests)</li>
+                            <li><strong>VIP Senders:</strong> User IDs that get priority matching (threshold reduced by 30% for these users)</li>
+                            <li><strong>Excluded Users:</strong> User IDs to blacklist (never match even if semantically similar)</li>
                             <li><strong>Tags:</strong> Organizational labels for filtering and grouping profiles</li>
                             <li><strong>Always Notify:</strong> Bypass other filters and always alert on matches</li>
                             <li><strong>Include in Digest:</strong> Whether matches appear in scheduled digests</li>
                         </ul>
+                        
+                        <div class="alert alert-info mt-3 mb-0">
+                            <strong>Note:</strong> Interest Profiles are designed for semantic understanding and backtesting. 
+                            For keyword-based scoring and heuristics (weight, priority, keyword boosts), use <strong>Alert Profiles</strong> instead.
+                        </div>
                     </div>
                 </div>
 
@@ -2495,10 +2887,12 @@ volumes:
                 <h3 class="mt-4">Best Practices</h3>
                 <ul>
                     <li>Provide diverse positive examples that cover different aspects of your interest</li>
-                    <li>Start with a threshold of 0.42 and adjust based on results</li>
+                    <li>Start with a threshold of 0.42 and adjust based on backtest results</li>
                     <li>Use negative examples to exclude common false positives</li>
-                    <li>Test your profile using the Backtest feature before activating</li>
-                    <li>Combine with keyword boosting for hybrid detection</li>
+                    <li><strong>Always test</strong> your profile using the Backtest feature before activating</li>
+                    <li>Use VIP Senders for important users whose content should match more easily</li>
+                    <li>Use Excluded Users to filter out bot accounts or noisy sources</li>
+                    <li>For keyword-based matching and scoring weights, create an <strong>Alert Profile</strong> instead</li>
                 </ul>
             </section>
 
@@ -2506,80 +2900,274 @@ volumes:
                 <h2 class="section-header">Detection Settings</h2>
                 <p class="lead">Fine-tune how alert profiles detect and filter messages with these advanced settings.</p>
                 
+                <div class="alert alert-info">
+                    <h5 class="alert-heading">
+                        <i class="bi bi-info-circle-fill me-2"></i>Score Calculation: Additive (OR) Logic
+                    </h5>
+                    <p class="mb-2">
+                        TG Sentinel uses <strong>additive scoring</strong> (OR logic), not AND logic. 
+                        This means a message does <strong>not</strong> need to match all enabled conditions to trigger an alert.
+                    </p>
+                    <p class="mb-2">
+                        <strong>How it works:</strong>
+                    </p>
+                    <ul class="mb-2">
+                        <li><strong>Each detection that triggers adds points</strong> to the total score</li>
+                        <li>If the final score ≥ Minimum Score threshold → Alert fires</li>
+                        <li>A message can alert from <em>just one</em> high-value condition (e.g., a pinned message with 1.2 points when threshold is 1.0)</li>
+                    </ul>
+                    <p class="mb-0">
+                        <strong>Example:</strong> If you enable "Detect Polls" (+1.0) and "Prioritize Pinned" (+1.2), a pinned poll would score 2.2 points. 
+                        But a <em>non-pinned</em> poll still scores 1.0 and will alert if your threshold is ≤ 1.0.
+                    </p>
+                </div>
+
                 <h3 class="mt-4">Core Settings</h3>
                 <div class="table-responsive">
                     <table class="table table-striped">
                         <thead>
                             <tr>
-                                <th>Setting</th>
-                                <th>Description</th>
-                                <th>Example</th>
+                                <th style="width: 25%;">Setting</th>
+                                <th style="width: 45%;">Description</th>
+                                <th style="width: 30%;">Example</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr>
                                 <td><strong>Minimum Score</strong></td>
-                                <td>Threshold for triggering alerts (0-10 scale)</td>
-                                <td>Set to 5.0 for medium sensitivity</td>
+                                <td>
+                                    Alert threshold (typically 0-20, theoretical max ~50 if all conditions met). 
+                                    Higher = fewer alerts. Use the <strong>Max Score Calculator</strong> in the form to see your profile's maximum achievable score.
+                                </td>
+                                <td>
+                                    <code>1.0</code> = very sensitive<br>
+                                    <code>5.0</code> = balanced (default)<br>
+                                    <code>10.0</code> = only high-priority
+                                </td>
                             </tr>
                             <tr>
                                 <td><strong>VIP Senders</strong></td>
-                                <td>Always alert from these users, regardless of score</td>
-                                <td>@vitalik, @satoshi</td>
+                                <td>Always boost score +1.0 per VIP sender (can stack). These users' messages get priority even with low keyword matches.</td>
+                                <td><code>@vitalik, @satoshi</code></td>
                             </tr>
                             <tr>
                                 <td><strong>Excluded Users</strong></td>
-                                <td>Never alert from these users (blacklist)</td>
-                                <td>@spammer, @bot_account</td>
+                                <td>Never alert from these users, regardless of score (blacklist)</td>
+                                <td><code>@spammer, @bot_account</code></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h3 class="mt-4">Keyword Categories (Additive Scoring)</h3>
+                <p>Each non-empty keyword category contributes to the total score when matches are found:</p>
+                <div class="table-responsive">
+                    <table class="table table-bordered">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 30%;">Category</th>
+                                <th style="width: 15%;">Score</th>
+                                <th style="width: 55%;">Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="badge bg-danger">Critical Keywords</span></td>
+                                <td><code>+1.5</code></td>
+                                <td>Highest-priority terms (e.g., "urgent", "critical", "ASAP")</td>
+                            </tr>
+                            <tr>
+                                <td><span class="badge bg-danger">Urgency Keywords</span></td>
+                                <td><code>+1.5</code></td>
+                                <td>Time-sensitive indicators (e.g., "deadline", "emergency")</td>
+                            </tr>
+                            <tr>
+                                <td><span class="badge bg-warning">Security Keywords</span></td>
+                                <td><code>+1.2</code></td>
+                                <td>Security/privacy terms (e.g., "breach", "vulnerability")</td>
+                            </tr>
+                            <tr>
+                                <td><span class="badge bg-warning">Financial Keywords</span></td>
+                                <td><code>+1.0</code></td>
+                                <td>Money-related terms (e.g., "price", "market", "fees")</td>
+                            </tr>
+                            <tr>
+                                <td><span class="badge bg-warning">Risk Keywords</span></td>
+                                <td><code>+1.0</code></td>
+                                <td>Risk indicators (e.g., "scam", "hack", "compromise")</td>
+                            </tr>
+                            <tr>
+                                <td><span class="badge bg-info">Importance Keywords</span></td>
+                                <td><code>+0.9</code></td>
+                                <td>General importance markers (e.g., "important", "note")</td>
+                            </tr>
+                            <tr>
+                                <td><span class="badge bg-info">Community Keywords</span></td>
+                                <td><code>+0.8</code></td>
+                                <td>Community/governance terms (e.g., "vote", "proposal")</td>
+                            </tr>
+                            <tr>
+                                <td><span class="badge bg-info">General Keywords</span></td>
+                                <td><code>+0.8</code></td>
+                                <td>Custom general-purpose keywords</td>
+                            </tr>
+                            <tr>
+                                <td><span class="badge bg-info">Release Keywords</span></td>
+                                <td><code>+0.8</code></td>
+                                <td>Release/update terms (e.g., "v2.0", "launch", "release")</td>
+                            </tr>
+                            <tr>
+                                <td><span class="badge bg-secondary">Opportunity Keywords</span></td>
+                                <td><code>+0.6</code></td>
+                                <td>Opportunities (e.g., "airdrop", "giveaway", "whitelist")</td>
+                            </tr>
+                            <tr>
+                                <td><span class="badge bg-secondary">Technical Keywords</span></td>
+                                <td><code>+0.5</code></td>
+                                <td>Technical terms (e.g., "API", "integration", "bug")</td>
+                            </tr>
+                            <tr>
+                                <td><span class="badge bg-secondary">Project Keywords</span></td>
+                                <td><code>+0.5</code></td>
+                                <td>Project-specific terms (e.g., protocol names, features)</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
 
                 <h3 class="mt-4">Detection Toggles</h3>
+                <p>Enable specific detection features that boost scores when matched (independent of keywords):</p>
                 <div class="row g-3 mt-2">
                     <div class="col-md-6">
-                        <div class="card">
+                        <div class="card border-primary">
                             <div class="card-body">
-                                <h5 class="card-title">❓ Detect Questions</h5>
+                                <h5 class="card-title">@️ Detect Mentions <span class="badge bg-primary">+2.0</span></h5>
+                                <p class="card-text">Boost score for messages mentioning specific users or @everyone tags. <strong>Highest detection bonus.</strong></p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card border-info">
+                            <div class="card-body">
+                                <h5 class="card-title">🔒 Detect Code Snippets <span class="badge bg-info">+1.3</span></h5>
+                                <p class="card-text">Boost score for messages containing multi-line code blocks or inline code patterns</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card border-info">
+                            <div class="card-body">
+                                <h5 class="card-title">📌 Prioritize Pinned <span class="badge bg-info">+1.2</span></h5>
+                                <p class="card-text">Boost score for pinned messages (typically high-priority announcements)</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card border-info">
+                            <div class="card-body">
+                                <h5 class="card-title">❓ Detect Questions <span class="badge bg-info">+1.2</span></h5>
                                 <p class="card-text">Boost score for messages containing question marks or interrogative patterns</p>
                             </div>
                         </div>
                     </div>
                     <div class="col-md-6">
-                        <div class="card">
+                        <div class="card border-secondary">
                             <div class="card-body">
-                                <h5 class="card-title">@️ Detect Mentions</h5>
-                                <p class="card-text">Boost score for messages mentioning specific users or @everyone tags</p>
+                                <h5 class="card-title">📊 Detect Polls <span class="badge bg-secondary">+1.0</span></h5>
+                                <p class="card-text">Boost score for messages containing polls (community decisions, voting)</p>
                             </div>
                         </div>
                     </div>
                     <div class="col-md-6">
-                        <div class="card">
+                        <div class="card border-secondary">
                             <div class="card-body">
-                                <h5 class="card-title">🔗 Detect Links</h5>
+                                <h5 class="card-title">👑 Prioritize Admin <span class="badge bg-secondary">+0.9</span></h5>
+                                <p class="card-text">Boost score for messages from channel/group admins (authority figures)</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card border-light">
+                            <div class="card-body">
+                                <h5 class="card-title">📄 Detect Documents <span class="badge bg-secondary">+0.7</span></h5>
+                                <p class="card-text">Boost score for messages with attached documents/files</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card border-light">
+                            <div class="card-body">
+                                <h5 class="card-title">🔗 Detect Links <span class="badge bg-secondary">+0.5</span></h5>
                                 <p class="card-text">Boost score for messages containing URLs or external links</p>
                             </div>
                         </div>
                     </div>
                     <div class="col-md-6">
-                        <div class="card">
+                        <div class="card border-warning">
                             <div class="card-body">
-                                <h5 class="card-title">📤 Only Forwards</h5>
-                                <p class="card-text">Only alert on forwarded messages (ignores original posts)</p>
+                                <h5 class="card-title">📤 Only Forwards <span class="badge bg-warning">Filter</span></h5>
+                                <p class="card-text">
+                                    <strong>Filter mode:</strong> Only alert on forwarded messages (ignores original posts). 
+                                    Does not add score, but <em>removes</em> non-forwarded messages from consideration.
+                                </p>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <h3 class="mt-4">Score Calculation</h3>
-                <p>The final alert score is calculated using:</p>
-                <pre><code>Final Score = Base Score + Category Bonuses + Pattern Multipliers
+                <h3 class="mt-4">Score Calculation Examples</h3>
+                <div class="alert alert-success">
+                    <h5 class="alert-heading">Example 1: Single Condition Alert</h5>
+                    <p><strong>Scenario:</strong> Only "Prioritize Pinned" (+1.2) is enabled. Minimum Score = 1.0</p>
+                    <ul class="mb-0">
+                        <li>A pinned message arrives → Score = 1.2 → <span class="badge bg-success">ALERT FIRES ✓</span></li>
+                        <li>A non-pinned message arrives → Score = 0.0 → <span class="badge bg-secondary">No alert</span></li>
+                    </ul>
+                </div>
+                <div class="alert alert-primary">
+                    <h5 class="alert-heading">Example 2: Cumulative Scoring</h5>
+                    <p><strong>Scenario:</strong> Enabled: "Detect Mentions" (+2.0), "Detect Code" (+1.3), Critical Keywords (+1.5). Minimum Score = 5.0</p>
+                    <ul class="mb-0">
+                        <li>Message with @mention only → Score = 2.0 → <span class="badge bg-secondary">No alert (below 5.0)</span></li>
+                        <li>Message with @mention + code snippet → Score = 2.0 + 1.3 = 3.3 → <span class="badge bg-secondary">No alert (below 5.0)</span></li>
+                        <li>Message with @mention + code + critical keyword → Score = 2.0 + 1.3 + 1.5 = 4.8 → <span class="badge bg-secondary">No alert (below 5.0)</span></li>
+                        <li>Message with @mention + code + critical + security keywords → Score = 2.0 + 1.3 + 1.5 + 1.2 = 6.0 → <span class="badge bg-success">ALERT FIRES ✓</span></li>
+                    </ul>
+                </div>
+                <div class="alert alert-warning">
+                    <h5 class="alert-heading">Example 3: Using the Max Score Calculator</h5>
+                    <p><strong>Scenario:</strong> You want to be alerted for "critical" OR "urgent" messages, but avoid noise</p>
+                    <ol class="mb-0">
+                        <li>Enable: Critical Keywords, Urgency Keywords, Detect Mentions, Prioritize Pinned</li>
+                        <li>Check the <strong>Max Score Calculator</strong> badge → Shows ~6.9 (1.5 + 1.5 + 2.0 + 1.2 + others)</li>
+                        <li>Set Minimum Score to 5.0 → Only messages with multiple triggers (or high-value single trigger) will alert</li>
+                        <li>Result: Reduces noise while catching genuinely important messages</li>
+                    </ol>
+                </div>
 
-Where:
-- Base Score: Match frequency × keyword priority
-- Category Bonuses: Question (+2), Mention (+3), Link (+1)
-- Pattern Multipliers: VIP sender (×2), Multiple keywords (×1.5)</code></pre>
+                <h3 class="mt-4">Additional Runtime Boosts (Not Configurable in UI)</h3>
+                <p>These bonuses are applied automatically based on message context (not part of Max Score Calculator):</p>
+                <ul>
+                    <li><strong>Replies to user:</strong> +1.5 (someone replied directly to you)</li>
+                    <li><strong>High reactions:</strong> +1.0 (message has significant engagement)</li>
+                    <li><strong>Decision indicators:</strong> +1.1 (words like "decide", "approve")</li>
+                    <li><strong>Action required:</strong> +1.0 (words like "action", "do")</li>
+                    <li><strong>Private chat bonus:</strong> +0.5 (1-on-1 conversation)</li>
+                </ul>
+
+                <h3 class="mt-4">Best Practices</h3>
+                <div class="card bg-light">
+                    <div class="card-body">
+                        <ul class="mb-0">
+                            <li><strong>Start with default (5.0) threshold</strong> and adjust based on alert volume</li>
+                            <li><strong>Use the Max Score Calculator</strong> to understand your profile's scoring potential</li>
+                            <li><strong>Enable high-value detections first</strong> (Mentions, Pinned, Code) before adding many keyword categories</li>
+                            <li><strong>Remember: OR logic = ANY trigger can cause alert</strong> — fewer enabled conditions = more predictable behavior</li>
+                            <li><strong>Use VIP Senders sparingly</strong> — they add +1.0 per sender and can stack</li>
+                            <li><strong>Test with Backtest</strong> feature to validate scoring before deploying</li>
+                        </ul>
+                    </div>
+                </div>
             </section>
 
             <section id="profile-scope" class="mb-5">
@@ -3724,12 +4312,13 @@ Where:
             'manual-troubleshooting': 'manual',
             // Sentinel API sections
             'sentinel-overview': 'sentinel',
-            'sentinel-health': 'sentinel',
+            'sentinel-config': 'sentinel',
             'sentinel-session': 'sentinel',
-            'sentinel-telegram': 'sentinel',
-            'sentinel-alerts': 'sentinel',
+            'sentinel-status': 'sentinel',
+            'sentinel-database': 'sentinel',
             'sentinel-profiles': 'sentinel',
-            'sentinel-metrics': 'sentinel',
+            'sentinel-assets': 'sentinel',
+            'sentinel-analytics': 'sentinel',
             // UI API sections (if they exist, otherwise default to 'ui' tab)
         };
 

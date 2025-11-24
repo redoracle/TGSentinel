@@ -14,10 +14,10 @@ __all__ = [
 ]
 
 try:
-    from .session import session_bp
     from .dashboard import dashboard_bp
-    from .worker import worker_bp
+    from .session import session_bp
     from .views import views_bp
+    from .worker import worker_bp
 except ImportError:
     # Graceful fallback if blueprints not yet extracted
     session_bp = None  # type: ignore

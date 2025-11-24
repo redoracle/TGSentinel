@@ -81,8 +81,93 @@ def _resolve_session_path(cfg: AppCfg) -> str:
 _logged_session_once = False
 
 
+def _migrate_session_schema(session_path: str) -> None:
+    """Ensure Telethon session schema matches expectations.
+
+    Older Telethon releases created a ``tmp_auth_key`` column that newer
+    versions no longer understand. If we detect that legacy layout we squash
+    it into the 5-column schema Telethon v1 expects so the worker can boot
+    without forcing a user re-login."""
+
+    if not session_path:
+        return
+
+    try:
+        import sqlite3
+    except Exception as exc:  # pragma: no cover - environment specific
+        log.debug("sqlite3 not available for session migration: %s", exc)
+        return
+
+    session_file = Path(session_path)
+    if not session_file.exists() or session_file.stat().st_size == 0:
+        return
+
+    try:
+        conn = sqlite3.connect(str(session_file))
+    except Exception as exc:
+        log.warning("Could not open session for migration: %s", exc)
+        return
+
+    try:
+        cursor = conn.execute("PRAGMA table_info(sessions)")
+        columns = [col[1] for col in cursor.fetchall()]
+        expected = [
+            "dc_id",
+            "server_address",
+            "port",
+            "auth_key",
+            "takeout_id",
+        ]
+
+        if not columns:
+            return
+
+        if columns == expected:
+            return
+
+        if columns == expected + ["tmp_auth_key"]:
+            log.info("Migrating Telethon session schema at %s", session_path)
+            try:
+                with conn:
+                    conn.execute("ALTER TABLE sessions RENAME TO sessions_tmp_v1")
+                    conn.execute(
+                        """
+                        CREATE TABLE sessions (
+                            dc_id integer primary key,
+                            server_address text,
+                            port integer,
+                            auth_key blob,
+                            takeout_id integer
+                        )
+                        """
+                    )
+                    conn.execute(
+                        """
+                        INSERT INTO sessions (dc_id, server_address, port, auth_key, takeout_id)
+                        SELECT dc_id, server_address, port, auth_key, takeout_id
+                        FROM sessions_tmp_v1
+                        """
+                    )
+                    conn.execute("DROP TABLE sessions_tmp_v1")
+            except Exception as migrate_exc:
+                log.warning(
+                    "Failed migrating session schema (tmp_auth_key -> v1): %s",
+                    migrate_exc,
+                )
+            return
+
+        log.warning(
+            "Unexpected session schema columns for %s: %s",
+            session_path,
+            columns,
+        )
+    finally:
+        conn.close()
+
+
 def make_client(cfg: AppCfg) -> TelegramClient:
     session_path = _resolve_session_path(cfg)
+    _migrate_session_schema(session_path)
     global _logged_session_once
 
     if not _logged_session_once:

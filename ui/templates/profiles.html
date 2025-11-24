@@ -48,12 +48,12 @@
 
 {% block extra_scripts %}
 <!-- Load JavaScript modules in dependency order -->
-<script src="{{ url_for('static', filename='js/profiles/shared_utils.js') }}"></script>
-<script src="{{ url_for('static', filename='js/components/digest_editor.js') }}"></script>
-<script src="{{ url_for('static', filename='js/profiles/entity_selector.js') }}"></script>
-<script src="{{ url_for('static', filename='js/profiles/alert_profiles.js') }}"></script>
-<script src="{{ url_for('static', filename='js/profiles/interest_profiles.js') }}"></script>
-<script src="{{ url_for('static', filename='js/profiles/init.js') }}"></script>
+<script src="{{ url_for('static', filename='js/profiles/shared_utils.js') }}?v=20251123-5"></script>
+<script src="{{ url_for('static', filename='js/components/digest_editor.js') }}?v=20251123-5"></script>
+<script src="{{ url_for('static', filename='js/profiles/entity_selector.js') }}?v=20251123-5"></script>
+<script src="{{ url_for('static', filename='js/profiles/alert_profiles.js') }}?v=20251123-5"></script>
+<script src="{{ url_for('static', filename='js/profiles/interest_profiles.js') }}?v=20251123-5"></script>
+<script src="{{ url_for('static', filename='js/profiles/init.js') }}?v=20251123-5"></script>
 
 <script>
     // Inject API endpoints from Flask - using actual route names from profiles.py

@@ -1,0 +1,42 @@
+{
+  "name": "Brand & Reputation Monitor",
+  "description": "Track mentions of your brand, products, and key executives across channels",
+  "enabled": false,
+  "min_score": 4.0,
+  "critical_keywords": ["[YOUR_BRAND]", "[YOUR_PRODUCT]", "[CEO_NAME]"],
+  "security_keywords": [],
+  "urgency_keywords": ["crisis", "issue", "problem", "complaint"],
+  "financial_keywords": [],
+  "technical_keywords": [],
+  "project_keywords": [],
+  "community_keywords": [
+    "feedback",
+    "review",
+    "opinion",
+    "experience",
+    "support"
+  ],
+  "general_keywords": ["announcement", "launch", "release", "update"],
+  "detect_questions": true,
+  "detect_mentions": false,
+  "detect_links": false,
+  "require_forwarded": false,
+  "detect_codes": false,
+  "detect_documents": false,
+  "detect_polls": true,
+  "prioritize_pinned": true,
+  "prioritize_admin": false,
+  "vip_senders": [],
+  "excluded_users": [],
+  "channels": [],
+  "users": [],
+  "tags": ["marketing", "brand", "reputation", "social-listening"],
+  "digest_schedules": [
+    {
+      "schedule_type": "daily",
+      "daily_hour": 10,
+      "top_n": 20,
+      "min_score": 4.0
+    }
+  ]
+}

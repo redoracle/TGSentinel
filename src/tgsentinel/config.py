@@ -96,6 +96,7 @@ class ProfileDefinition:
 
     id: str
     name: str = ""
+    enabled: bool = True  # Whether this profile is active
     keywords: List[str] = field(default_factory=list)
     action_keywords: List[str] = field(default_factory=list)
     decision_keywords: List[str] = field(default_factory=list)
@@ -109,6 +110,8 @@ class ProfileDefinition:
     # Detection flags
     detect_codes: bool = True
     detect_documents: bool = True
+    detect_links: bool = False
+    require_forwarded: bool = False
     prioritize_pinned: bool = True
     prioritize_admin: bool = True
     detect_polls: bool = True
@@ -118,6 +121,16 @@ class ProfileDefinition:
 
     # Digest configuration (optional, per-profile schedules)
     digest: Optional[ProfileDigestConfig] = None
+
+    # Channel/user bindings (empty list = applies to all monitored entities)
+    channels: List[int] = field(default_factory=list)
+    users: List[int] = field(default_factory=list)
+
+    # Webhook integrations (list of webhook service names from config/webhooks.yml)
+    webhooks: List[str] = field(default_factory=list)
+
+    # User filtering (blacklist: never alert from these users)
+    excluded_users: List[int] = field(default_factory=list)
 
     def __post_init__(self):
         """Set default scoring weights if not provided."""
@@ -148,6 +161,7 @@ class ChannelOverrides:
     scoring_weights: Dict[str, float] = field(default_factory=dict)
     min_score: float | None = None
     digest: Optional[ProfileDigestConfig] = None  # Digest schedule override
+    excluded_users: List[int] = field(default_factory=list)  # Additional excluded users
 
 
 @dataclass
@@ -155,6 +169,9 @@ class ChannelRule:
     id: int
     name: str = ""
     vip_senders: List[int] = field(default_factory=list)
+    excluded_users: List[int] = field(
+        default_factory=list
+    )  # Blacklist: never alert from these users
     keywords: List[str] = field(default_factory=list)
     reaction_threshold: int = 0
     reply_threshold: int = 0
@@ -177,6 +194,8 @@ class ChannelRule:
     # Category 6: Structured Data Detection
     detect_codes: bool = True
     detect_documents: bool = True
+    detect_links: bool = False
+    require_forwarded: bool = False
 
     # Category 8: Risk Keywords
     risk_keywords: List[str] = field(default_factory=list)
@@ -199,6 +218,9 @@ class ChannelRule:
     # Direct digest configuration (takes precedence over profile-level)
     digest: Optional[ProfileDigestConfig] = None
 
+    # Webhook integrations (list of webhook service names from config/webhooks.yml)
+    webhooks: List[str] = field(default_factory=list)
+
 
 @dataclass
 class MonitoredUser:
@@ -213,6 +235,9 @@ class MonitoredUser:
 
     # Direct digest configuration (takes precedence over profile-level)
     digest: Optional[ProfileDigestConfig] = None
+
+    # User filtering (blacklist: never alert from these users)
+    excluded_users: List[int] = field(default_factory=list)
 
 
 @dataclass
@@ -390,6 +415,154 @@ def _convert_legacy_digest(
     )
 
 
+def _legacy_schedule_enabled(value: Any) -> bool:
+    if isinstance(value, dict):
+        if "enabled" in value:
+            return bool(value.get("enabled"))
+        return True
+    return bool(value)
+
+
+def _extract_int(container: Any, key: str) -> Optional[int]:
+    if isinstance(container, dict):
+        raw = container.get(key)
+        if raw is None:
+            return None
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _extract_float(container: Any, key: str) -> Optional[float]:
+    if isinstance(container, dict):
+        raw = container.get(key)
+        if raw is None:
+            return None
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _coerce_int(value: Any, default: int) -> int:
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _coerce_float(value: Any, default: float) -> float:
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _parse_profile_digest_config(raw: Any) -> ProfileDigestConfig:
+    if isinstance(raw, ProfileDigestConfig):
+        return raw
+
+    if not isinstance(raw, dict):
+        raise TypeError(
+            f"Profile digest config must be dict or ProfileDigestConfig, got {type(raw).__name__}"
+        )
+
+    payload: Dict[str, Any] = dict(raw)
+    mode = str(payload.pop("mode", "dm"))
+    target_channel = payload.pop("target_channel", None)
+    if isinstance(target_channel, str) and target_channel.strip() == "":
+        target_channel = None
+    min_score_sentinel = object()
+    min_score_raw = payload.pop("min_score", min_score_sentinel)
+    min_score_provided = min_score_raw is not min_score_sentinel
+    top_n_sentinel = object()
+    top_n_raw = payload.pop("top_n", top_n_sentinel)
+    top_n_provided = top_n_raw is not top_n_sentinel
+    schedules_data = payload.pop("schedules", None)
+
+    if schedules_data is not None:
+        kwargs: Dict[str, Any] = {
+            "schedules": schedules_data,
+            "mode": mode,
+            "target_channel": target_channel,
+        }
+        if top_n_provided:
+            kwargs["top_n"] = _coerce_int(top_n_raw, 10)
+        if min_score_provided:
+            kwargs["min_score"] = _coerce_float(min_score_raw, 5.0)
+        if payload:
+            log.debug(
+                "Ignoring unsupported digest config keys: %s",
+                ", ".join(sorted(str(key) for key in payload.keys())),
+            )
+        return ProfileDigestConfig(**kwargs)
+
+    schedule_map = {
+        "hourly": DigestSchedule.HOURLY,
+        "every_4h": DigestSchedule.EVERY_4H,
+        "every_6h": DigestSchedule.EVERY_6H,
+        "every_12h": DigestSchedule.EVERY_12H,
+        "daily": DigestSchedule.DAILY,
+        "weekly": DigestSchedule.WEEKLY,
+    }
+
+    schedules: List[ScheduleConfig] = []
+    for legacy_key, schedule_enum in schedule_map.items():
+        value = payload.pop(legacy_key, None)
+        if not _legacy_schedule_enabled(value):
+            continue
+
+        schedule_kwargs: Dict[str, Any] = {
+            "schedule": schedule_enum,
+            "enabled": True,
+        }
+
+        top_override = _extract_int(value, "top_n")
+        if top_override is not None:
+            schedule_kwargs["top_n"] = top_override
+
+        min_override = _extract_float(value, "min_score")
+        if min_override is not None:
+            schedule_kwargs["min_score"] = min_override
+
+        if schedule_enum == DigestSchedule.DAILY:
+            daily_hour = _extract_int(value, "daily_hour")
+            if daily_hour is None:
+                daily_hour = _extract_int(value, "hour")
+            if daily_hour is not None:
+                schedule_kwargs["daily_hour"] = daily_hour
+
+        if schedule_enum == DigestSchedule.WEEKLY:
+            weekly_day = _extract_int(value, "weekly_day")
+            if weekly_day is not None:
+                schedule_kwargs["weekly_day"] = weekly_day
+            weekly_hour = _extract_int(value, "weekly_hour")
+            if weekly_hour is None:
+                weekly_hour = _extract_int(value, "hour")
+            if weekly_hour is not None:
+                schedule_kwargs["weekly_hour"] = weekly_hour
+
+        schedules.append(ScheduleConfig(**schedule_kwargs))
+
+    top_n = _coerce_int(top_n_raw, 10) if top_n_provided else 10
+    min_score = _coerce_float(min_score_raw, 5.0) if min_score_provided else 5.0
+
+    return ProfileDigestConfig(
+        schedules=schedules,
+        top_n=top_n,
+        min_score=min_score,
+        mode=mode,
+        target_channel=target_channel,
+    )
+
+
 def _load_global_profiles(profiles_path: str) -> Dict[str, ProfileDefinition]:
     """Load global profile definitions from unified YAML files.
 
@@ -475,10 +648,48 @@ def _load_global_profiles(profiles_path: str) -> Dict[str, ProfileDefinition]:
                     # Create a copy to avoid modifying the original
                     data_copy = dict(profile_data)
 
+                    # Map UI field names to ProfileDefinition field names
+                    # UI uses categorized keywords like critical_keywords, financial_keywords
+                    # Backend uses semantic categories like urgency_keywords, security_keywords
+                    field_mapping = {
+                        "critical_keywords": "urgency_keywords",  # Critical -> Urgency
+                        "financial_keywords": "opportunity_keywords",  # Financial -> Opportunity
+                        "general_keywords": "keywords",  # General -> Base keywords
+                        "community_keywords": "keywords",  # Community -> Base keywords
+                        "project_keywords": "importance_keywords",  # Project -> Importance
+                        "technical_keywords": "keywords",  # Technical -> Base keywords
+                    }
+
+                    # Apply field mapping and merge keywords
+                    merged_keywords = {}
+                    for ui_field, backend_field in field_mapping.items():
+                        if ui_field in data_copy and data_copy[ui_field]:
+                            if backend_field not in merged_keywords:
+                                merged_keywords[backend_field] = []
+                            # Add keywords from UI field to the corresponding backend field
+                            ui_keywords = data_copy[ui_field]
+                            if isinstance(ui_keywords, list):
+                                merged_keywords[backend_field].extend(ui_keywords)
+                            # Remove the UI field from data_copy
+                            data_copy.pop(ui_field, None)
+
+                    # Merge mapped keywords with any existing keywords in data_copy
+                    for backend_field, keywords in merged_keywords.items():
+                        if backend_field in data_copy:
+                            # Append to existing keywords
+                            existing = data_copy[backend_field]
+                            if isinstance(existing, list):
+                                data_copy[backend_field] = list(
+                                    set(existing + keywords)
+                                )
+                        else:
+                            data_copy[backend_field] = keywords
+
                     # Define fields that are valid for ProfileDefinition
                     valid_fields = {
                         "id",
                         "name",
+                        "enabled",  # Whether profile is active
                         "keywords",
                         "action_keywords",
                         "decision_keywords",
@@ -495,6 +706,8 @@ def _load_global_profiles(profiles_path: str) -> Dict[str, ProfileDefinition]:
                         "detect_polls",
                         "scoring_weights",
                         "digest",
+                        "channels",  # Channel bindings (empty = all channels)
+                        "users",  # User bindings (empty = all users)
                     }
 
                     # Remove fields not part of ProfileDefinition
@@ -504,12 +717,21 @@ def _load_global_profiles(profiles_path: str) -> Dict[str, ProfileDefinition]:
                     }
 
                     # Convert digest config if present
-                    if "digest" in filtered_data and isinstance(
-                        filtered_data["digest"], dict
-                    ):
-                        filtered_data["digest"] = ProfileDigestConfig(
-                            **filtered_data["digest"]
-                        )
+                    if "digest" in filtered_data:
+                        digest_value = filtered_data.get("digest")
+                        if isinstance(digest_value, (dict, ProfileDigestConfig)):
+                            filtered_data["digest"] = _parse_profile_digest_config(
+                                digest_value
+                            )
+                        elif digest_value is None:
+                            filtered_data["digest"] = None
+                        else:
+                            log.warning(
+                                "Profile '%s' has unsupported digest value of type %s; ignoring",
+                                profile_id,
+                                type(digest_value).__name__,
+                            )
+                            filtered_data.pop("digest", None)
 
                     # Ensure id field matches key
                     filtered_data["id"] = profile_id
@@ -720,11 +942,11 @@ logging:
     # Convert digest configs to new format if present
     for channel in channels:
         if channel.digest and isinstance(channel.digest, dict):
-            channel.digest = ProfileDigestConfig(**channel.digest)
+            channel.digest = _parse_profile_digest_config(channel.digest)
 
     for user in monitored_users:
         if user.digest and isinstance(user.digest, dict):
-            user.digest = ProfileDigestConfig(**user.digest)
+            user.digest = _parse_profile_digest_config(user.digest)
 
     # Get telegram session path with safe fallback
     telegram_config = y.get("telegram", {})

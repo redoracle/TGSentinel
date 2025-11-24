@@ -5,6 +5,7 @@ classes added in Phase 1 of the schedule-driven digest implementation.
 """
 
 import pytest
+import yaml
 
 from src.tgsentinel.config import (
     DigestCfg,
@@ -12,6 +13,7 @@ from src.tgsentinel.config import (
     ProfileDigestConfig,
     ScheduleConfig,
     _convert_legacy_digest,
+    _load_global_profiles,
 )
 
 
@@ -313,3 +315,44 @@ class TestIntegration:
 
         assert user.digest is not None
         assert user.digest.schedules[0].daily_hour == 10
+
+    def test_load_global_profiles_with_legacy_digest_yaml(self, tmp_path):
+        """Legacy digest blocks in YAML should load via compatibility shim."""
+
+        yaml_content = {
+            "profiles": {
+                "3000": {
+                    "name": "Legacy Interest",
+                    "keywords": ["blockchain"],
+                    "digest": {
+                        "hourly": {"enabled": True, "top_n": 7, "min_score": 6.2},
+                        "daily": {"enabled": False},
+                        "top_n": 5,
+                        "mode": "channel",
+                        "target_channel": "@legacy_alerts",
+                        "min_score": 5.5,
+                    },
+                }
+            }
+        }
+
+        interest_path = tmp_path / "profiles_interest.yml"
+        interest_path.write_text(yaml.safe_dump(yaml_content, sort_keys=False))
+
+        profiles = _load_global_profiles(str(tmp_path))
+        profile = profiles.get("3000")
+
+        assert profile is not None
+        digest = profile.digest
+        assert digest is not None
+        assert digest.mode == "channel"
+        assert digest.target_channel == "@legacy_alerts"
+        assert digest.top_n == 5
+        assert pytest.approx(5.5) == digest.min_score
+        assert len(digest.schedules) == 1
+
+        schedule = digest.schedules[0]
+        assert schedule.schedule == DigestSchedule.HOURLY
+        assert schedule.enabled is True
+        assert schedule.top_n == 7
+        assert pytest.approx(6.2) == schedule.min_score

@@ -166,7 +166,7 @@ def api_webhooks_list():
             if "secret" in webhook:
                 webhook["secret"] = "••••••"
 
-        return jsonify({"webhooks": webhooks})
+        return jsonify({"webhooks": webhooks, "enabled": True})
 
     except Exception as exc:
         logger.error(f"Failed to list webhooks: {exc}")
@@ -783,6 +783,72 @@ def api_webhooks_update(service_name: str):
 
     except Exception as exc:
         logger.error(f"Failed to update webhook: {exc}")
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@developer_bp.get("/webhooks/history")
+def api_webhooks_history():
+    """Get recent webhook delivery history from Sentinel.
+
+    Query Parameters:
+        limit: Maximum number of records to return (default: 10, max: 100)
+
+    Returns:
+        JSON with recent webhook deliveries including status, timing, and errors
+    """
+    # Import requests here to avoid dependency issues
+    try:
+        import requests
+    except ImportError:
+        return (
+            jsonify(
+                {
+                    "status": "error",
+                    "message": "requests library not available - cannot fetch webhook history",
+                }
+            ),
+            500,
+        )
+
+    try:
+        # Get limit parameter
+        limit = request.args.get("limit", default=10, type=int)
+        limit = max(1, min(limit, 100))  # Clamp between 1 and 100
+
+        # Proxy request to Sentinel API
+        sentinel_url = os.environ.get("SENTINEL_API_BASE_URL", "http://sentinel:8080")
+        response = requests.get(
+            f"{sentinel_url}/api/webhooks/history", params={"limit": limit}, timeout=10
+        )
+
+        if response.status_code != 200:
+            logger.error(
+                f"Sentinel API returned {response.status_code}: {response.text}"
+            )
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": f"Sentinel API error: {response.status_code}",
+                    }
+                ),
+                response.status_code,
+            )
+
+        data = response.json()
+        return jsonify(data), 200
+
+    except requests.exceptions.RequestException as req_exc:
+        logger.error(f"Failed to connect to Sentinel API: {req_exc}")
+        return (
+            jsonify(
+                {"status": "error", "message": "Failed to connect to Sentinel service"}
+            ),
+            503,
+        )
+
+    except Exception as exc:
+        logger.error(f"Failed to fetch webhook history: {exc}")
         return jsonify({"status": "error", "message": str(exc)}), 500
 
 

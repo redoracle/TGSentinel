@@ -13,12 +13,14 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 import requests
-from flask import Blueprint, jsonify, make_response, request, session as flask_session
+from flask import Blueprint, jsonify, make_response, request
+from flask import session as flask_session
 from prometheus_client.parser import text_string_to_metric_families
 
 try:
-    import docker  # type: ignore[import-not-found]
     from docker.errors import DockerException  # type: ignore[import-not-found]
+
+    import docker  # type: ignore[import-not-found]
 
     DOCKER_AVAILABLE = True
 except ImportError:
@@ -236,6 +238,46 @@ def api_analytics_anomalies():
     except Exception as exc:
         logger.error(f"Failed to detect anomalies: {exc}")
         return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@analytics_bp.route("/analytics/channels", methods=["GET"])
+def api_analytics_channels():
+    """Return alert counts per channel from the last 24 hours.
+
+    Proxies request to Sentinel API which owns the database.
+    """
+    try:
+        sentinel_api_url = os.getenv(
+            "SENTINEL_API_BASE_URL", "http://sentinel:8080/api"
+        )
+        hours = request.args.get("hours", default=24, type=int)
+
+        response = requests.get(
+            f"{sentinel_api_url}/analytics/channels",
+            params={"hours": hours},
+            timeout=5,
+        )
+
+        if response.ok:
+            data = response.json()
+            if data.get("status") == "ok":
+                channels = data.get("data", {}).get("channels", [])
+                # Normalize format for UI
+                return jsonify(
+                    {
+                        "channels": [
+                            {"channel": ch["channel"], "count": ch["alerts"]}
+                            for ch in channels
+                        ]
+                    }
+                )
+
+        logger.warning(f"Sentinel channels API returned status {response.status_code}")
+        return jsonify({"channels": []})
+
+    except requests.exceptions.RequestException as exc:
+        logger.error(f"Failed to fetch channel analytics from Sentinel: {exc}")
+        return jsonify({"channels": []})
 
 
 @analytics_bp.get("/console/diagnostics")

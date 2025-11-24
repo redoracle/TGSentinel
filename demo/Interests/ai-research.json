@@ -1,0 +1,45 @@
+{
+  "id": 3004,
+  "name": "AI & Machine Learning Research",
+  "description": "Capture cutting-edge AI research, model releases, and breakthrough discussions",
+  "enabled": false,
+  "threshold": 0.44,
+  "positive_samples": [
+    "Breakthrough in transformer architecture achieving 40% efficiency gains",
+    "New open-source LLM released with state-of-the-art performance",
+    "Research paper on novel attention mechanism for video understanding",
+    "GPT-5 announcement with multimodal capabilities",
+    "Major advancement in reinforcement learning for robotics",
+    "New dataset released for training large language models",
+    "Significant improvement in zero-shot learning benchmarks"
+  ],
+  "negative_samples": [
+    "How do I install TensorFlow?",
+    "Looking for ML job opportunities",
+    "What's the best course for beginners?",
+    "General Python programming question",
+    "Daily motivation quote"
+  ],
+  "keywords": [
+    "research",
+    "paper",
+    "model",
+    "LLM",
+    "transformer",
+    "breakthrough",
+    "SOTA"
+  ],
+  "channels": [],
+  "users": [],
+  "vip_senders": [],
+  "excluded_users": [],
+  "tags": ["ai", "machine-learning", "research", "innovation"],
+  "digest_schedules": [
+    {
+      "schedule_type": "daily",
+      "daily_hour": 20,
+      "top_n": 15,
+      "min_score": 0.44
+    }
+  ]
+}

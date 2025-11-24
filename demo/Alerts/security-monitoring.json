@@ -1,0 +1,66 @@
+{
+  "name": "Security Advisory Monitor",
+  "description": "Track CVEs, zero-days, exploits, and security incidents across threat intel channels",
+  "enabled": false,
+  "min_score": 5.0,
+  "critical_keywords": [
+    "0day",
+    "zero-day",
+    "breach",
+    "compromised",
+    "hacked",
+    "exploit"
+  ],
+  "security_keywords": [
+    "CVE-",
+    "RCE",
+    "XSS",
+    "SQL injection",
+    "privilege escalation",
+    "authentication bypass",
+    "ransomware",
+    "malware",
+    "vulnerability",
+    "patch",
+    "security advisory"
+  ],
+  "urgency_keywords": [
+    "critical",
+    "high severity",
+    "emergency patch",
+    "actively exploited"
+  ],
+  "financial_keywords": [],
+  "technical_keywords": [
+    "proof-of-concept",
+    "PoC",
+    "exploit code",
+    "payload",
+    "reverse shell"
+  ],
+  "project_keywords": [],
+  "community_keywords": [],
+  "general_keywords": [],
+  "detect_questions": false,
+  "detect_mentions": false,
+  "detect_links": true,
+  "require_forwarded": false,
+  "detect_codes": true,
+  "detect_documents": true,
+  "detect_polls": false,
+  "prioritize_pinned": true,
+  "prioritize_admin": true,
+  "vip_senders": [],
+  "excluded_users": [],
+  "channels": [],
+  "users": [],
+  "tags": ["security", "threat-intel", "cve", "incident-response"],
+  "digest_schedules": [
+    {
+      "schedule_type": "daily",
+      "daily_hour": 9,
+      "top_n": 20,
+      "min_score": 5.0
+    }
+  ]
+}

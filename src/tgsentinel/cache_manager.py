@@ -270,8 +270,15 @@ async def channels_users_cache_refresher(
                 """Perform the actual cache refresh operation."""
                 try:
                     logger.info("[CACHE-REFRESHER] Fetching dialogs for cache refresh.")
+                    logger.info(
+                        "[CACHE-REFRESHER] About to call get_cached_dialogs_func(force_refresh=True)..."
+                    )
                     # Fetch fresh dialogs (fast - ~20 seconds for 365 dialogs)
                     dialogs = await get_cached_dialogs_func(force_refresh=True)
+                    logger.info(
+                        "[CACHE-REFRESHER] get_cached_dialogs_func returned %d dialogs",
+                        len(dialogs),
+                    )
                     # Note: get_cached_dialogs_func() already logs "Fetched X dialogs"
 
                     # Process channels/groups metadata (fast - in-memory only)

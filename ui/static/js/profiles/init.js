@@ -37,6 +37,9 @@
         // Save active tab on change
         saveActiveTabOnChange();
         
+        // Load available webhooks for profile forms
+        loadAvailableWebhooks();
+        
         // Initialize entity selector (fetch monitored channels/users)
         if (window.EntitySelector) {
             window.EntitySelector.init();
@@ -66,6 +69,86 @@
         
         // Setup export/import handlers
         setupExportImportHandlers();
+    }
+    
+    /**
+     * Load available webhooks from /api/webhooks and populate select fields
+     */
+    async function loadAvailableWebhooks() {
+        const alertSelect = document.getElementById('alert-webhooks');
+        const interestSelect = document.getElementById('interest-webhooks');
+        
+        try {
+            const response = await fetch('/api/webhooks', {
+                signal: AbortSignal.timeout(10000) // 10 second timeout
+            });
+            
+            if (!response.ok) {
+                console.warn('[WEBHOOKS] Failed to load webhooks, status:', response.status);
+                // Show error state
+                if (alertSelect) {
+                    alertSelect.innerHTML = '<option disabled selected>Failed to load webhooks</option>';
+                    alertSelect.setAttribute('aria-busy', 'false');
+                }
+                if (interestSelect) {
+                    interestSelect.innerHTML = '<option disabled selected>Failed to load webhooks</option>';
+                    interestSelect.setAttribute('aria-busy', 'false');
+                }
+                return;
+            }
+            
+            const data = await response.json();
+            const webhooks = data.webhooks || [];
+            const webhooksEnabled = data.enabled !== false;
+            
+            if (!webhooksEnabled) {
+                console.info('[WEBHOOKS] Webhook feature is disabled (WEBHOOK_SECRET_KEY not set)');
+                // Hide webhook sections if webhooks are disabled
+                document.querySelectorAll('.webhook-integration-section').forEach(el => el.style.display = 'none');
+                // Update aria-busy state
+                if (alertSelect) alertSelect.setAttribute('aria-busy', 'false');
+                if (interestSelect) interestSelect.setAttribute('aria-busy', 'false');
+                return;
+            }
+            
+            // Populate alert profile webhook select
+            if (alertSelect) {
+                if (webhooks.length === 0) {
+                    alertSelect.innerHTML = '<option disabled selected>No webhooks available</option>';
+                } else {
+                    alertSelect.innerHTML = webhooks.map(wh => 
+                        `<option value="${wh.service}">${wh.service}</option>`
+                    ).join('');
+                }
+                alertSelect.setAttribute('aria-busy', 'false');
+            }
+            
+            // Populate interest profile webhook select
+            if (interestSelect) {
+                if (webhooks.length === 0) {
+                    interestSelect.innerHTML = '<option disabled selected>No webhooks available</option>';
+                } else {
+                    interestSelect.innerHTML = webhooks.map(wh => 
+                        `<option value="${wh.service}">${wh.service}</option>`
+                    ).join('');
+                }
+                interestSelect.setAttribute('aria-busy', 'false');
+            }
+            
+            console.info(`[WEBHOOKS] Loaded ${webhooks.length} webhook(s) for profile forms`);
+            
+        } catch (error) {
+            console.error('[WEBHOOKS] Error loading webhooks:', error);
+            // Show error state on exception (network error, timeout, etc.)
+            if (alertSelect) {
+                alertSelect.innerHTML = '<option disabled selected>Failed to load webhooks</option>';
+                alertSelect.setAttribute('aria-busy', 'false');
+            }
+            if (interestSelect) {
+                interestSelect.innerHTML = '<option disabled selected>Failed to load webhooks</option>';
+                interestSelect.setAttribute('aria-busy', 'false');
+            }
+        }
     }
     
     /**
@@ -122,7 +205,7 @@
         
         const backtestBtn = document.getElementById("btn-backtest-alert-profile");
         if (backtestBtn) {
-            backtestBtn.addEventListener("click", window.AlertProfiles.backtestAlertProfile);
+            backtestBtn.addEventListener("click", () => window.AlertProfiles.backtestAlertProfile());
         }
         
         // Search functionality with debounce
@@ -166,7 +249,7 @@
         
         const backtestBtn = document.getElementById("btn-backtest-interest-profile");
         if (backtestBtn) {
-            backtestBtn.addEventListener("click", window.InterestProfiles.backtestInterestProfile);
+            backtestBtn.addEventListener("click", () => window.InterestProfiles.backtestInterestProfile());
         }
         
         const runTestBtn = document.getElementById("btn-run-test");
@@ -202,6 +285,7 @@
             dropdown.innerHTML = `
                 <button class="alert-bulk-dropdown-item" data-action="enable-all">Enable All</button>
                 <button class="alert-bulk-dropdown-item" data-action="disable-all">Disable All</button>
+                <button class="alert-bulk-dropdown-item" data-action="import">Import</button>
                 <button class="alert-bulk-dropdown-item" data-action="export-all">Export All</button>
             `;
             bulkActionsBtn.parentElement.style.position = "relative";
@@ -218,6 +302,8 @@
                         await window.AlertProfiles.bulkToggleAlertProfiles(true);
                     } else if (action === "disable-all") {
                         await window.AlertProfiles.bulkToggleAlertProfiles(false);
+                    } else if (action === "import") {
+                        window.AlertProfiles.importAlertProfile();
                     } else if (action === "export-all") {
                         window.AlertProfiles.exportAllAlertProfiles();
                     }
@@ -255,6 +341,7 @@
             dropdown.innerHTML = `
                 <button class="alert-bulk-dropdown-item" data-action="enable-all">Enable All</button>
                 <button class="alert-bulk-dropdown-item" data-action="disable-all">Disable All</button>
+                <button class="alert-bulk-dropdown-item" data-action="import">Import</button>
                 <button class="alert-bulk-dropdown-item" data-action="export-all">Export All</button>
             `;
             bulkActionsBtn.parentElement.style.position = "relative";
@@ -271,6 +358,8 @@
                         await window.InterestProfiles.bulkToggleInterestProfiles(true);
                     } else if (action === "disable-all") {
                         await window.InterestProfiles.bulkToggleInterestProfiles(false);
+                    } else if (action === "import") {
+                        window.InterestProfiles.importInterestProfile();
                     } else if (action === "export-all") {
                         window.InterestProfiles.exportAllInterestProfiles();
                     }

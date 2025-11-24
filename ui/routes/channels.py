@@ -11,7 +11,8 @@ import os
 import shutil
 import tempfile
 import threading
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from pathlib import Path
 from typing import Any, Callable, Dict, List
 
@@ -393,9 +394,10 @@ def update_channel(chat_id):
     - reply_threshold: int
     - rate_limit_per_hour: int
     """
-    import requests
     import time
+
     import redis
+    import requests
 
     if not request.is_json:
         return (

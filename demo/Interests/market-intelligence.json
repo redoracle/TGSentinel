@@ -1,0 +1,46 @@
+{
+  "id": 3009,
+  "name": "Market Intelligence & Trends",
+  "description": "Track market trends, competitive intelligence, and industry shifts",
+  "enabled": false,
+  "threshold": 0.45,
+  "positive_samples": [
+    "Market analysis shows 300% growth in AI adoption across enterprise",
+    "Competitor launches disruptive pricing model threatening market share",
+    "Industry report reveals significant shift toward cloud-native architectures",
+    "Emerging trend: decentralized identity gaining mainstream traction",
+    "Market leader announces pivot to subscription-based model",
+    "Analyst predicts major consolidation in the SaaS space next year",
+    "Consumer behavior study shows changing preferences in digital payments"
+  ],
+  "negative_samples": [
+    "Stock price discussion",
+    "Daily market open/close",
+    "Generic business news",
+    "What stocks should I buy?",
+    "Market is up today"
+  ],
+  "keywords": [
+    "market",
+    "trend",
+    "intelligence",
+    "competitive",
+    "industry",
+    "analysis",
+    "shift"
+  ],
+  "channels": [],
+  "users": [],
+  "vip_senders": [],
+  "excluded_users": [],
+  "tags": ["market", "intelligence", "trends", "competitive"],
+  "digest_schedules": [
+    {
+      "schedule_type": "weekly",
+      "weekly_day": 1,
+      "weekly_hour": 8,
+      "top_n": 25,
+      "min_score": 0.45
+    }
+  ]
+}

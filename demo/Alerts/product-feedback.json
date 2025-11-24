@@ -1,0 +1,55 @@
+{
+  "name": "Product Feedback Capture",
+  "description": "Extract feature requests, bug reports, and UX feedback from community channels",
+  "enabled": false,
+  "min_score": 3.5,
+  "critical_keywords": [
+    "bug",
+    "broken",
+    "doesn't work",
+    "not working",
+    "error",
+    "crash"
+  ],
+  "security_keywords": [],
+  "urgency_keywords": ["urgent", "blocker", "critical"],
+  "financial_keywords": [],
+  "technical_keywords": [
+    "feature request",
+    "suggestion",
+    "improvement",
+    "enhancement"
+  ],
+  "project_keywords": [],
+  "community_keywords": [
+    "feedback",
+    "please add",
+    "would be nice",
+    "missing",
+    "needs",
+    "should have"
+  ],
+  "general_keywords": [],
+  "detect_questions": true,
+  "detect_mentions": false,
+  "detect_links": false,
+  "require_forwarded": false,
+  "detect_codes": true,
+  "detect_documents": false,
+  "detect_polls": true,
+  "prioritize_pinned": false,
+  "prioritize_admin": false,
+  "vip_senders": [],
+  "excluded_users": [],
+  "channels": [],
+  "users": [],
+  "tags": ["product", "ux", "feedback", "research"],
+  "digest_schedules": [
+    {
+      "schedule_type": "daily",
+      "daily_hour": 17,
+      "top_n": 25,
+      "min_score": 3.0
+    }
+  ]
+}

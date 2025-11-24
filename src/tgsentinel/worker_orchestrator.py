@@ -81,9 +81,25 @@ class WorkerOrchestrator:
 
     async def worker(self) -> None:
         """Main message processing worker."""
+        log.info("[WORKER-ORCHESTRATOR] worker() called - getting client reference")
         # Get current client dynamically (handles session imports)
         current_client = self.client_ref()
-        await process_loop(self.cfg, current_client, self.engine, self.handshake_gate)
+        log.info("[WORKER-ORCHESTRATOR] Client obtained, starting process_loop")
+        try:
+            await process_loop(
+                self.cfg, current_client, self.engine, self.handshake_gate
+            )
+        except Exception as e:
+            log.error(
+                "[WORKER-ORCHESTRATOR] process_loop raised exception: %s",
+                e,
+                exc_info=True,
+            )
+            raise
+        finally:
+            log.warning(
+                "[WORKER-ORCHESTRATOR] process_loop exited (this should never happen in normal operation)"
+            )
 
     async def periodic_digest(self) -> None:
         """Send hourly digests periodically (DEPRECATED - use unified_digest_worker).
@@ -91,12 +107,22 @@ class WorkerOrchestrator:
         Kept for backward compatibility during migration.
         Will be removed once unified digest worker is fully validated.
         """
-        # Only run if hourly digests are enabled
-        if not self.cfg.alerts.digest.hourly:
-            log.info("[DIGEST] Hourly digests disabled, worker sleeping")
+        # Check if profiles are configured
+        has_any_profiles = bool(self.cfg.global_profiles) or any(
+            bool(ch.profiles) or bool(ch.keywords) for ch in self.cfg.channels
+        )
+
+        # Only run if hourly digests are enabled AND profiles exist
+        if not self.cfg.alerts.digest.hourly or not has_any_profiles:
+            log.info(
+                "[DIGEST] Hourly digests disabled or no profiles configured, worker sleeping"
+            )
             while True:
                 await asyncio.sleep(3600)  # Check config every hour in case it changes
-                if self.cfg.alerts.digest.hourly:
+                has_any_profiles = bool(self.cfg.global_profiles) or any(
+                    bool(ch.profiles) or bool(ch.keywords) for ch in self.cfg.channels
+                )
+                if self.cfg.alerts.digest.hourly and has_any_profiles:
                     break
 
         while True:
@@ -121,12 +147,22 @@ class WorkerOrchestrator:
         Kept for backward compatibility during migration.
         Will be removed once unified digest worker is fully validated.
         """
-        # Only run if daily digests are enabled
-        if not self.cfg.alerts.digest.daily:
-            log.info("[DIGEST] Daily digests disabled, worker sleeping")
+        # Check if profiles are configured
+        has_any_profiles = bool(self.cfg.global_profiles) or any(
+            bool(ch.profiles) or bool(ch.keywords) for ch in self.cfg.channels
+        )
+
+        # Only run if daily digests are enabled AND profiles exist
+        if not self.cfg.alerts.digest.daily or not has_any_profiles:
+            log.info(
+                "[DIGEST] Daily digests disabled or no profiles configured, worker sleeping"
+            )
             while True:
                 await asyncio.sleep(86400)  # Check config every 24h in case it changes
-                if self.cfg.alerts.digest.daily:
+                has_any_profiles = bool(self.cfg.global_profiles) or any(
+                    bool(ch.profiles) or bool(ch.keywords) for ch in self.cfg.channels
+                )
+                if self.cfg.alerts.digest.daily and has_any_profiles:
                     break
 
         while True:
@@ -281,6 +317,12 @@ class WorkerOrchestrator:
             "channels_users_cache_refresher",
         ]
 
+        log.info(
+            "[WORKER-ORCHESTRATOR] Starting all %d workers with asyncio.gather...",
+            len(worker_names),
+        )
+        log.info("[WORKER-ORCHESTRATOR] Workers: %s", ", ".join(worker_names))
+
         results = await asyncio.gather(
             self.worker(),
             self.unified_digest_worker(),  # Replaces periodic_digest + daily_digest
@@ -296,14 +338,29 @@ class WorkerOrchestrator:
             return_exceptions=True,
         )
 
+        log.warning(
+            "[WORKER-ORCHESTRATOR] asyncio.gather completed (should run forever, this is unexpected)"
+        )
+
         # Check for exceptions in worker results
+        log.info("[WORKER-ORCHESTRATOR] Checking worker results...")
         for worker_name, result in zip(worker_names, results):
-            if isinstance(result, BaseException) and not isinstance(
-                result, asyncio.CancelledError
-            ):
-                log.error(
-                    "Worker '%s' failed with exception: %s",
+            if isinstance(result, BaseException):
+                if isinstance(result, asyncio.CancelledError):
+                    log.info(
+                        "[WORKER-ORCHESTRATOR] Worker '%s' was cancelled (normal during shutdown)",
+                        worker_name,
+                    )
+                else:
+                    log.error(
+                        "[WORKER-ORCHESTRATOR] Worker '%s' failed with exception: %s",
+                        worker_name,
+                        result,
+                        exc_info=result,
+                    )
+            else:
+                log.warning(
+                    "[WORKER-ORCHESTRATOR] Worker '%s' exited normally (unexpected): %s",
                     worker_name,
                     result,
-                    exc_info=result,
                 )

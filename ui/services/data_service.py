@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import logging
 import os
-import requests
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, cast
+
+import requests
 
 logger = logging.getLogger(__name__)
 

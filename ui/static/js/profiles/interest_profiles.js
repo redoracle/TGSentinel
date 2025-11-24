@@ -15,6 +15,7 @@
  *   - newInterestProfile(): Reset form and show toast
  *   - filterInterestProfiles(searchTerm): Filter profiles by name/description
  *   - exportInterestProfile(id): Export single profile as JSON
+ *   - importInterestProfile(): Import profile from JSON file
  *   - duplicateInterestProfile(id): Clone existing profile
  *   - exportAllInterestProfiles(): Export all profiles as JSON
  *   - bulkToggleInterestProfiles(enabled): Enable/disable all profiles
@@ -37,6 +38,7 @@
     let filteredInterestProfiles = [];
     let interestProfileEndpoints = {};
     let interestProfilesLoading = false;
+    const defaultInterestTargetChannel = document.getElementById("interest-digest-target-channel")?.dataset.defaultChannel || "";
     
     // ============= PUBLIC API =============
     
@@ -130,7 +132,7 @@
                         <path d="M2.5 3.5a.5.5 0 0 1 0-1h11a.5.5 0 0 1 0 1h-11zm2-2a.5.5 0 0 1 0-1h7a.5.5 0 0 1 0 1h-7zM0 13a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 16 13V6a1.5 1.5 0 0 0-1.5-1.5h-13A1.5 1.5 0 0 0 0 6v7zm1.5.5A.5.5 0 0 1 1 13V6a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-.5.5h-13z"/>
                     </svg>
                     <p class="mb-2">Loading interest profiles...</p>
-                    <small>Create your first profile to get started</small>
+                    <small>Please wait while we fetch your profiles</small>
                     <div class="spinner-border text-primary mt-3" role="status" aria-label="Loading interest profiles"></div>
                 </div>
             `;
@@ -178,6 +180,7 @@
                                 ${entityCount > 0 ? `<small class="text-muted">👥 ${entityCount}</small>` : ''}
                                 ${scheduleCount > 0 ? `<small class="text-muted">📅 ${scheduleCount}</small>` : ''}
                                 ${profile.threshold ? `<small class="text-muted">θ=${profile.threshold.toFixed(2)}</small>` : ''}
+                                ${(profile.tags || []).length > 0 ? `<small class="text-muted">🏷️ ${(profile.tags || []).map(t => window.SharedUtils.escapeHtml(t)).join(', ')}</small>` : ''}
                             </div>
                         </div>
                         <div class="alert-profile-item-actions d-flex flex-column align-items-end gap-2">
@@ -188,6 +191,22 @@
                                        title="Enable/Disable">
                             </div>
                             <div class="btn-group btn-group-sm alert-profile-actions" role="group" onclick="event.stopPropagation()">
+                                <button type="button" class="btn btn-outline-secondary" 
+                                        onclick="window.InterestProfiles.backtestInterestProfile(${profile.id})"
+                                        title="Run Backtest">
+                                    <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                                        <path d="M8 2a.5.5 0 0 1 .5.5V4a.5.5 0 0 1-1 0V2.5A.5.5 0 0 1 8 2zM3.732 3.732a.5.5 0 0 1 .707 0l.915.914a.5.5 0 1 1-.708.708l-.914-.915a.5.5 0 0 1 0-.707zM2 8a.5.5 0 0 1 .5-.5h1.586a.5.5 0 0 1 0 1H2.5A.5.5 0 0 1 2 8zm9.5 0a.5.5 0 0 1 .5-.5h1.5a.5.5 0 0 1 0 1H12a.5.5 0 0 1-.5-.5zm.754-4.246a.389.389 0 0 0-.527-.02L7.547 7.31A.91.91 0 1 0 8.85 8.569l3.434-4.297a.389.389 0 0 0-.029-.518z"/>
+                                        <path fill-rule="evenodd" d="M6.664 15.889A8 8 0 1 1 9.336.11a8 8 0 0 1-2.672 15.78zm-4.665-4.283A11.945 11.945 0 0 1 8 10c2.186 0 4.236.585 6.001 1.606a7 7 0 1 0-12.002 0z"/>
+                                    </svg>
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" 
+                                        onclick="window.InterestProfiles.importInterestProfile()"
+                                        title="Import from JSON">
+                                    <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                                        <path d="M8.5 11.5a.5.5 0 0 1-1 0V7.707L6.354 8.854a.5.5 0 1 1-.708-.708l2-2a.5.5 0 0 1 .708 0l2 2a.5.5 0 0 1-.708.708L8.5 7.707V11.5z"/>
+                                        <path d="M14 14V4.5L9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2zM9.5 3A1.5 1.5 0 0 0 11 4.5h2V14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h5.5v2z"/>
+                                    </svg>
+                                </button>
                                 <button type="button" class="btn btn-outline-secondary" 
                                         onclick="window.InterestProfiles.exportInterestProfile(${profile.id})"
                                         title="Export as JSON">
@@ -238,14 +257,27 @@
             
             // Advanced fields
             document.getElementById("similarity-threshold").value = profile.threshold || 0.42;
-            document.getElementById("profile-weight").value = profile.weight || 1.0;
             document.getElementById("profile-enabled").value = profile.enabled !== false ? "true" : "false";
-            document.getElementById("profile-priority").value = profile.priority || "normal";
-            document.getElementById("profile-keywords").value = (profile.keywords || []).join(", ");
+            
+            // VIP and excluded users
+            document.getElementById("interest-vip-senders").value = (profile.vip_senders || []).join(", ");
+            document.getElementById("interest-excluded-users").value = (profile.excluded_users || []).join(", ");
             
             // Set channel and user selections using the helper function
             if (window.EntitySelector) {
                 window.EntitySelector.setSelectedEntityIds('interest', profile.channels || [], profile.users || []);
+            }
+            
+            // Set selected webhooks
+            const webhookSelect = document.getElementById('interest-webhooks');
+            if (webhookSelect && profile.webhooks) {
+                // Deselect all first
+                Array.from(webhookSelect.options).forEach(opt => opt.selected = false);
+                // Select webhooks from profile
+                profile.webhooks.forEach(webhookService => {
+                    const option = Array.from(webhookSelect.options).find(opt => opt.value === webhookService);
+                    if (option) option.selected = true;
+                });
             }
             
             document.getElementById("profile-tags").value = (profile.tags || []).join(", ");
@@ -255,7 +287,7 @@
             // Digest schedules
             populateInterestDigestSchedules(profile.digest_schedules || []);
             document.getElementById("interest-digest-mode").value = profile.digest_mode || "dm";
-            document.getElementById("interest-digest-target-channel").value = profile.digest_target_channel || "";
+            document.getElementById("interest-digest-target-channel").value = profile.digest_target_channel || defaultInterestTargetChannel;
             
             // Update UI state
             const deleteBtn = document.getElementById("btn-delete-interest-profile");
@@ -300,16 +332,17 @@
             negative_samples: document.getElementById("negative-samples").value
                 .split("\n").map(s => s.trim()).filter(s => s),
             threshold: parseFloat(document.getElementById("similarity-threshold").value) || 0.42,
-            weight: parseFloat(document.getElementById("profile-weight").value) || 1.0,
-            priority: document.getElementById("profile-priority").value,
-            keywords: document.getElementById("profile-keywords").value
-                .split(",").map(s => s.trim()).filter(s => s),
+            vip_senders: document.getElementById("interest-vip-senders").value
+                .split(",").map(s => s.trim()).filter(s => s).map(s => parseInt(s)).filter(n => !isNaN(n)),
+            excluded_users: document.getElementById("interest-excluded-users").value
+                .split(",").map(s => s.trim()).filter(s => s).map(s => parseInt(s)).filter(n => !isNaN(n)),
             channels: window.EntitySelector ? window.EntitySelector.getSelectedEntityIds('interest', 'channels') : [],
             users: window.EntitySelector ? window.EntitySelector.getSelectedEntityIds('interest', 'users') : [],
             tags: document.getElementById("profile-tags").value
                 .split(",").map(s => s.trim()).filter(s => s),
             notify_always: document.getElementById("profile-notify-always").checked,
             include_digest: document.getElementById("profile-include-in-digest").checked,
+            webhooks: Array.from(document.getElementById('interest-webhooks').selectedOptions || []).map(opt => opt.value),
             digest_schedules: extractInterestDigestSchedules(),
             digest_mode: document.getElementById("interest-digest-mode").value,
             digest_target_channel: document.getElementById("interest-digest-target-channel").value.trim()
@@ -407,16 +440,48 @@
     }
     
     /**
-     * Run backtest for the current interest profile
+     * Run backtest for an interest profile
+     * @param {number} [profileId] - Optional profile ID. If not provided, uses current form profile
      * @returns {Promise<void>}
      */
-    async function backtestInterestProfile() {
-        const profileId = document.getElementById("interest-profile-id").value;
-        const profileName = document.getElementById("topic-name").value;
+    async function backtestInterestProfile(profileId) {
+        let targetProfileId = profileId;
+        let targetProfileName = '';
         
-        if (!profileId) {
-            window.SharedUtils.showToast("Please select or save a profile first", "warning");
-            return;
+        // If profileId not provided, get from form
+        if (!targetProfileId) {
+            targetProfileId = document.getElementById("interest-profile-id").value;
+            targetProfileName = document.getElementById("topic-name").value;
+            
+            if (!targetProfileId) {
+                window.SharedUtils.showToast("Please select or save a profile first", "warning");
+                return;
+            }
+        } else {
+            // Load profile name from list with type coercion
+            const profile = allInterestProfiles.find(p => String(p.id) === String(profileId));
+            if (profile) {
+                targetProfileName = profile.name;
+            } else {
+                // Fallback: fetch profile from API if not in local cache
+                try {
+                    const response = await fetch(`${interestProfileEndpoints.get}/${profileId}`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.status === 'ok' && data.profile) {
+                            targetProfileName = data.profile.name;
+                        }
+                    }
+                } catch (error) {
+                    console.error("Failed to fetch profile for backtest:", error);
+                }
+                
+                // If still not found, show warning and return
+                if (!targetProfileName) {
+                    window.SharedUtils.showToast(`Profile ${profileId} not found`, "warning");
+                    return;
+                }
+            }
         }
         
         const modalEl = document.getElementById('backtestModal');
@@ -436,7 +501,7 @@
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    name: profileName,
+                    name: targetProfileName,
                     hours_back: 24,
                     max_messages: 100
                 })
@@ -455,29 +520,69 @@
             document.getElementById('stat-match-rate').textContent = (data.stats.match_rate || 0).toFixed(1) + '%';
             document.getElementById('stat-avg-score').textContent = (data.stats.avg_score || data.stats.average_score || 0).toFixed(2);
             
-            // Recommendations
-            const recsList = document.getElementById('recommendations-list');
-            if (data.recommendations && data.recommendations.length > 0) {
-                recsList.innerHTML = data.recommendations.map(r => `<li>${window.SharedUtils.escapeHtml(r)}</li>`).join('');
-            } else {
-                recsList.innerHTML = '<li>Profile is working well!</li>';
+            // Update recommendations tooltip
+            const recIcon = document.getElementById('backtest-recommendations-icon');
+            if (recIcon) {
+                let tooltipContent;
+                if (data.recommendations && data.recommendations.length > 0) {
+                    tooltipContent = '<ul class="mb-0 ps-3">' + 
+                        data.recommendations.map(r => `<li>${window.SharedUtils.escapeHtml(r)}</li>`).join('') + 
+                        '</ul>';
+                } else {
+                    tooltipContent = '<strong>✓ Profile is working well!</strong>';
+                }
+                // Dispose of existing tooltip and create new one with updated content
+                const existingTooltip = bootstrap.Tooltip.getInstance(recIcon);
+                if (existingTooltip) {
+                    existingTooltip.dispose();
+                }
+                recIcon.setAttribute('data-bs-html', 'true');
+                recIcon.setAttribute('data-bs-title', tooltipContent);
+                new bootstrap.Tooltip(recIcon);
+            }
+            
+            // Check if any match has triggers data (for interest profiles, triggers are usually empty)
+            const hasTriggersData = data.matches && data.matches.some(m => m.triggers && m.triggers.length > 0);
+            const triggersHeader = document.getElementById('triggers-header');
+            
+            // Hide Triggers column if no data available
+            if (triggersHeader) {
+                if (hasTriggersData) {
+                    triggersHeader.style.display = '';
+                } else {
+                    triggersHeader.style.display = 'none';
+                }
             }
             
             // Matches table
             const tbody = document.getElementById('backtest-matches-tbody');
+            if (!tbody) {
+                console.error('backtest-matches-tbody element not found in DOM');
+                document.getElementById('backtest-loading').classList.add('d-none');
+                document.getElementById('backtest-error').textContent = 'UI error: Table element not found';
+                document.getElementById('backtest-error').classList.remove('d-none');
+                return;
+            }
             if (data.matches && data.matches.length > 0) {
-                tbody.innerHTML = data.matches.map(match => `
-                    <tr>
-                        <td>${window.SharedUtils.escapeHtml(match.chat_title || 'Unknown')}</td>
-                        <td>${match.message_id}</td>
-                        <td><span class="badge bg-primary">${match.score.toFixed(2)}</span></td>
-                        <td><small>${window.SharedUtils.escapeHtml((match.triggers || []).join(', '))}</small></td>
-                        <td>${match.would_alert ? '<span class="badge bg-success">Yes</span>' : '<span class="badge bg-secondary">No</span>'}</td>
-                        <td><small>${window.SharedUtils.escapeHtml((match.text_preview || '').substring(0, 100))}</small></td>
-                    </tr>
-                `).join('');
+                tbody.innerHTML = data.matches.map(match => {
+                    const triggersCell = hasTriggersData 
+                        ? `<td><small>${window.SharedUtils.escapeHtml((match.triggers || []).join(', '))}</small></td>`
+                        : '';
+                    
+                    return `
+                        <tr>
+                            <td>${window.SharedUtils.escapeHtml(match.chat_title || 'Unknown')}</td>
+                            <td>${match.message_id}</td>
+                            <td><span class="badge bg-primary">${match.score.toFixed(2)}</span></td>
+                            ${triggersCell}
+                            <td>${match.would_alert ? '<span class="badge bg-success">Yes</span>' : '<span class="badge bg-secondary">No</span>'}</td>
+                            <td><small>${window.SharedUtils.escapeHtml((match.text_preview || '').substring(0, 100))}</small></td>
+                        </tr>
+                    `;
+                }).join('');
             } else {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No matches found</td></tr>';
+                const colspan = hasTriggersData ? 6 : 5;
+                tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-muted">No matches found</td></tr>`;
             }
         } catch (error) {
             console.error("Backtest failed:", error);
@@ -499,10 +604,9 @@
         document.getElementById("positive-samples").value = "";
         document.getElementById("negative-samples").value = "";
         document.getElementById("similarity-threshold").value = "0.42";
-        document.getElementById("profile-weight").value = "1.0";
         document.getElementById("profile-enabled").value = "true";
-        document.getElementById("profile-priority").value = "normal";
-        document.getElementById("profile-keywords").value = "";
+        document.getElementById("interest-vip-senders").value = "";
+        document.getElementById("interest-excluded-users").value = "";
         document.getElementById("profile-tags").value = "";
         document.getElementById("profile-notify-always").checked = false;
         document.getElementById("profile-include-in-digest").checked = true;
@@ -515,7 +619,7 @@
         }
         
         document.getElementById("interest-digest-mode").value = "dm";
-        document.getElementById("interest-digest-target-channel").value = "";
+        document.getElementById("interest-digest-target-channel").value = defaultInterestTargetChannel;
         
         const deleteBtn = document.getElementById("btn-delete-interest-profile");
         if (deleteBtn) {
@@ -574,6 +678,93 @@
         URL.revokeObjectURL(url);
         
         window.SharedUtils.showToast(`Exported: ${profile.name}`, 'success');
+    }
+    
+    /**
+     * Import an interest profile from JSON file
+     * Validates that the file contains an Interest profile (not Alert profile)
+     * @returns {Promise<void>}
+     */
+    async function importInterestProfile() {
+        // Create a temporary file input
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = '.json';
+        fileInput.style.display = 'none';
+        
+        fileInput.onchange = async (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            try {
+                const text = await file.text();
+                const profile = JSON.parse(text);
+                
+                // Validate this is an Interest profile
+                // Interest profiles have: positive_samples, negative_samples, threshold
+                // Alert profiles have: action_keywords, decision_keywords, detect_questions, keywords, etc.
+                const isInterestProfile = (
+                    ('positive_samples' in profile || 'negative_samples' in profile || 'threshold' in profile) &&
+                    !('action_keywords' in profile || 'detect_questions' in profile || 'keywords' in profile)
+                );
+                
+                if (!isInterestProfile) {
+                    window.SharedUtils.showToast(
+                        'Invalid file: This appears to be an Alert profile. Please import it in the Alert Profiles section.',
+                        'error'
+                    );
+                    return;
+                }
+                
+                // Remove timestamps and ID to create as new profile
+                const { id: _omitId, created_at: _omitCreated, updated_at: _omitUpdated, ...rest } = profile;
+                
+                // Compute next available ID
+                const existingIds = allInterestProfiles
+                    .map(p => parseInt(p.id, 10))
+                    .filter(id => Number.isFinite(id) && id >= 3000 && id < 4000);
+                const nextId = existingIds.length ? Math.max(...existingIds) + 1 : 3000;
+                
+                const importedProfile = {
+                    ...rest,
+                    id: nextId,
+                    name: `${rest.name || 'Imported Profile'}`,
+                    enabled: false, // Start disabled for safety
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                };
+                
+                // Save the profile
+                const response = await fetch(interestProfileEndpoints.upsert, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(importedProfile)
+                });
+                
+                if (!response.ok) throw new Error("Failed to import profile");
+                
+                const result = await response.json();
+                window.SharedUtils.showToast(`Imported: ${importedProfile.name}`, "success");
+                
+                // Reload list and select the new profile
+                await loadInterestProfiles();
+                if (result.profile_id) {
+                    await selectInterestProfile(result.profile_id);
+                }
+            } catch (error) {
+                console.error("Failed to import profile:", error);
+                if (error instanceof SyntaxError) {
+                    window.SharedUtils.showToast("Invalid JSON file", "error");
+                } else {
+                    window.SharedUtils.showToast("Failed to import profile", "error");
+                }
+            } finally {
+                document.body.removeChild(fileInput);
+            }
+        };
+        
+        document.body.appendChild(fileInput);
+        fileInput.click();
     }
     
     /**
@@ -921,6 +1112,7 @@
         newInterestProfile,
         filterInterestProfiles,
         exportInterestProfile,
+        importInterestProfile,
         duplicateInterestProfile,
         exportAllInterestProfiles,
         bulkToggleInterestProfiles,

@@ -10,10 +10,14 @@ from typing import Any, Callable, Dict, List, Optional, TypeVar
 
 try:
     from pydantic import BaseModel as PydanticBaseModel  # type: ignore[assignment]
-    from pydantic import Field as PydanticField  # type: ignore[assignment]
-    from pydantic import field_validator as pydantic_field_validator  # type: ignore[assignment]
-    from pydantic import model_validator as pydantic_model_validator  # type: ignore[assignment]
     from pydantic import ConfigDict as PydanticConfigDict  # type: ignore[assignment]
+    from pydantic import Field as PydanticField  # type: ignore[assignment]
+    from pydantic import (
+        field_validator as pydantic_field_validator,  # type: ignore[assignment]
+    )
+    from pydantic import (
+        model_validator as pydantic_model_validator,  # type: ignore[assignment]
+    )
 
     PYDANTIC_AVAILABLE = True
     BaseModel = PydanticBaseModel  # type: ignore[misc,assignment]
@@ -64,6 +68,7 @@ def _refresh_ui_config(context: str) -> None:
     """Reload TG Sentinel config so UI immediately reflects latest changes."""
     try:
         from core import get_deps
+
         from tgsentinel.config import load_config
 
         deps = get_deps()
@@ -100,7 +105,6 @@ if PYDANTIC_AVAILABLE:
         similarity_threshold: Optional[float] = Field(None, ge=0.0, le=1.0)
         decay_window: Optional[int] = Field(None, ge=1)
         interests: Optional[List[str]] = Field(None, max_length=50)
-        feedback_learning: Optional[bool] = None
 
         # Heuristic weights
         weight_0: Optional[float] = Field(None, ge=0.0, le=1.0)
@@ -394,8 +398,9 @@ def api_config_interests():
 @config_info_bp.get("/api/config/users")
 def api_config_users_list():
     """Get list of all monitored users."""
-    import yaml
     from pathlib import Path
+
+    import yaml
 
     try:
         config_file = Path(os.getenv("TG_SENTINEL_CONFIG", "config/tgsentinel.yml"))
@@ -416,10 +421,11 @@ def api_config_users_list():
 @config_info_bp.post("/api/config/users/add")
 def api_config_users_add():
     """Add new users to monitoring configuration."""
-    import tempfile
     import shutil
-    import yaml
+    import tempfile
     from pathlib import Path
+
+    import yaml
 
     try:
         data = request.get_json()
@@ -504,8 +510,9 @@ def api_config_users_add():
 @config_info_bp.route("/api/config/users/<user_id>", methods=["DELETE"])
 def api_config_users_delete(user_id):
     """Remove a user from monitoring configuration."""
-    import yaml
     from pathlib import Path
+
+    import yaml
 
     try:
         # Convert to int here instead of in the route
@@ -554,8 +561,9 @@ def api_config_users_delete(user_id):
 @config_info_bp.get("/api/config/channels")
 def api_config_channels():
     """Get list of configured channels."""
-    import yaml
     from pathlib import Path
+
+    import yaml
 
     try:
         config_file = Path(os.getenv("TG_SENTINEL_CONFIG", "config/tgsentinel.yml"))
@@ -575,8 +583,9 @@ def api_config_channels():
 @config_info_bp.route("/api/config/channels/<chat_id>", methods=["DELETE"])
 def api_config_channels_delete(chat_id):
     """Remove a channel from monitoring configuration."""
-    import yaml
     from pathlib import Path
+
+    import yaml
 
     try:
         # Convert to int here instead of in the route
@@ -620,8 +629,9 @@ def api_config_channels_delete(chat_id):
 @config_info_bp.route("/api/config/channels/<chat_id>", methods=["PATCH"])
 def api_config_channels_patch(chat_id):
     """Update channel properties (e.g., enabled state)."""
-    import yaml
     from pathlib import Path
+
+    import yaml
 
     try:
         # Convert chat_id to int

@@ -15,9 +15,9 @@ from __future__ import annotations
 
 import logging
 import os
-import requests
 from datetime import datetime, timezone
 
+import requests
 from flask import Blueprint, render_template, request
 
 try:
@@ -205,6 +205,7 @@ def profiles():
                             "channel_id": channel_id,
                             "enabled": True,
                             "vip_senders": getattr(channel, "vip_senders", []),
+                            "excluded_users": getattr(channel, "excluded_users", []),
                             "keywords": getattr(channel, "keywords", []),
                             "action_keywords": getattr(channel, "action_keywords", []),
                             "decision_keywords": getattr(

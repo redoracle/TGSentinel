@@ -1,0 +1,45 @@
+{
+  "id": 3006,
+  "name": "User Frustration & Pain Points",
+  "description": "Identify messages expressing user frustration, confusion, or pain points for product insights",
+  "enabled": false,
+  "threshold": 0.43,
+  "positive_samples": [
+    "This feature is so confusing, I've been trying for an hour and can't figure it out",
+    "Why is this so complicated? It should be much simpler",
+    "I'm extremely frustrated with how unreliable this has become",
+    "This is the third time this week it's failed. Unacceptable",
+    "The onboarding process is way too difficult for new users",
+    "Major usability issue: I can't find where to change my settings",
+    "This workflow makes no sense and wastes so much time"
+  ],
+  "negative_samples": [
+    "Feature works great, thank you",
+    "Minor suggestion for improvement",
+    "Everything is running smoothly",
+    "Quick question about usage",
+    "Appreciate the help"
+  ],
+  "keywords": [
+    "frustrated",
+    "confusing",
+    "difficult",
+    "broken",
+    "pain point",
+    "usability",
+    "terrible"
+  ],
+  "channels": [],
+  "users": [],
+  "vip_senders": [],
+  "excluded_users": [],
+  "tags": ["product", "ux", "feedback", "user-research"],
+  "digest_schedules": [
+    {
+      "schedule_type": "daily",
+      "daily_hour": 16,
+      "top_n": 20,
+      "min_score": 0.43
+    }
+  ]
+}

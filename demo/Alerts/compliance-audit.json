@@ -1,0 +1,53 @@
+{
+  "name": "Compliance & Audit Monitor",
+  "description": "Track policy changes, regulatory updates, and sensitive discussions",
+  "enabled": false,
+  "min_score": 5.0,
+  "critical_keywords": [
+    "confidential",
+    "NDA",
+    "legal",
+    "lawsuit",
+    "subpoena",
+    "investigation"
+  ],
+  "security_keywords": ["data breach", "PII", "GDPR", "privacy violation"],
+  "urgency_keywords": ["urgent", "immediate", "deadline"],
+  "financial_keywords": ["insider", "material information", "earnings"],
+  "technical_keywords": [],
+  "project_keywords": [],
+  "community_keywords": [],
+  "general_keywords": [
+    "policy",
+    "terms of service",
+    "TOS",
+    "terms and conditions",
+    "regulation",
+    "compliance",
+    "audit",
+    "governance"
+  ],
+  "detect_questions": true,
+  "detect_mentions": false,
+  "detect_links": true,
+  "require_forwarded": false,
+  "detect_codes": false,
+  "detect_documents": true,
+  "detect_polls": false,
+  "prioritize_pinned": true,
+  "prioritize_admin": true,
+  "vip_senders": [],
+  "excluded_users": [],
+  "channels": [],
+  "users": [],
+  "tags": ["compliance", "legal", "governance", "audit"],
+  "digest_schedules": [
+    {
+      "schedule_type": "weekly",
+      "weekly_day": 1,
+      "weekly_hour": 9,
+      "top_n": 30,
+      "min_score": 4.0
+    }
+  ]
+}

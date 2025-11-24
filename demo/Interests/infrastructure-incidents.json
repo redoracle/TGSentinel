@@ -1,0 +1,38 @@
+{
+  "id": 3002,
+  "name": "Infrastructure Issues & Outages",
+  "description": "Detect production incidents, system degradation, and infrastructure problems",
+  "enabled": false,
+  "threshold": 0.48,
+  "positive_samples": [
+    "Production database is experiencing high latency and timeouts",
+    "Service degradation detected on the API gateway",
+    "Complete outage of the authentication service",
+    "Critical infrastructure failure requiring immediate rollback",
+    "Performance degradation affecting all users in EU region",
+    "Emergency maintenance required due to disk space issues",
+    "Multiple servers are unresponsive and need investigation"
+  ],
+  "negative_samples": [
+    "Scheduled maintenance completed",
+    "Regular backup process running",
+    "Monitoring metrics look healthy",
+    "System uptime at 99.9%",
+    "All health checks passing"
+  ],
+  "keywords": [
+    "outage",
+    "down",
+    "degradation",
+    "incident",
+    "failure",
+    "latency",
+    "timeout"
+  ],
+  "channels": [],
+  "users": [],
+  "vip_senders": [],
+  "excluded_users": [],
+  "tags": ["devops", "sre", "infrastructure", "incidents"],
+  "digest_schedules": []
+}

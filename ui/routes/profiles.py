@@ -211,19 +211,16 @@ def toggle_profile():
         return jsonify({"status": "error", "message": "Profile name required"}), 400
 
     try:
-        # Load profile
         profile = (
             _profile_service.get_profile(profile_name) if _profile_service else None
         )
         if profile is None:
-            # Check if this is a legacy interest from config
             interests_attr = getattr(_config, "interests", None) if _config else None
             legacy_interests = (
                 list(interests_attr) if interests_attr is not None else []
             )
 
             if profile_name in legacy_interests:
-                # Auto-create default profile for legacy interest
                 logger.info(
                     f"Auto-creating profile for legacy interest '{profile_name}' during toggle"
                 )
@@ -234,7 +231,7 @@ def toggle_profile():
                     "negative_samples": [],
                     "threshold": 0.42,
                     "weight": 1.0,
-                    "enabled": enabled,  # Use the requested state
+                    "enabled": enabled,
                     "priority": "normal",
                     "keywords": [],
                     "channels": [],
@@ -254,10 +251,8 @@ def toggle_profile():
                     404,
                 )
         else:
-            # Update enabled state for existing profile
             profile["enabled"] = enabled
 
-        # Save changes
         if not _profile_service or not _profile_service.upsert_profile(profile):
             logger.error(f"Failed to persist toggle for profile '{profile_name}'")
             return (
@@ -277,343 +272,6 @@ def toggle_profile():
     except Exception as exc:
         logger.error(f"Error toggling profile '{profile_name}': {exc}")
         return jsonify({"status": "error", "message": "Internal server error"}), 500
-
-
-@profiles_bp.get("/get")
-def get_profile():
-    """Get profile details by name."""
-    profile_name = request.args.get("name", "").strip()
-    if not profile_name:
-        return jsonify({"status": "error", "message": "Profile name required"}), 400
-
-    try:
-        profile = (
-            _profile_service.get_profile(profile_name) if _profile_service else None
-        )
-
-        if profile is None:
-            # Check if this is a legacy interest from config
-            interests_attr = getattr(_config, "interests", None) if _config else None
-            legacy_interests = (
-                list(interests_attr) if interests_attr is not None else []
-            )
-
-            if profile_name in legacy_interests:
-                # Auto-create default profile for legacy interest
-                logger.info(
-                    f"Auto-creating profile for legacy interest '{profile_name}'"
-                )
-                profile = {
-                    "name": profile_name,
-                    "description": "Migrated from legacy interests",
-                    "positive_samples": [],
-                    "negative_samples": [],
-                    "threshold": 0.42,
-                    "weight": 1.0,
-                    "enabled": True,
-                    "priority": "normal",
-                    "keywords": [],
-                    "channels": [],
-                    "tags": [],
-                    "notify_always": False,
-                    "include_digest": True,
-                }
-                # Save it for future use
-                if _profile_service:
-                    _profile_service.upsert_profile(profile)
-            else:
-                logger.warning(f"Profile '{profile_name}' not found")
-                return (
-                    jsonify(
-                        {
-                            "status": "error",
-                            "message": f"Profile '{profile_name}' not found",
-                        }
-                    ),
-                    404,
-                )
-
-        logger.debug(f"Retrieved profile '{profile_name}'")
-        return jsonify(profile)
-
-    except Exception as exc:
-        logger.error(f"Error retrieving profile '{profile_name}': {exc}")
-        return jsonify({"status": "error", "message": "Internal server error"}), 500
-
-
-@profiles_bp.post("/save")
-def save_profile():
-    """Save or update a profile."""
-    if not request.is_json:
-        return (
-            jsonify(
-                {"status": "error", "message": "Content-Type must be application/json"}
-            ),
-            400,
-        )
-
-    payload = request.get_json(silent=True)
-    if payload is None:
-        return jsonify({"status": "error", "message": "Invalid JSON payload"}), 400
-
-    # Validate required fields
-    profile_name = payload.get("name", "").strip()
-    if not profile_name:
-        return jsonify({"status": "error", "message": "Profile name required"}), 400
-
-    # If updating existing profile, check if original_name differs (rename scenario)
-    original_name = payload.get("original_name", "").strip()
-
-    try:
-        # Set defaults for optional fields
-        profile_data = {
-            "name": profile_name,
-            "description": payload.get("description", "").strip(),
-            "positive_samples": payload.get("positive_samples", []),
-            "negative_samples": payload.get("negative_samples", []),
-            "threshold": float(payload.get("threshold", 0.42)),
-            "weight": float(payload.get("weight", 1.0)),
-            "enabled": bool(payload.get("enabled", True)),
-            "priority": payload.get("priority", "normal"),
-            "keywords": payload.get("keywords", []),
-            "channels": payload.get("channels", []),
-            "tags": payload.get("tags", []),
-            "notify_always": bool(payload.get("notify_always", False)),
-            "include_digest": bool(payload.get("include_digest", True)),
-        }
-
-        # Validate list fields are actually lists
-        for field in [
-            "positive_samples",
-            "negative_samples",
-            "keywords",
-            "channels",
-            "tags",
-        ]:
-            if not isinstance(profile_data[field], list):
-                return (
-                    jsonify(
-                        {
-                            "status": "error",
-                            "message": f"Field '{field}' must be a list",
-                        }
-                    ),
-                    400,
-                )
-
-        # Validate priority
-        if profile_data["priority"] not in ["low", "normal", "high", "critical"]:
-            return (
-                jsonify(
-                    {
-                        "status": "error",
-                        "message": "Priority must be: low, normal, high, or critical",
-                    }
-                ),
-                400,
-            )
-
-        # Handle rename: delete old profile if name changed
-        if original_name and original_name != profile_name:
-            logger.info(f"Renaming profile '{original_name}' to '{profile_name}'")
-            if _profile_service:
-                _profile_service.delete_profile(original_name)
-
-        # Save profile
-        if not _profile_service or not _profile_service.upsert_profile(profile_data):
-            logger.error(f"Failed to persist profile '{profile_name}'")
-            return (
-                jsonify({"status": "error", "message": "Failed to save profile"}),
-                500,
-            )
-
-        logger.info(f"Profile saved: {profile_name}")
-        return jsonify({"status": "ok", "message": f"Profile '{profile_name}' saved"})
-
-    except (ValueError, TypeError) as exc:
-        logger.warning(f"Validation error for profile '{profile_name}': {exc}")
-        return jsonify({"status": "error", "message": f"Validation error: {exc}"}), 400
-    except Exception as exc:
-        logger.error(f"Error saving profile '{profile_name}': {exc}")
-        return jsonify({"status": "error", "message": "Internal server error"}), 500
-
-
-@profiles_bp.post("/delete")
-def delete_profile():
-    """Delete a profile."""
-    if not request.is_json:
-        return (
-            jsonify(
-                {"status": "error", "message": "Content-Type must be application/json"}
-            ),
-            400,
-        )
-
-    payload = request.get_json(silent=True)
-    if payload is None:
-        return jsonify({"status": "error", "message": "Invalid JSON payload"}), 400
-
-    profile_name = payload.get("name", "").strip()
-    if not profile_name:
-        return jsonify({"status": "error", "message": "Profile name required"}), 400
-
-    try:
-        # Check if profile exists first
-        profile = (
-            _profile_service.get_profile(profile_name) if _profile_service else None
-        )
-        if profile is None:
-            logger.warning(f"Delete failed: profile '{profile_name}' not found")
-            return (
-                jsonify(
-                    {
-                        "status": "error",
-                        "message": f"Profile '{profile_name}' not found",
-                    }
-                ),
-                404,
-            )
-
-        # Delete profile
-        if not _profile_service or not _profile_service.delete_profile(profile_name):
-            logger.error(f"Failed to delete profile '{profile_name}'")
-            return (
-                jsonify({"status": "error", "message": "Failed to delete profile"}),
-                500,
-            )
-
-        logger.info(f"Profile deleted: {profile_name}")
-        return jsonify({"status": "ok", "message": f"Profile '{profile_name}' deleted"})
-
-    except Exception as exc:
-        logger.error(f"Error deleting profile '{profile_name}': {exc}")
-        return jsonify({"status": "error", "message": "Internal server error"}), 500
-
-
-@profiles_bp.post("/import")
-def import_profiles():
-    """Import interest profiles from YAML file.
-
-    Persists changes to Sentinel config via API (single source of truth).
-    """
-    import os
-    import requests
-
-    if "file" not in request.files:
-        return jsonify({"status": "error", "message": "No file provided"}), 400
-
-    file = request.files["file"]
-    if file.filename == "":
-        return jsonify({"status": "error", "message": "Empty filename"}), 400
-
-    try:
-        # Read and validate YAML
-        content = file.read().decode("utf-8")
-        data = yaml.safe_load(content)
-
-        if not isinstance(data, dict):
-            return (
-                jsonify({"status": "error", "message": "Invalid YAML structure"}),
-                400,
-            )
-
-        # Validate interests structure
-        if "interests" not in data:
-            return (
-                jsonify(
-                    {"status": "error", "message": "Missing 'interests' key in YAML"}
-                ),
-                400,
-            )
-
-        interests = data["interests"]
-        if not isinstance(interests, list):
-            return (
-                jsonify({"status": "error", "message": "'interests' must be a list"}),
-                400,
-            )
-
-        # Persist to Sentinel config (single source of truth)
-        sentinel_api_url = os.getenv(
-            "SENTINEL_API_BASE_URL", "http://sentinel:8080/api"
-        )
-
-        # Get current config from Sentinel
-        try:
-            response = requests.get(f"{sentinel_api_url}/config", timeout=5)
-            if not response.ok:
-                logger.error(
-                    f"Failed to fetch config from Sentinel: {response.status_code}"
-                )
-                return (
-                    jsonify(
-                        {
-                            "status": "error",
-                            "message": "Could not fetch current config from Sentinel",
-                        }
-                    ),
-                    503,
-                )
-
-            # Update config via Sentinel API
-            update_response = requests.post(
-                f"{sentinel_api_url}/config",
-                json={"interests": interests},
-                headers={"Content-Type": "application/json"},
-                timeout=10,
-            )
-
-            if not update_response.ok:
-                logger.error(
-                    f"Sentinel rejected interests update: {update_response.status_code}"
-                )
-                error_detail = update_response.json().get("message", "Unknown error")
-                return (
-                    jsonify(
-                        {
-                            "status": "error",
-                            "message": f"Failed to persist config via Sentinel: {error_detail}",
-                        }
-                    ),
-                    502,
-                )
-
-            logger.info(
-                f"Imported and persisted {len(interests)} interest profile(s) via Sentinel API"
-            )
-
-            # Update local config to reflect changes immediately (in-memory cache)
-            if _config:
-                _config.interests = interests
-
-            return jsonify(
-                {
-                    "status": "ok",
-                    "message": f"Imported {len(interests)} profile(s)",
-                    "count": len(interests),
-                    "imported": len(interests),
-                    "persisted": True,
-                }
-            )
-
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Could not connect to Sentinel API: {e}")
-            return (
-                jsonify(
-                    {
-                        "status": "error",
-                        "message": "Could not reach Sentinel service to persist changes",
-                    }
-                ),
-                503,
-            )
-
-    except yaml.YAMLError as exc:
-        logger.error(f"YAML parsing error: {exc}")
-        return jsonify({"status": "error", "message": f"Invalid YAML: {exc}"}), 400
-    except Exception as exc:
-        logger.error(f"Import error: {exc}", exc_info=True)
-        return jsonify({"status": "error", "message": str(exc)}), 500
 
 
 @profiles_bp.post("/interest/backtest")
@@ -1085,7 +743,13 @@ def toggle_alert_profile():
 
 @profiles_bp.post("/alert/backtest")
 def backtest_alert_profile():
-    """Backtest an alert profile against historical messages."""
+    """Backtest an alert profile against historical messages.
+
+    This endpoint proxies the request to the Sentinel API, which owns the
+    message database and heuristics scoring pipeline.
+    """
+    logger.info("[BACKTEST] Alert backtest endpoint called")
+
     if not request.is_json:
         return (
             jsonify(
@@ -1099,229 +763,87 @@ def backtest_alert_profile():
         return jsonify({"status": "error", "message": "Invalid JSON payload"}), 400
 
     profile_id = payload.get("id", "").strip()
-
-    # Safely parse and validate hours_back
-    try:
-        hours_back_raw = payload.get("hours_back", 24)
-        hours_back = int(hours_back_raw)
-    except (ValueError, TypeError):
-        return (
-            jsonify(
-                {
-                    "status": "error",
-                    "message": f"hours_back must be a valid integer, got: {type(hours_back_raw).__name__}",
-                }
-            ),
-            400,
-        )
-
-    # Safely parse and validate max_messages
-    try:
-        max_messages_raw = payload.get("max_messages", 100)
-        max_messages = int(max_messages_raw)
-    except (ValueError, TypeError):
-        return (
-            jsonify(
-                {
-                    "status": "error",
-                    "message": f"max_messages must be a valid integer, got: {type(max_messages_raw).__name__}",
-                }
-            ),
-            400,
-        )
-
-    channel_filter = payload.get("channel_filter")  # Optional channel ID
-
     if not profile_id:
         return jsonify({"status": "error", "message": "Profile ID required"}), 400
 
-    # Validate hours_back bounds (prevent resource exhaustion)
-    if hours_back < 0 or hours_back > 168:
-        return (
-            jsonify(
-                {
-                    "status": "error",
-                    "message": "hours_back must be between 0 and 168 (7 days)",
-                }
-            ),
-            400,
-        )
-
-    # Validate max_messages bounds (prevent SQL injection and excessive queries)
-    if max_messages < 1 or max_messages > 1000:
-        return (
-            jsonify(
-                {
-                    "status": "error",
-                    "message": "max_messages must be between 1 and 1000",
-                }
-            ),
-            400,
-        )
-
+    # Forward the request to Sentinel API
     try:
-        profile = (
-            _profile_service.get_alert_profile(profile_id) if _profile_service else None
-        )
-        if not profile:
-            return jsonify({"status": "error", "message": "Profile not found"}), 404
+        sentinel_url = os.getenv("SENTINEL_API_BASE_URL", "http://sentinel:8080/api")
+        backtest_url = f"{sentinel_url}/profiles/alert/backtest"
 
-        # Fetch historical messages
-        cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours_back)).strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
-
-        # Build query with optional channel filter
-        query = """
-            SELECT chat_id, msg_id, chat_title, sender_name, message_text, 
-                   score, triggers, alerted, created_at
-            FROM messages 
-            WHERE datetime(created_at) >= :cutoff
-        """
-        params: Dict[str, Any] = {"cutoff": cutoff}
-
-        if channel_filter:
-            query += " AND chat_id = :channel_id"
-            params["channel_id"] = channel_filter
-
-        query += " ORDER BY created_at DESC LIMIT :limit"
-        params["limit"] = max_messages  # Use integer directly for SQL LIMIT
-
-        messages = _query_all(query, **params) if _query_all else []
-
-        # Re-score messages with profile
-        matches = []
-        for msg in messages:
-            text = msg.get("message_text", "")
-
-            # Collect all keywords from profile
-            keywords = []
-            for category in [
-                "action_keywords",
-                "decision_keywords",
-                "urgency_keywords",
-                "importance_keywords",
-                "release_keywords",
-                "security_keywords",
-                "risk_keywords",
-                "opportunity_keywords",
-            ]:
-                keywords.extend(profile.get(category, []))
-
-            # Check if any keywords match
-            keyword_score = 0.0
-            matched_keywords = []
-            for kw in keywords:
-                if kw.lower() in text.lower():
-                    keyword_score += 0.8
-                    matched_keywords.append(kw)
-
-            # Build triggers list
-            triggers = []
-            rescore = keyword_score
-
-            if matched_keywords:
-                triggers.append(f"keywords:{','.join(matched_keywords[:3])}")
-
-            # Estimate if this would trigger an alert
-            threshold = 0.7  # Configurable threshold
-            would_alert = rescore >= threshold
-
-            if would_alert or msg.get("alerted"):
-                matches.append(
-                    {
-                        "message_id": msg["msg_id"],
-                        "chat_id": msg["chat_id"],
-                        "chat_title": msg["chat_title"],
-                        "sender_name": msg["sender_name"],
-                        "score": round(rescore, 2),
-                        "original_score": round(msg.get("score", 0.0), 2),
-                        "triggers": triggers,
-                        "original_triggers": msg.get("triggers", ""),
-                        "text_preview": text[:100] + ("..." if len(text) > 100 else ""),
-                        "timestamp": msg["created_at"],
-                        "would_alert": would_alert,
-                        "actually_alerted": bool(msg.get("alerted")),
-                    }
-                )
-
-        # Calculate statistics
-        total_messages = len(messages)
-        matched_messages = len(matches)
-        true_positives = sum(
-            1 for m in matches if m["would_alert"] and m["actually_alerted"]
-        )
-        false_positives = sum(
-            1 for m in matches if m["would_alert"] and not m["actually_alerted"]
-        )
-        false_negatives = sum(
-            1
-            for m in messages
-            if m.get("alerted")
-            and not any(
-                match["message_id"] == m["msg_id"] and match["would_alert"]
-                for match in matches
-            )
-        )
-
-        stats = {
-            "total_messages": total_messages,
-            "matched_messages": matched_messages,
-            "match_rate": (
-                round(matched_messages / total_messages * 100, 1)
-                if total_messages > 0
-                else 0
-            ),
-            "avg_score": (
-                round(sum(m["score"] for m in matches) / matched_messages, 2)
-                if matched_messages > 0
-                else 0
-            ),
-            "true_positives": true_positives,
-            "false_positives": false_positives,
-            "false_negatives": false_negatives,
-            "precision": (
-                round(true_positives / (true_positives + false_positives) * 100, 1)
-                if (true_positives + false_positives) > 0
-                else 0
-            ),
-        }
-
-        # Generate recommendations
-        recommendations = []
-        if stats["false_positives"] > stats["true_positives"]:
-            recommendations.append(
-                "⚠️ High false positive rate - consider tightening keyword matches"
-            )
-        if stats["match_rate"] > 50:
-            recommendations.append("📊 Very high match rate - profile may be too broad")
-        if stats["match_rate"] < 5:
-            recommendations.append(
-                "📉 Low match rate - consider adding more keywords or lowering thresholds"
-            )
-        if stats["precision"] < 70:
-            recommendations.append("🎯 Low precision - review keyword relevance")
-
-        result = {
-            "status": "ok",
+        # Build request payload for Sentinel
+        sentinel_payload = {
             "profile_id": profile_id,
-            "profile_name": profile.get("name", profile_id),
-            "test_date": datetime.now(timezone.utc).isoformat(),
-            "parameters": {
-                "hours_back": hours_back,
-                "max_messages": max_messages,
-                "channel_filter": channel_filter,
-            },
-            "matches": matches[:50],  # Limit response size
-            "stats": stats,
-            "recommendations": recommendations,
+            "hours_back": payload.get("hours_back", 24),
+            "max_messages": payload.get("max_messages", 100),
         }
 
-        logger.info(f"Backtest completed for alert profile {profile_id}: {stats}")
+        # Add optional channel filter if provided
+        if "channel_filter" in payload:
+            sentinel_payload["channel_filter"] = payload["channel_filter"]
+
+        logger.info(
+            f"[BACKTEST] Forwarding request to Sentinel: {backtest_url}, "
+            f"profile_id={profile_id}, hours_back={sentinel_payload['hours_back']}"
+        )
+
+        # Make request to Sentinel API
+        response = requests.post(
+            backtest_url,
+            json=sentinel_payload,
+            headers={"Content-Type": "application/json"},
+            timeout=30,
+        )
+
+        # Check for HTTP errors
+        response.raise_for_status()
+
+        # Parse and return the response
+        result = response.json()
+        logger.info(
+            f"[BACKTEST] Received response from Sentinel: "
+            f"status={result.get('status')}, "
+            f"matched_messages={result.get('stats', {}).get('matched_messages', 0)}"
+        )
+
         return jsonify(result)
 
+    except requests.exceptions.Timeout:
+        logger.error("[BACKTEST] Timeout connecting to Sentinel API")
+        return (
+            jsonify(
+                {
+                    "status": "error",
+                    "message": "Request to Sentinel API timed out",
+                }
+            ),
+            504,
+        )
+    except requests.exceptions.ConnectionError as exc:
+        logger.error(f"[BACKTEST] Connection error to Sentinel API: {exc}")
+        return (
+            jsonify(
+                {
+                    "status": "error",
+                    "message": "Could not connect to Sentinel API",
+                }
+            ),
+            503,
+        )
+    except requests.exceptions.HTTPError as exc:
+        logger.error(f"[BACKTEST] HTTP error from Sentinel API: {exc}")
+        status_code = exc.response.status_code if exc.response else 500
+        error_msg = "Sentinel API returned an error"
+        try:
+            error_data = exc.response.json()
+            error_msg = error_data.get("message", error_msg)
+        except (json.JSONDecodeError, ValueError, TypeError, AttributeError):
+            pass
+        return jsonify({"status": "error", "message": error_msg}), status_code
     except Exception as exc:
-        logger.error(f"Error backtesting alert profile: {exc}", exc_info=True)
+        logger.error(
+            f"[BACKTEST] Error backtesting alert profile: {exc}", exc_info=True
+        )
         return jsonify({"status": "error", "message": str(exc)}), 500
 
 
@@ -1473,10 +995,10 @@ def upsert_interest_profile():
         profile_data.setdefault("positive_samples", [])
         profile_data.setdefault("negative_samples", [])
         profile_data.setdefault("threshold", 0.42)
-        profile_data.setdefault("weight", 1.0)
-        profile_data.setdefault("priority", "normal")
-        profile_data.setdefault("keywords", [])
+        profile_data.setdefault("vip_senders", [])
+        profile_data.setdefault("excluded_users", [])
         profile_data.setdefault("channels", [])
+        profile_data.setdefault("users", [])
         profile_data.setdefault("tags", [])
         profile_data.setdefault("notify_always", False)
         profile_data.setdefault("include_digest", True)

@@ -1,0 +1,51 @@
+{
+  "name": "DevOps CI/CD Monitor",
+  "description": "Alert on failed builds, deployment issues, and infrastructure problems",
+  "enabled": false,
+  "min_score": 4.0,
+  "critical_keywords": [
+    "failed",
+    "error",
+    "failure",
+    "broken",
+    "crashed",
+    "down"
+  ],
+  "security_keywords": [],
+  "urgency_keywords": ["rollback", "revert", "emergency", "hotfix", "incident"],
+  "financial_keywords": [],
+  "technical_keywords": [
+    "build failed",
+    "deployment failed",
+    "test failure",
+    "pipeline error",
+    "timeout",
+    "out of memory",
+    "disk full",
+    "connection refused"
+  ],
+  "project_keywords": [
+    "production",
+    "staging",
+    "CI/CD",
+    "deployment",
+    "release"
+  ],
+  "community_keywords": [],
+  "general_keywords": [],
+  "detect_questions": true,
+  "detect_mentions": true,
+  "detect_links": false,
+  "require_forwarded": false,
+  "detect_codes": true,
+  "detect_documents": false,
+  "detect_polls": false,
+  "prioritize_pinned": true,
+  "prioritize_admin": true,
+  "vip_senders": [],
+  "excluded_users": [],
+  "channels": [],
+  "users": [],
+  "tags": ["devops", "sre", "ci-cd", "monitoring"],
+  "digest_schedules": []
+}

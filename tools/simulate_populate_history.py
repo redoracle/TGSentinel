@@ -15,6 +15,7 @@ import asyncio
 import json
 import logging
 import os
+import sqlite3
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import redis
 from telethon import TelegramClient
+from telethon.sessions import SQLiteSession, StringSession
 from telethon.tl.types import Channel, Chat, User
 
 from tgsentinel.config import load_config
@@ -261,8 +263,30 @@ async def main():
 
     # Initialize Telegram client
     log.info("Initializing Telegram client...")
+
+    # IMPORTANT: This script cannot run while sentinel is active because both
+    # would try to access the same Telethon session file (SQLite database).
+    # SQLite does not support concurrent writers well, especially with WAL mode.
+    #
+    # To use this script:
+    # 1. Stop sentinel: docker compose stop sentinel
+    # 2. Run this script: docker compose run --rm sentinel python tools/simulate_populate_history.py ...
+    # 3. Restart sentinel: docker compose start sentinel
+
+    session_path = cfg.telegram_session
+    log.info(f"Using Telegram session: '{session_path}'")
+
+    if not os.path.exists(session_path):
+        log.error(f"Session file not found at {session_path}")
+        log.error(
+            "Please ensure you have authenticated first by running the main application."
+        )
+        return 1
+
+    # Create client with session file
+    # Note: sentinel must be stopped first to avoid "database is locked" errors
     client = TelegramClient(
-        cfg.telegram_session,
+        session_path,
         int(api_id),
         api_hash,
         system_version="TGSentinel History Populator",
@@ -306,9 +330,13 @@ async def main():
         async for dialog in client.iter_dialogs():
             if dialog.entity.id in channel_ids:
                 id_to_entity[dialog.entity.id] = dialog.entity
-                log.debug(
-                    f"Resolved entity for {dialog.entity.id}: {dialog.entity.title}"
+                # Get name safely - Users have first_name, Channels/Chats have title
+                entity_name = (
+                    getattr(dialog.entity, "title", None)
+                    or getattr(dialog.entity, "first_name", None)
+                    or f"Entity {dialog.entity.id}"
                 )
+                log.debug(f"Resolved entity for {dialog.entity.id}: {entity_name}")
 
         log.info(f"Resolved {len(id_to_entity)} out of {len(channel_ids)} channels")
 
@@ -353,13 +381,30 @@ async def main():
 
         log.info("\n✅ History population complete!")
 
+    except sqlite3.OperationalError as e:
+        if "locked" in str(e).lower():
+            log.error("=" * 60)
+            log.error("DATABASE IS LOCKED!")
+            log.error("The Telegram session file is being used by another process.")
+            log.error("")
+            log.error("To fix this, stop the sentinel service first:")
+            log.error("  docker compose stop sentinel")
+            log.error("")
+            log.error("Then run this script again:")
+            log.error(
+                "  docker compose run --rm sentinel python tools/simulate_populate_history.py ..."
+            )
+            log.error("=" * 60)
+            return 1
+        else:
+            raise
     except Exception as e:
         log.error(f"Error during execution: {e}", exc_info=True)
         return 1
 
     finally:
         if client.is_connected():
-            client.disconnect()  # type: ignore[func-returns-value]
+            await client.disconnect()
             log.info("Telegram client disconnected")
 
     return 0

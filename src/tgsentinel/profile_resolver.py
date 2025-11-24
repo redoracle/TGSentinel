@@ -36,9 +36,16 @@ class ResolvedProfile:
     risk_keywords: List[str] = field(default_factory=list)
     opportunity_keywords: List[str] = field(default_factory=list)
 
+    # User filtering
+    excluded_users: List[int] = field(
+        default_factory=list
+    )  # Blacklist: never alert from these users
+
     # Detection flags (use most permissive from all profiles)
     detect_codes: bool = True
     detect_documents: bool = True
+    detect_links: bool = False
+    require_forwarded: bool = False
     prioritize_pinned: bool = True
     prioritize_admin: bool = True
     detect_polls: bool = True
@@ -68,6 +75,36 @@ class ProfileResolver:
         """
         self.global_profiles = global_profiles
 
+    def has_applicable_profiles(self, entity_type: str, entity_id: int) -> bool:
+        """Check if any global profile applies to this entity.
+
+        This checks if there are profiles with empty bindings (apply to all)
+        or explicit bindings that include this entity.
+
+        Args:
+            entity_type: "channel" or "user"
+            entity_id: The entity ID to check
+
+        Returns:
+            True if at least one enabled profile applies to this entity
+        """
+        for profile in self.global_profiles.values():
+            # Skip disabled profiles
+            if not getattr(profile, "enabled", True):
+                continue
+
+            if entity_type == "channel":
+                # Profile applies if BOTH lists empty OR channels contains this ID
+                both_empty = not profile.channels and not profile.users
+                if both_empty or entity_id in profile.channels:
+                    return True
+            elif entity_type == "user":
+                # Profile applies if BOTH lists empty OR users contains this ID
+                both_empty = not profile.channels and not profile.users
+                if both_empty or entity_id in profile.users:
+                    return True
+        return False
+
     def resolve_for_channel(self, channel: ChannelRule) -> ResolvedProfile:
         """Resolve profiles for a specific channel.
 
@@ -77,12 +114,40 @@ class ProfileResolver:
         Returns:
             ResolvedProfile with merged keywords and scoring weights
         """
+        # Start with explicitly bound profiles
+        effective_profiles = list(channel.profiles)
+
+        # Add global profiles that apply to this channel (empty channels list OR explicitly listed)
+        for profile_id, profile in self.global_profiles.items():
+            # Skip disabled profiles
+            if not getattr(profile, "enabled", True):
+                log.debug(
+                    f"Skipping disabled profile '{profile_id}' for channel {channel.id}"
+                )
+                continue
+
+            if profile_id not in effective_profiles:
+                # Auto-bind if:
+                # 1. BOTH channels and users are empty (applies to all), OR
+                # 2. channels list contains this channel ID
+                both_empty = not profile.channels and not profile.users
+                channel_matches = channel.id in profile.channels
+
+                if both_empty or channel_matches:
+                    effective_profiles.append(profile_id)
+                    reason = "both lists empty" if both_empty else "channel ID in list"
+                    log.debug(
+                        f"Auto-binding global profile '{profile_id}' to channel {channel.id} "
+                        f"({reason})"
+                    )
+
         return self._resolve(
             entity_type="channel",
             entity_id=channel.id,
-            bound_profiles=channel.profiles,
+            bound_profiles=effective_profiles,
             overrides=channel.overrides,
             entity_digest=channel.digest,  # Direct digest override
+            entity_excluded_users=channel.excluded_users,  # Entity-level excluded users
             # Backward compatibility: merge legacy keyword fields
             legacy_keywords={
                 "keywords": channel.keywords,
@@ -106,12 +171,42 @@ class ProfileResolver:
         Returns:
             ResolvedProfile with merged keywords and scoring weights
         """
+        # Start with explicitly bound profiles
+        effective_profiles = list(user.profiles)
+
+        # Add global profiles that apply to this user (empty users list OR explicitly listed)
+        for profile_id, profile in self.global_profiles.items():
+            # Skip disabled profiles
+            if not getattr(profile, "enabled", True):
+                log.debug(
+                    f"Skipping disabled profile '{profile_id}' for user {user.id}"
+                )
+                continue
+
+            if profile_id not in effective_profiles:
+                # Auto-bind if:
+                # 1. BOTH channels and users are empty (applies to all), OR
+                # 2. users list contains this user ID
+                both_empty = not profile.channels and not profile.users
+                user_matches = user.id in profile.users
+
+                if both_empty or user_matches:
+                    effective_profiles.append(profile_id)
+                    reason = "both lists empty" if both_empty else "user ID in list"
+                    log.debug(
+                        f"Auto-binding global profile '{profile_id}' to user {user.id} "
+                        f"({reason})"
+                    )
+
         return self._resolve(
             entity_type="user",
             entity_id=user.id,
-            bound_profiles=user.profiles,
+            bound_profiles=effective_profiles,
             overrides=user.overrides,
             entity_digest=user.digest,  # Direct digest override
+            entity_excluded_users=getattr(
+                user, "excluded_users", []
+            ),  # Entity-level excluded users
             legacy_keywords={},  # Users don't have legacy keyword fields
         )
 
@@ -122,6 +217,7 @@ class ProfileResolver:
         bound_profiles: List[str],
         overrides: ChannelOverrides,
         entity_digest: Optional[ProfileDigestConfig],
+        entity_excluded_users: List[int],
         legacy_keywords: Dict[str, List[str]],
     ) -> ResolvedProfile:
         """Core resolution logic.
@@ -132,6 +228,7 @@ class ProfileResolver:
             bound_profiles: List of profile IDs to bind
             overrides: Entity-specific overrides
             entity_digest: Direct digest config override at entity level
+            entity_excluded_users: Entity-level excluded users (from ChannelRule or MonitoredUser)
             legacy_keywords: Backward-compatible keyword fields (for channels)
 
         Returns:
@@ -155,10 +252,14 @@ class ProfileResolver:
         detect_flags = {
             "detect_codes": [],
             "detect_documents": [],
+            "detect_links": [],
+            "require_forwarded": [],
             "prioritize_pinned": [],
             "prioritize_admin": [],
             "detect_polls": [],
         }
+        # Collect excluded_users preserving order (profiles first, then overrides)
+        excluded_users_ordered: List[int] = []
 
         for profile_id in bound_profiles:
             profile = self.global_profiles.get(profile_id)
@@ -180,6 +281,12 @@ class ProfileResolver:
             for flag_key in detect_flags.keys():
                 detect_flags[flag_key].append(getattr(profile, flag_key, True))
 
+            # Collect excluded_users from profile (preserving order)
+            profile_excluded = getattr(profile, "excluded_users", [])
+            for user_id in profile_excluded:
+                if user_id not in excluded_users_ordered:
+                    excluded_users_ordered.append(user_id)
+
             resolved.bound_profiles.append(profile_id)
 
         # Step 2: Apply legacy keywords (backward compatibility)
@@ -200,9 +307,26 @@ class ProfileResolver:
             merged_keywords["urgency_keywords"].update(overrides.urgency_keywords_extra)
             resolved.has_overrides = True
 
+        # Apply entity-level excluded_users (from ChannelRule/MonitoredUser)
+        # These come after profile-level but before overrides for proper precedence
+        if entity_excluded_users:
+            for user_id in entity_excluded_users:
+                if user_id not in excluded_users_ordered:
+                    excluded_users_ordered.append(user_id)
+
+        # Apply excluded_users from overrides (append last, highest priority)
+        if hasattr(overrides, "excluded_users") and overrides.excluded_users:
+            for user_id in overrides.excluded_users:
+                if user_id not in excluded_users_ordered:
+                    excluded_users_ordered.append(user_id)
+            resolved.has_overrides = True
+
         # Step 4: Finalize keywords (sort for deterministic output)
         for key, keyword_set in merged_keywords.items():
             setattr(resolved, key, sorted(keyword_set))
+
+        # Finalize excluded_users (preserve order, duplicates already removed)
+        resolved.excluded_users = excluded_users_ordered
 
         # Step 5: Compute final scoring weights (average from profiles)
         for category, weights in merged_weights.items():
@@ -216,6 +340,8 @@ class ProfileResolver:
         # Step 6: Set detection flags (use most permissive)
         resolved.detect_codes = any(detect_flags["detect_codes"])
         resolved.detect_documents = any(detect_flags["detect_documents"])
+        resolved.detect_links = any(detect_flags["detect_links"])
+        resolved.require_forwarded = any(detect_flags["require_forwarded"])
         resolved.prioritize_pinned = any(detect_flags["prioritize_pinned"])
         resolved.prioritize_admin = any(detect_flags["prioritize_admin"])
         resolved.detect_polls = any(detect_flags["detect_polls"])
@@ -235,6 +361,7 @@ class ProfileResolver:
             f"Resolved profile for {entity_type} {entity_id}: "
             f"{len(resolved.keywords)} keywords, "
             f"{len(resolved.bound_profiles)} profiles, "
+            f"{len(resolved.excluded_users)} excluded_users, "
             f"digest_config={'present' if resolved.digest else 'none'}, "
             f"overrides={resolved.has_overrides}"
         )

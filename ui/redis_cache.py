@@ -13,12 +13,12 @@ import hashlib
 import json
 import logging
 import os
-import time
-from typing import Any, Dict
 
 # Import from utils_legacy (sibling module in ui/)
 import sys
+import time
 from pathlib import Path
+from typing import Any, Dict
 
 sys.path.insert(0, str(Path(__file__).parent))
 from utils_legacy import format_display_phone  # noqa: E402

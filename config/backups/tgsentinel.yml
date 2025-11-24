@@ -1,0 +1,23 @@
+# TG Sentinel Configuration
+# This file is auto-generated on first startup
+
+# Channels to monitor (can be updated via UI)
+channels: []
+
+# Telegram session file path (relative to app root)
+telegram:
+  session: "data/tgsentinel.session"
+
+# Alert settings
+alerts:
+  enabled: true
+  min_score: 5.0 # Minimum score (0.0-10.0 scale) to trigger instant alerts
+
+# Digest settings
+digest:
+  hourly: true
+  daily: true
+
+# Logging
+logging:
+  level: "INFO"

@@ -152,15 +152,18 @@
 
 /* Alert Profiles List Improvements */
 .alert-profiles-list-card {
-  height: calc(100vh - 250px);
-  min-height: 500px;
-  max-height: 800px;
   display: flex;
   flex-direction: column;
 }
 
-.alert-profiles-list-card .card-body {
-  flex: 1;
+.alert-profiles-list-card .collapse.show {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+}
+
+.alert-profiles-list-card .collapse .card-body {
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -170,6 +173,7 @@
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+  max-height: calc(100vh - 320px);
 }
 
 /* Scrollbar styling with fallbacks for browser compatibility */
@@ -705,15 +709,16 @@
   color: var(--success-color, #28a745);
 }
 
-/* Collapsible Section Styling */
+/* Collapsible Section Styling - Match Alerts Feed exactly */
 .collapse-icon {
   display: inline-block;
-  transition: transform 0.3s ease;
-  font-size: 0.875rem;
+  transition: transform 0.3s ease-in-out;
+  transform: rotate(90deg);
 }
 
-[aria-expanded="true"] .collapse-icon {
-  transform: rotate(90deg);
+button.collapsed .collapse-icon,
+button[aria-expanded="false"] .collapse-icon {
+  transform: rotate(0deg);
 }
 
 .card-header[role="button"]:hover {
@@ -722,8 +727,7 @@
 
 /* Responsive Adjustments */
 @media (max-width: 1199.98px) {
-  .alert-profiles-list-card {
-    height: auto;
+  .alert-profiles-list-container {
     max-height: 500px;
   }
 }

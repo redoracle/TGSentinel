@@ -6,7 +6,7 @@ All operations proxy to Sentinel as the single source of truth for configuration
 
 import logging
 import os
-from typing import Optional, Callable
+from typing import Callable, Optional
 
 from flask import Blueprint, jsonify, request
 

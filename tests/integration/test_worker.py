@@ -1,6 +1,6 @@
-"""Tests for the worker module."""
-
 from __future__ import annotations
+
+"""Tests for the worker module."""
 
 import asyncio
 import json
@@ -21,8 +21,6 @@ from tgsentinel.config import (
 )
 from tgsentinel.heuristics import HeuristicResult
 
-pytestmark = pytest.mark.integration
-
 
 def _make_cfg(
     *,
@@ -35,7 +33,9 @@ def _make_cfg(
         telegram_session="sess",
         api_id=123,
         api_hash="hash",
-        alerts=AlertsCfg(mode=mode, target_channel=target_channel, digest=DigestCfg()),
+        alerts=AlertsCfg(
+            mode=mode, target_channel=target_channel, min_score=0.0, digest=DigestCfg()
+        ),
         channels=channels
         or [
             ChannelRule(
@@ -60,7 +60,7 @@ def _make_cfg(
             ),
             database_uri="sqlite:///:memory:",
         ),
-        embeddings_model="all-MiniLM-L6-v2",
+        embeddings_model=None,
         similarity_threshold=similarity_threshold,
     )
 

@@ -1,5 +1,5 @@
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
@@ -26,6 +26,22 @@ CREATE TABLE IF NOT EXISTS feedback(
   label INTEGER, -- 1=thumbs up, 0=thumbs down
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY(chat_id, msg_id)
+);
+
+CREATE TABLE IF NOT EXISTS webhook_deliveries(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  webhook_service TEXT NOT NULL,
+  profile_id TEXT,
+  profile_name TEXT,
+  chat_id INTEGER,
+  msg_id INTEGER,
+  status TEXT NOT NULL, -- 'success', 'failed', 'retry_1', 'retry_2', 'retry_3'
+  http_status INTEGER,
+  response_time_ms INTEGER,
+  error_message TEXT,
+  payload TEXT, -- JSON payload sent
+  attempt INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 """
 
@@ -97,6 +113,28 @@ CREATE TABLE IF NOT EXISTS feedback(
             )
         )
 
+        con.execute(
+            text(
+                """
+CREATE TABLE IF NOT EXISTS webhook_deliveries(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  webhook_service TEXT NOT NULL,
+  profile_id TEXT,
+  profile_name TEXT,
+  chat_id INTEGER,
+  msg_id INTEGER,
+  status TEXT NOT NULL,
+  http_status INTEGER,
+  response_time_ms INTEGER,
+  error_message TEXT,
+  payload TEXT,
+  attempt INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)
+        """
+            )
+        )
+
         # Add columns to existing tables if they don't exist
         _add_column_if_missing(con, "messages", "chat_title", "TEXT")
         _add_column_if_missing(con, "messages", "sender_name", "TEXT")
@@ -139,6 +177,23 @@ CREATE TABLE IF NOT EXISTS feedback(
         con.execute(
             text(
                 "CREATE INDEX IF NOT EXISTS idx_messages_digest ON messages(digest_schedule, digest_processed, created_at)"
+            )
+        )
+
+        # Webhook delivery indexes
+        con.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_created_at ON webhook_deliveries(created_at DESC)"
+            )
+        )
+        con.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_service ON webhook_deliveries(webhook_service, created_at DESC)"
+            )
+        )
+        con.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_status ON webhook_deliveries(status, created_at DESC)"
             )
         )
 
@@ -333,3 +388,116 @@ def vacuum_database(engine: Engine) -> dict[str, Any]:
         log.error(f"VACUUM failed: {e}")
 
     return stats
+
+
+def record_webhook_delivery(
+    engine: Engine,
+    webhook_service: str,
+    profile_id: str,
+    profile_name: str,
+    chat_id: int,
+    msg_id: int,
+    status: str,
+    http_status: Optional[int] = None,
+    response_time_ms: Optional[int] = None,
+    error_message: Optional[str] = None,
+    payload: Optional[str] = None,
+    attempt: int = 1,
+):
+    """Record a webhook delivery attempt in the database.
+
+    Args:
+        engine: SQLAlchemy engine
+        webhook_service: Name of the webhook service (e.g., "slack", "pagerduty")
+        profile_id: Profile ID that triggered the webhook
+        profile_name: Profile name
+        chat_id: Chat ID where the message originated
+        msg_id: Message ID
+        status: Delivery status ('success', 'failed', 'retry_1', 'retry_2', 'retry_3')
+        http_status: HTTP status code from webhook response
+        response_time_ms: Response time in milliseconds
+        error_message: Error message if delivery failed
+        payload: JSON payload sent to webhook
+        attempt: Attempt number (1-4, where 4 is final retry)
+    """
+    with engine.begin() as con:
+        con.execute(
+            text(
+                """
+                INSERT INTO webhook_deliveries(
+                    webhook_service, profile_id, profile_name, chat_id, msg_id,
+                    status, http_status, response_time_ms, error_message, payload, attempt
+                )
+                VALUES(:service, :profile_id, :profile_name, :chat_id, :msg_id,
+                       :status, :http_status, :response_time_ms, :error_message, :payload, :attempt)
+                """
+            ),
+            {
+                "service": webhook_service,
+                "profile_id": str(profile_id) if profile_id else None,
+                "profile_name": profile_name,
+                "chat_id": chat_id,
+                "msg_id": msg_id,
+                "status": status,
+                "http_status": http_status,
+                "response_time_ms": response_time_ms,
+                "error_message": error_message,
+                "payload": payload,
+                "attempt": attempt,
+            },
+        )
+
+
+def get_recent_webhook_deliveries(engine: Engine, limit: int = 10) -> list[dict]:
+    """Get recent webhook deliveries for display in UI.
+
+    Args:
+        engine: SQLAlchemy engine
+        limit: Maximum number of deliveries to return
+
+    Returns:
+        List of webhook delivery records as dictionaries.
+        Note: payload column is intentionally omitted from SELECT to reduce
+        data transfer size for UI display purposes.
+    """
+    with engine.begin() as con:
+        result = con.execute(
+            text(
+                """
+                SELECT 
+                    id, webhook_service, profile_id, profile_name, chat_id, msg_id,
+                    status, http_status, response_time_ms, error_message,
+                    attempt, created_at
+                FROM webhook_deliveries
+                ORDER BY created_at DESC
+                LIMIT :limit
+                """
+            ),
+            {"limit": limit},
+        )
+
+        rows = result.fetchall()
+        return [dict(row._mapping) for row in rows]
+
+
+def cleanup_old_webhook_deliveries(engine: Engine, days: int = 30) -> int:
+    """Clean up old webhook delivery records.
+
+    Args:
+        engine: SQLAlchemy engine
+        days: Delete records older than this many days
+
+    Returns:
+        Number of records deleted
+    """
+    with engine.begin() as con:
+        result = con.execute(
+            text(
+                """
+                DELETE FROM webhook_deliveries
+                WHERE created_at < datetime('now', '-' || :days || ' days')
+                """
+            ),
+            {"days": days},
+        )
+        return result.rowcount

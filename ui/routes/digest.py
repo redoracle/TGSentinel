@@ -6,7 +6,7 @@ Proxies digest config requests to Sentinel API.
 import logging
 from typing import Callable, Tuple
 
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, current_app, jsonify, request
 
 logger = logging.getLogger(__name__)
 

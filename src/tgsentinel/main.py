@@ -262,7 +262,10 @@ async def _run():
         """Fetch dialogs once and reuse them to avoid duplicate Telethon calls."""
 
         nonlocal dialogs_cache
+        log.info("[DIALOGS-CACHE] Entry: force_refresh=%s", force_refresh)
+        log.info("[DIALOGS-CACHE] Attempting to acquire dialogs_cache_lock...")
         async with dialogs_cache_lock:
+            log.info("[DIALOGS-CACHE] Lock acquired")
             now = datetime.now(timezone.utc)
             if (
                 not force_refresh
@@ -273,22 +276,47 @@ async def _run():
                 log.debug("Using cached dialogs (%d entries)", cached_len)
                 return dialogs_cache[1]
 
-            log.debug("Fetching dialogs from Telegram (cache expired)")
+            log.info(
+                "[DIALOGS-CACHE] Cache miss or force_refresh, fetching from Telegram..."
+            )
+            log.info("[DIALOGS-CACHE] authorized=%s", authorized)
             try:
                 # Ensure client is connected before making API call
+                log.info("[DIALOGS-CACHE] Calling _ensure_client_connected()...")
                 await _ensure_client_connected()
+                log.info("[DIALOGS-CACHE] Client connection ensured")
 
                 # Skip dialog fetch if we're not fully authorized yet to avoid DB locks
                 if not authorized:
-                    log.debug("Skipping dialog fetch - not yet authorized")
+                    log.info(
+                        "[DIALOGS-CACHE] Skipping dialog fetch - not yet authorized"
+                    )
                     return []
 
                 # Use client_ref_dict to get current client (handles session imports)
                 current_client = client_ref_dict["value"]
-                dialogs = await current_client.get_dialogs()  # type: ignore[misc]
-                dialogs_cache = (now, dialogs)
-                log.info("Fetched %d dialogs from Telegram", len(dialogs))
-                return dialogs
+                log.info(
+                    "[DIALOGS-CACHE] Calling client.get_dialogs() with 60s timeout..."
+                )
+
+                # Add timeout to prevent indefinite hanging
+                try:
+                    dialogs = await asyncio.wait_for(
+                        current_client.get_dialogs(),  # type: ignore[misc]
+                        timeout=60.0,  # 60 second timeout
+                    )
+                    log.info(
+                        "[DIALOGS-CACHE] get_dialogs() returned %d dialogs",
+                        len(dialogs),
+                    )
+                    dialogs_cache = (now, dialogs)
+                    log.info("Fetched %d dialogs from Telegram", len(dialogs))
+                    return dialogs
+                except asyncio.TimeoutError:
+                    log.error(
+                        "[DIALOGS-CACHE] Timeout fetching dialogs after 60s - returning empty list"
+                    )
+                    return []
             except Exception as e:
                 log.error(
                     "Failed to fetch dialogs: %s. Clearing cache and retrying once.",
@@ -509,27 +537,41 @@ async def _run():
 
     if not authorized:
         log.warning("[STARTUP] ✗ No valid session found - authentication required")
-        wait_total = int(os.getenv("SESSION_WAIT_SECS", "300"))
+        # SESSION_WAIT_SECS=0 means wait indefinitely
+        wait_total_str = os.getenv("SESSION_WAIT_SECS", "0")
+        wait_total = int(wait_total_str) if wait_total_str else 0
         interval = 3
         waited = 0
+        wait_indefinitely = wait_total == 0
 
-        log.warning(
-            "No Telegram session found. Waiting up to %ss for UI login at http://localhost:5001",
-            wait_total,
-        )
+        if wait_indefinitely:
+            log.warning(
+                "No Telegram session found. Waiting indefinitely for UI login at http://localhost:5001"
+            )
+        else:
+            log.warning(
+                "No Telegram session found. Waiting up to %ss for UI login at http://localhost:5001",
+                wait_total,
+            )
         log.info("Complete the login in the UI, sentinel will detect it automatically")
         redis_mgr.publish_worker_status(authorized=False, status="waiting", ttl=30)
 
-        while waited < wait_total and not authorized:
+        while not authorized and (wait_indefinitely or waited < wait_total):
             try:
                 await asyncio.wait_for(auth_event.wait(), timeout=interval)
             except asyncio.TimeoutError:
                 waited += interval
                 if waited % 30 == 0:
-                    log.info("Still waiting for login... (%ss/%ss)", waited, wait_total)
+                    if wait_indefinitely:
+                        log.info("Still waiting for login... (%ss elapsed)", waited)
+                    else:
+                        log.info(
+                            "Still waiting for login... (%ss/%ss)", waited, wait_total
+                        )
                 continue
 
         if not authorized:
+            # Only reach here if timeout is set and expired
             log.error("Session not available after %ss. Please:", wait_total)
             log.error("  1. Go to http://localhost:5001")
             log.error("  2. Complete the Telegram login")
@@ -574,8 +616,14 @@ async def _run():
     # Start ingestion once authorized
     start_ingestion(cfg, client, r)
 
-    # Send initial digests on startup if enabled
-    if cfg.alerts.digest.hourly:
+    # Check if profiles/keywords are configured before sending digests
+    # Without profiles, system should be in monitoring-only mode
+    has_any_profiles = bool(cfg.global_profiles) or any(
+        bool(ch.profiles) or bool(ch.keywords) for ch in cfg.channels
+    )
+
+    # Send initial digests on startup if enabled AND profiles are configured
+    if has_any_profiles and cfg.alerts.digest.hourly:
         log.info("Sending initial hourly digest on startup...")
         await send_digest(
             engine,
@@ -587,8 +635,10 @@ async def _run():
             channels_config=cfg.channels,
             min_score=0.0,
         )
+    elif cfg.alerts.digest.hourly and not has_any_profiles:
+        log.info("Hourly digest enabled but no profiles configured - skipping")
 
-    if cfg.alerts.digest.daily:
+    if has_any_profiles and cfg.alerts.digest.daily:
         log.info("Sending initial daily digest on startup...")
         await send_digest(
             engine,
@@ -600,6 +650,8 @@ async def _run():
             channels_config=cfg.channels,
             min_score=0.0,
         )
+    elif cfg.alerts.digest.daily and not has_any_profiles:
+        log.info("Daily digest enabled but no profiles configured - skipping")
 
     # Initialize request handlers
     participant_handler = ParticipantInfoHandler(

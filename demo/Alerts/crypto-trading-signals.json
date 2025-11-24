@@ -1,0 +1,48 @@
+{
+  "name": "Crypto Alpha Signals",
+  "description": "Track high-value crypto signals: exploits, listings, governance, regulatory news",
+  "enabled": false,
+  "min_score": 6.0,
+  "critical_keywords": ["exploit", "hack", "rug pull", "scam", "vulnerability"],
+  "security_keywords": ["smart contract", "audit", "security issue"],
+  "urgency_keywords": ["breaking", "alert", "urgent", "now"],
+  "financial_keywords": [
+    "listing",
+    "exchange",
+    "binance",
+    "coinbase",
+    "token launch",
+    "airdrop",
+    "governance vote",
+    "proposal",
+    "price",
+    "APY",
+    "yield"
+  ],
+  "technical_keywords": [],
+  "project_keywords": [],
+  "community_keywords": [],
+  "general_keywords": ["regulation", "SEC", "regulatory", "compliance"],
+  "detect_questions": false,
+  "detect_mentions": false,
+  "detect_links": true,
+  "require_forwarded": false,
+  "detect_codes": false,
+  "detect_documents": false,
+  "detect_polls": true,
+  "prioritize_pinned": true,
+  "prioritize_admin": true,
+  "vip_senders": [],
+  "excluded_users": [],
+  "channels": [],
+  "users": [],
+  "tags": ["crypto", "defi", "trading", "alpha"],
+  "digest_schedules": [
+    {
+      "schedule_type": "daily",
+      "daily_hour": 8,
+      "top_n": 15,
+      "min_score": 6.0
+    }
+  ]
+}
