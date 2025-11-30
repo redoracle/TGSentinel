@@ -1,0 +1,43 @@
+{
+  "id": 3000,
+  "name": "Product Launches & Announcements",
+  "description": "Highlights major product releases and announcements so go-to-market teams stay aligned.",
+  "enabled": false,
+  "threshold": 0.45,
+  "positive_weight": 1.0,
+  "negative_weight": 0.2,
+  "positive_samples": [
+    "We're excited to announce the launch of our new product",
+    "Today we're releasing version 2.0 with major improvements",
+    "Introducing our latest innovation",
+    "We've just launched a groundbreaking new feature",
+    "Official announcement: our product is now available",
+    "Big news! We're unveiling our new platform",
+    "Product release: now live and ready for users"
+  ],
+  "negative_samples": [
+    "Just a minor bug fix update",
+    "Daily standup meeting notes",
+    "Random chat about weather",
+    "Good morning everyone",
+    "Thanks for the help"
+  ],
+  "channels": [],
+  "users": [],
+  "vip_senders": [],
+  "webhooks": [],
+  "excluded_users": [],
+  "reaction_threshold": 25,
+  "reply_threshold": 12,
+  "tags": ["product", "launches", "announcements", "signal-over-noise"],
+  "digest": {
+    "schedules": [
+      {
+        "schedule": "daily",
+        "daily_hour": 18,
+        "top_n": 10,
+        "min_score": 0.45
+      }
+    ]
+  }
+}

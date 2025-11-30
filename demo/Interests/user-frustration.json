@@ -1,0 +1,43 @@
+{
+  "id": 3006,
+  "name": "User Frustration & Pain Points",
+  "description": "Identifies frustrated customer narratives to prioritize UX fixes and support outreach.",
+  "enabled": false,
+  "threshold": 0.43,
+  "positive_weight": 1.0,
+  "negative_weight": 0.22,
+  "positive_samples": [
+    "This feature is so confusing, I've been trying for an hour and can't figure it out",
+    "Why is this so complicated? It should be much simpler",
+    "I'm extremely frustrated with how unreliable this has become",
+    "This is the third time this week it's failed. Unacceptable",
+    "The onboarding process is way too difficult for new users",
+    "Major usability issue: I can't find where to change my settings",
+    "This workflow makes no sense and wastes so much time"
+  ],
+  "negative_samples": [
+    "Feature works great, thank you",
+    "Minor suggestion for improvement",
+    "Everything is running smoothly",
+    "Quick question about usage",
+    "Appreciate the help"
+  ],
+  "channels": [],
+  "users": [],
+  "vip_senders": [],
+  "webhooks": [],
+  "excluded_users": [],
+  "reaction_threshold": 10,
+  "reply_threshold": 5,
+  "tags": ["product", "ux", "feedback", "user-research"],
+  "digest": {
+    "schedules": [
+      {
+        "schedule": "daily",
+        "daily_hour": 16,
+        "top_n": 20,
+        "min_score": 0.43
+      }
+    ]
+  }
+}

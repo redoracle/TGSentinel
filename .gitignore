@@ -1,0 +1,43 @@
+# Environment and secrets
+.env
+*.env*
+!.env.sample
+# Python build artifacts
+.ruff_cache/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Logs and runtime data
+*.log
+*.bak
+*.sqlite3
+*.db
+*.session
+/data/
+config/*.yml
+
+# Cache directories
+.cache/
+.mypy_cache/
+.pytest_cache/
+
+.vscode/
+docs/ignore
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+!data/plugins/README.md
+.github/instructions/
+.github/api_key_revocation_refactor.md
+.github/copilot-instructions.OLD.md
+.github/copilot-instructions.md

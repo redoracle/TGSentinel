@@ -1,0 +1,350 @@
+/* ============================================================================
+   Module 2 – Navigation & Header
+   ========================================================================= */
+
+/* Navbar */
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 1030;
+  background: rgba(22, 33, 62, 0.95) !important;
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border-color);
+  padding: 1rem 0;
+  box-shadow: var(--shadow-md);
+}
+
+.navbar .container-fluid {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1rem;
+}
+
+/* Removed obsolete navbar-brand-wrapper - using ts-brand instead */
+
+.navbar-user-block {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.navbar-brand {
+  font-weight: 700;
+  font-size: 1.5rem;
+  color: var(--text-primary) !important;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  transition: var(--transition-smooth);
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+}
+
+.navbar-brand:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.2);
+}
+
+.navbar-brand img {
+  height: 144px;
+  width: auto;
+  filter: drop-shadow(0 0 20px rgba(102, 126, 234, 0.6));
+  transition: var(--transition-smooth);
+  flex-shrink: 0;
+}
+
+.navbar-brand:hover img {
+  filter: drop-shadow(0 0 30px rgba(102, 126, 234, 0.9));
+  transform: scale(1.05);
+}
+
+.navbar-brand-text {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.navbar-brand-subtitle {
+  font-size: 0.95rem;
+  font-weight: 400;
+  line-height: 1.3;
+  color: var(--text-secondary);
+  opacity: 0.8;
+}
+
+.navbar-toggler {
+  border-color: var(--border-color);
+  padding: 0.5rem 0.75rem;
+}
+
+.navbar-toggler:focus {
+  box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.5);
+}
+
+.navbar-toggler-icon {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba(255, 255, 255, 0.75)' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+}
+
+.navbar-collapse {
+  flex-grow: 1;
+  justify-content: center;
+  width: 100%;
+  margin-top: -2rem !important;
+}
+
+.navbar-nav {
+  gap: 1rem;
+  flex-direction: row;
+  align-items: center;
+}
+
+.nav-link {
+  color: var(--text-secondary) !important;
+  font-weight: 500;
+  font-size: 0.95rem;
+  padding: 0.65rem 1rem !important;
+  border-radius: var(--radius-sm);
+  transition: var(--transition-smooth);
+  position: relative;
+  white-space: nowrap;
+}
+
+.nav-link::before {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 2px;
+  background: var(--primary-gradient);
+  transition: var(--transition-smooth);
+}
+
+.nav-link:hover {
+  color: var(--text-primary) !important;
+  background: rgba(102, 126, 234, 0.1);
+}
+
+.nav-link:hover::before {
+  width: 80%;
+}
+
+.nav-link.active {
+  color: var(--text-primary) !important;
+  background: rgba(102, 126, 234, 0.15);
+}
+
+.nav-link.active::before {
+  width: 80%;
+}
+
+.navbar-text {
+  font-size: 0.875rem;
+  padding: 0.5rem 0;
+}
+
+/* Navbar layout helpers */
+/* Removed obsolete navbar-actions - using ts-auth-actions instead */
+
+.ts-header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding-bottom: 0;
+}
+
+.ts-brand {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.ts-brand .navbar-brand {
+  gap: 0.75rem;
+}
+
+.ts-auth-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* Removed - using ts-header-bottom instead */
+
+/* Removed obsolete layout helpers - using ts-header-bottom flex layout instead */
+
+.navbar-avatar,
+.ts-avatar {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  filter: drop-shadow(0 0 4px rgba(102, 126, 234, 0.4));
+}
+
+.navbar-user-info {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.navbar-user-name,
+.ts-username {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.navbar-user-details,
+.ts-phone {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  opacity: 0.85;
+}
+
+.ts-header-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding-top: 0.5rem;
+  margin-top: 0;
+}
+
+.ts-user-block {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  /* Aligns with TG Sentinel text: logo width (56px) + gap (1rem from ts-brand) */
+  margin-left: calc(56px + 1rem);
+}
+
+.ts-user-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.ts-username-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ts-status-badge {
+  font-size: 0.7rem;
+  padding: 0.25rem 0.6rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ts-main-menu {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  margin-top: -0.5rem !important;
+}
+
+/* Hide mobile auth actions on desktop */
+.ts-mobile-auth-actions {
+  display: none;
+}
+
+/* Mobile navbar improvements */
+@media (max-width: 991px) {
+  .navbar .container-fluid {
+    align-items: stretch;
+  }
+
+  /* Removed obsolete navbar-brand-wrapper - using ts-brand instead */
+
+  .navbar-user-block {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  /* Removed obsolete navbar-actions - using ts-auth-actions instead */
+  /* Hide desktop logout/lock buttons on mobile - they appear in the collapsible menu */
+  .ts-auth-actions .btn-logout,
+  .ts-auth-actions .btn-lock,
+  .ts-auth-actions #btn-logout,
+  .ts-auth-actions #btn-ui-lock {
+    display: none !important;
+  }
+  
+  .navbar-toggler {
+    display: block !important;
+  }
+
+  .navbar-brand {
+    font-size: 1.1rem;
+  }
+
+  .navbar-brand img {
+    height: 80px;
+  }
+
+  .navbar-collapse {
+    margin-top: 0rem;
+    padding: 1rem;
+    background: rgba(22, 33, 62, 0.98);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+  }
+
+  .navbar-nav {
+    gap: 0.5rem;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .nav-link {
+    padding: 0.75rem 1rem !important;
+    margin: 0.25rem 0;
+  }
+
+  .ts-header-bottom {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+  
+  .ts-user-block {
+    margin-left: 0;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .ts-main-menu {
+    width: 100%;
+    justify-content: center;
+    flex-direction: column;
+  }
+  
+  /* Show mobile auth actions at bottom of menu */
+  .ts-mobile-auth-actions {
+    display: flex;
+    flex-direction: column;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+  }
+
+  /* Removed obsolete status-cluster - integrated into ts-user-block */
+
+  .navbar-text {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+    text-align: center;
+  }
+}
+
+/* ============================================================================

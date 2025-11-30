@@ -1,0 +1,463 @@
+{# Alert Profile Form - Extracted from profiles.html #}
+{# This form includes all fields for Alert Profile configuration #}
+
+<form id="alert-profile-form" class="d-grid gap-3" novalidate>
+    <input type="hidden" id="alert-profile-id" value="">
+    
+    <!-- Basic Info -->
+    <div class="row">
+        <div class="col-md-4 d-none">
+            <label class="form-label" for="alert-profile-id-display">Profile ID</label>
+            <input class="form-control bg-light" id="alert-profile-id-display" type="text" placeholder="Auto-generated" readonly>
+            <small class="form-text text-muted">Auto-assigned integer ID (1000-1999)</small>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label" for="alert-name">Profile Name <span class="text-danger">*</span></label>
+            <input class="form-control" id="alert-name" name="name" type="text" placeholder="e.g., Security Alerts" required>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label" for="alert-enabled">Status</label>
+            <select class="form-select" id="alert-enabled" name="enabled">
+                <option value="true" selected>Enabled</option>
+                <option value="false">Disabled</option>
+            </select>
+        </div>
+    </div>
+    
+    <div>
+        <label class="form-label" for="alert-description">Description</label>
+        <input class="form-control" id="alert-description" name="description" type="text" placeholder="Brief description">
+    </div>
+    
+    <!-- Keywords Section -->
+    <div class="border-top pt-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3 class="h6 mb-0">Keyword Detection</h3>
+            <a href="/docs#alert-profiles" class="btn btn-outline-primary btn-sm" title="View keyword detection documentation" target="_blank" rel="noopener">
+                <i class="bi bi-info-circle"></i>
+            </a>
+        </div>
+        
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label" for="alert-action-keywords">Action Keywords <span class="badge bg-primary">1.0</span></label>
+                <textarea class="form-control font-monospace" id="alert-action-keywords" name="action_keywords" rows="3" placeholder="please review, confirm, approve"></textarea>
+                <small class="text-muted">Messages requiring direct action.</small>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="alert-decision-keywords">Decision Keywords <span class="badge bg-primary">1.1</span></label>
+                <textarea class="form-control font-monospace" id="alert-decision-keywords" name="decision_keywords" rows="3" placeholder="vote, decide, proposal"></textarea>
+                <small class="text-muted">Decisions, voting, direction changes.</small>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="alert-urgency-keywords">Urgency Keywords <span class="badge bg-primary">1.5</span></label>
+                <textarea class="form-control font-monospace" id="alert-urgency-keywords" name="urgency_keywords" rows="3" placeholder="urgent, asap, critical"></textarea>
+                <small class="text-muted">Time-sensitive indicators.</small>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="alert-importance-keywords">Importance Keywords <span class="badge bg-warning">0.9</span></label>
+                <textarea class="form-control font-monospace" id="alert-importance-keywords" name="importance_keywords" rows="3" placeholder="important, crucial, essential"></textarea>
+                <small class="text-muted">Key importance indicators.</small>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="alert-release-keywords">Release Keywords <span class="badge bg-secondary">0.8</span></label>
+                <textarea class="form-control font-monospace" id="alert-release-keywords" name="release_keywords" rows="3" placeholder="release, launch, update, upgrade"></textarea>
+                <small class="text-muted">Project and interest updates.</small>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="alert-security-keywords">Security Keywords <span class="badge bg-warning">1.2</span></label>
+                <textarea class="form-control font-monospace" id="alert-security-keywords" name="security_keywords" rows="3" placeholder="vulnerability, attack, breach"></textarea>
+                <small class="text-muted">Security-related terms.</small>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="alert-risk-keywords">Risk Keywords <span class="badge bg-danger">1.0</span></label>
+                <textarea class="form-control font-monospace" id="alert-risk-keywords" name="risk_keywords" rows="3" placeholder="risk, threat, incident"></textarea>
+                <small class="text-muted">Risk or incident messages.</small>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="alert-opportunity-keywords">Opportunity Keywords <span class="badge bg-info">0.6</span></label>
+                <textarea class="form-control font-monospace" id="alert-opportunity-keywords" name="opportunity_keywords" rows="3" placeholder="opportunity, deal, offer"></textarea>
+                <small class="text-muted">Opportunity-driven messages.</small>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="alert-keywords">General Keywords <span class="badge bg-secondary">0.8</span></label>
+                <textarea class="form-control font-monospace" id="alert-keywords" name="keywords" rows="3" placeholder="news, update, important"></textarea>
+                <small class="text-muted">Legacy custom keywords.</small>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Detection Settings -->
+    <div class="border-top pt-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3 class="h6 mb-0">Detection Settings</h3>
+            <a href="/docs#detection-settings" class="btn btn-outline-primary btn-sm" title="View detection settings documentation" target="_blank" rel="noopener">
+                <i class="bi bi-info-circle"></i>
+            </a>
+        </div>
+        
+        <div class="row g-3 mt-2">
+            <div class="col-md-3">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="alert-detect-questions" name="detect_questions">
+                    <label class="form-check-label" for="alert-detect-questions">
+                        <div>Detect Questions <span class="text-warning" data-bs-toggle="tooltip" data-bs-placement="top" title="Only works when 'Prioritize Private' is enabled. Detects direct questions in private chats.">*</span></div>
+                        <div><span class="badge bg-warning">1.2</span></div>
+                    </label>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="alert-detect-mentions" name="detect_mentions">
+                    <label class="form-check-label" for="alert-detect-mentions">
+                        <div>Detect Mentions</div>
+                        <div><span class="badge bg-success">2.0</span></div>
+                    </label>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="alert-detect-links" name="detect_links">
+                    <label class="form-check-label" for="alert-detect-links">
+                        <div>Detect Links</div>
+                        <div><span class="badge bg-info">0.5</span></div>
+                    </label>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="alert-require-forwarded" name="require_forwarded">
+                    <label class="form-check-label" for="alert-require-forwarded">
+                        <div>Only Forwards</div>
+                        <div><span class="badge bg-secondary" data-bs-toggle="tooltip" data-bs-placement="top" title="Filter: Only process forwarded messages. Non-forwarded messages get score 0.">filter</span></div>
+                    </label>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Advanced Detection Settings -->
+        <div class="row g-3 mt-2">
+            <div class="col-md-3">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="alert-detect-codes" name="detect_codes">
+                    <label class="form-check-label" for="alert-detect-codes">
+                        <div>Detect Code</div>
+                        <div><span class="badge bg-warning">1.3</span></div>
+                    </label>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="alert-detect-documents" name="detect_documents">
+                    <label class="form-check-label" for="alert-detect-documents">
+                        <div>Detect Docs</div>
+                        <div><span class="badge bg-info">0.7</span></div>
+                    </label>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="alert-detect-polls" name="detect_polls">
+                    <label class="form-check-label" for="alert-detect-polls">
+                        <div>Detect Polls</div>
+                        <div><span class="badge bg-success">1.0</span></div>
+                    </label>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="alert-prioritize-pinned" name="prioritize_pinned">
+                    <label class="form-check-label" for="alert-prioritize-pinned">
+                        <div>Prioritize Pinned</div>
+                        <div><span class="badge bg-success">1.2</span></div>
+                    </label>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row g-3 mt-2">
+            <div class="col-md-3">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="alert-prioritize-admin" name="prioritize_admin">
+                    <label class="form-check-label" for="alert-prioritize-admin">
+                        <div>Prioritize Admin</div>
+                        <div><span class="badge bg-secondary">0.9</span></div>
+                    </label>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="alert-prioritize-private" name="prioritize_private">
+                    <label class="form-check-label" for="alert-prioritize-private">
+                        <div>Prioritize Private</div>
+                        <div><span class="badge bg-info">0.5</span></div>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Engagement Thresholds -->
+        <div class="row g-3 mt-3">
+            <div class="col-12">
+                <h6 class="form-label fw-semibold">Engagement Thresholds <span class="badge bg-success">+0.5 each</span></h6>
+                <small class="text-muted d-block mb-2">Boost score when messages reach engagement thresholds. Set to 0 to disable.</small>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label" for="alert-reaction-threshold">
+                    Reaction Threshold
+                    <span class="text-muted" data-bs-toggle="tooltip" data-bs-placement="top" 
+                          title="Messages with at least this many reactions get +0.5 boost">ⓘ</span>
+                </label>
+                <input class="form-control" id="alert-reaction-threshold" name="reaction_threshold" 
+                       type="number" min="0" max="1000" step="1" value="0"
+                       placeholder="0 = disabled">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label" for="alert-reply-threshold">
+                    Reply Threshold
+                    <span class="text-muted" data-bs-toggle="tooltip" data-bs-placement="top" 
+                          title="Messages with at least this many replies get +0.5 boost">ⓘ</span>
+                </label>
+                <input class="form-control" id="alert-reply-threshold" name="reply_threshold" 
+                       type="number" min="0" max="1000" step="1" value="0"
+                       placeholder="0 = disabled">
+            </div>
+        </div>
+        
+        <!-- Score Threshold and User Filters -->
+        <div class="row g-3 mt-3">
+            <div class="col-md-4">
+                <label class="form-label" for="alert-min-score">
+                    Minimum Score
+                    <span class="text-muted" data-bs-toggle="tooltip" data-bs-placement="top" 
+                          title="Instant Alert Threshold: Messages must reach this keyword score to trigger immediate alerts. Based on keyword weights (0-50 range).">ⓘ</span>
+                </label>
+                <input class="form-control" id="alert-min-score" name="min_score" type="number" min="0" max="50" step="0.1" value="5.0">
+                <small class="text-muted" id="alert-min-score-help">Instant alert threshold (0 - <span id="alert-threshold-max">0</span>)</small>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" for="alert-vip-senders">VIP Senders <span class="badge bg-success">1.0</span></label>
+                <input class="form-control font-monospace" id="alert-vip-senders" name="vip_senders" type="text" 
+                       placeholder="123456789, 987654321"
+                       pattern="^\s*\d+(\s*,\s*\d+)*\s*$"
+                       title="Numeric Telegram user IDs separated by commas (spaces are trimmed automatically)">
+                <small class="text-muted">Always alert from these (numeric Telegram IDs). Max 100 IDs.</small>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" for="alert-excluded-users">Excluded Users</label>
+                <input class="form-control font-monospace" id="alert-excluded-users" name="excluded_users" type="text" 
+                       placeholder="123456789, 987654321"
+                       pattern="^\s*\d+(\s*,\s*\d+)*\s*$"
+                       title="Numeric Telegram user IDs separated by commas (spaces are trimmed automatically)">
+                <small class="text-muted">Never alert from these (numeric Telegram IDs). Max 100 IDs.</small>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Maximum Score Calculator -->
+    <div class="border-top pt-3">
+        <div class="alert alert-info mb-0">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="mb-1">
+                        <svg width="16" height="16" fill="currentColor" class="bi bi-calculator me-1" viewBox="0 0 16 16">
+                            <path d="M12 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h8zM4 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H4z"/>
+                            <path d="M4 2.5a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5v-2zm0 4a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm0 3a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm0 3a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm3-6a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm0 3a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm0 3a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm3-6a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm0 3a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v4a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-4z"/>
+                        </svg>
+                        Maximum Possible Score for This Profile
+                    </h6>
+                    <small class="text-muted">Based on enabled toggles and configured keywords</small>
+                </div>
+                <div class="text-end">
+                    <span class="badge bg-primary fs-5" id="alert-max-score-display">0.0</span>
+                    <br>
+                    <small class="text-muted">points</small>
+                </div>
+            </div>
+            <div class="mt-2">
+                <small class="text-muted">
+                    <strong>Note:</strong> Scores are additive (OR logic). Any enabled detection that triggers adds points to the total. 
+                    A message triggers an alert if its total score ≥ Minimum Score threshold.
+                </small>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Scope Restriction (Channels & Users) -->
+    <div class="border-top pt-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h3 class="h6 mb-0">Apply Profile To</h3>
+            <div class="d-flex gap-2">
+                <a href="/docs#profile-scope" class="btn btn-outline-primary btn-sm" title="View profile scope documentation" target="_blank" rel="noopener">
+                    <i class="bi bi-info-circle"></i>
+                </a>
+                <button type="button" class="btn btn-primary btn-sm" id="btn-select-entities-alert" data-bs-toggle="modal" data-bs-target="#selectEntitiesModal">
+                    <span aria-hidden="true">+</span> ADD
+                </button>
+            </div>
+        </div>
+        <div id="selected-entities-alert" class="border rounded p-3 bg-dark entity-selector-container">
+            <div class="text-muted small" id="entities-placeholder-alert">No channels or users selected.</div>
+            <div id="entities-badges-alert" class="d-flex flex-wrap gap-2"></div>
+        </div>
+        <small class="text-muted">Select specific channels/users or leave empty to apply to all monitored entities configured in the settings section.</small>
+    </div>
+    
+    <!-- Webhook Integration -->
+    <div class="border-top pt-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h3 class="h6 mb-0">
+                <svg width="16" height="16" fill="currentColor" class="bi bi-send me-1" viewBox="0 0 16 16">
+                    <path d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11ZM6.636 10.07l2.761 4.338L14.13 2.576 6.636 10.07Zm6.787-8.201L1.591 6.602l4.339 2.76 7.494-7.493Z"/>
+                </svg>
+                Webhook Notifications
+            </h3>
+            <a href="/docs#webhooks-api" class="btn btn-outline-primary btn-sm" title="View webhook documentation" target="_blank" rel="noopener">
+                <i class="bi bi-info-circle"></i>
+            </a>
+        </div>
+        <div>
+            <label class="form-label" for="alert-webhooks">Notify Webhooks (optional)</label>
+            <select class="form-select" id="alert-webhooks" name="webhooks" multiple size="5" aria-busy="true">
+                <option disabled selected>Loading webhooks...</option>
+            </select>
+            <small class="text-muted">Select one or more webhooks. Alerts matching this profile will be sent to selected webhooks.</small>
+        </div>
+    </div>
+    
+    <!-- Digest Configuration for Alert Profiles -->
+    <div class="border rounded p-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3 class="h6 mb-0">
+                <svg width="14" height="14" fill="currentColor" class="bi bi-send me-1" viewBox="0 0 16 16">
+                    <path d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11ZM6.636 10.07l2.761 4.338L14.13 2.576 6.636 10.07Zm6.787-8.201L1.591 6.602l4.339 2.76 7.494-7.493Z"/>
+                </svg>
+                Delivery Schedules
+            </h3>
+            <div class="d-flex gap-2">
+                <a href="/docs#digest-api" class="btn btn-outline-primary btn-sm" title="View digest documentation" target="_blank" rel="noopener">
+                    <i class="bi bi-info-circle"></i>
+                </a>
+                <button type="button" class="btn btn-sm btn-outline-info" data-bs-toggle="collapse" data-bs-target="#alert-digest-help" aria-label="Show digest help information">
+                    <svg width="14" height="14" fill="currentColor" class="bi bi-question-circle" viewBox="0 0 16 16">
+                        <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                        <path d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286zm1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        
+        <div class="collapse mb-3" id="alert-digest-help">
+            <div class="alert alert-info small mb-0">
+                <p class="mb-1"><strong>What are delivery schedules?</strong></p>
+                <p class="mb-1"><strong>DM</strong> sends instant alerts to a user/channel. <strong>Digest</strong> batches messages and sends scheduled summaries. <strong>Both</strong> sends instant DMs plus scheduled digests.</p>
+                <p class="mb-0 mt-2"><em>Configure up to 3 delivery schedules for this alert profile.</em></p>
+            </div>
+        </div>
+        
+        {# Render 3 schedule cards for Alert Profiles #}
+        {% for schedule_num in range(1, 4) %}
+        <div class="card mb-3">
+            <div class="card-header py-2">
+                {% if schedule_num > 1 %}
+                <button class="btn btn-link p-0 text-decoration-none text-white d-flex align-items-center gap-2 w-100" type="button" data-bs-toggle="collapse" data-bs-target="#alert-schedule-{{ schedule_num }}-body" aria-expanded="false">
+                    <svg width="14" height="14" fill="currentColor" class="bi bi-chevron-right schedule-chevron" viewBox="0 0 16 16">
+                        <path fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/>
+                    </svg>
+                    <strong>Schedule {{ schedule_num }}</strong> <span class="badge bg-dark">Optional</span>
+                </button>
+                {% else %}
+                <strong>Schedule {{ schedule_num }}</strong>
+                {% endif %}
+            </div>
+            <div class="card-body{% if schedule_num > 1 %} collapse{% endif %}" id="alert-schedule-{{ schedule_num }}-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label" for="alert-digest-schedule-{{ schedule_num }}-type">Schedule Type</label>
+                        <select class="form-select form-select-sm alert-digest-schedule-type" id="alert-digest-schedule-{{ schedule_num }}-type" name="alert_digest_schedule_{{ schedule_num }}_type">
+                            <option value="">{% if schedule_num == 1 %}None (Instant Alerts){% else %}None{% endif %}</option>
+                            <option value="hourly">⏰ Hourly</option>
+                            <option value="every_4h">🕓 Every 4 Hours</option>
+                            <option value="every_6h">🕕 Every 6 Hours</option>
+                            <option value="every_12h">🕛 Every 12 Hours</option>
+                            <option value="daily">📅 Daily</option>
+                            <option value="weekly">📊 Weekly</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 alert-digest-batch-settings" id="alert-digest-schedule-{{ schedule_num }}-topn-wrapper">
+                        <label class="form-label" for="alert-digest-schedule-{{ schedule_num }}-top-n">
+                            Top N Messages
+                            <span class="text-muted" data-bs-toggle="tooltip" data-bs-placement="top" 
+                                  title="Maximum messages to include in each digest summary. Only applies to Digest/Both modes.">ⓘ</span>
+                        </label>
+                        <input type="number" class="form-control form-control-sm" id="alert-digest-schedule-{{ schedule_num }}-top-n" name="alert_digest_schedule_{{ schedule_num }}_top_n" min="1" max="100" value="{{ 10 * schedule_num }}" placeholder="{{ 10 * schedule_num }}">
+                    </div>
+                    <div class="col-md-4 alert-digest-batch-settings" id="alert-digest-schedule-{{ schedule_num }}-minscore-wrapper">
+                        <label class="form-label" for="alert-digest-schedule-{{ schedule_num }}-min-score">
+                            Digest Min Score
+                            <span class="text-muted" data-bs-toggle="tooltip" data-bs-placement="top" 
+                                  title="Filter for Digest: Only include messages with keyword score ≥ this value in scheduled digests. Different from the instant alert threshold above.">ⓘ</span>
+                        </label>
+                        <input type="number" class="form-control form-control-sm" id="alert-digest-schedule-{{ schedule_num }}-min-score" name="alert_digest_schedule_{{ schedule_num }}_min_score" min="0" max="50" step="0.1" value="{{ 5.0 - schedule_num }}" placeholder="{{ 5.0 - schedule_num }}">
+                    </div>
+                    <div class="col-md-6 alert-digest-daily-settings d-none" id="alert-digest-schedule-{{ schedule_num }}-daily-settings">
+                        <label class="form-label" for="alert-digest-schedule-{{ schedule_num }}-daily-hour">Daily Hour (UTC)</label>
+                        <input type="number" class="form-control form-control-sm" id="alert-digest-schedule-{{ schedule_num }}-daily-hour" name="alert_digest_schedule_{{ schedule_num }}_daily_hour" min="0" max="23" value="8" placeholder="8">
+                    </div>
+                    <div class="col-md-6 alert-digest-weekly-settings d-none" id="alert-digest-schedule-{{ schedule_num }}-weekly-settings">
+                        <label class="form-label" for="alert-digest-schedule-{{ schedule_num }}-weekly-day">Weekly Day</label>
+                        <select class="form-select form-select-sm" id="alert-digest-schedule-{{ schedule_num }}-weekly-day" name="alert_digest_schedule_{{ schedule_num }}_weekly_day">
+                            <option value="0">Monday</option>
+                            <option value="1">Tuesday</option>
+                            <option value="2">Wednesday</option>
+                            <option value="3">Thursday</option>
+                            <option value="4">Friday</option>
+                            <option value="5">Saturday</option>
+                            <option value="6">Sunday</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 alert-digest-weekly-settings d-none" id="alert-digest-schedule-{{ schedule_num }}-weekly-hour-settings">
+                        <label class="form-label" for="alert-digest-schedule-{{ schedule_num }}-weekly-hour">Weekly Hour (UTC)</label>
+                        <input type="number" class="form-control form-control-sm" id="alert-digest-schedule-{{ schedule_num }}-weekly-hour" name="alert_digest_schedule_{{ schedule_num }}_weekly_hour" min="0" max="23" value="8" placeholder="8">
+                    </div>
+                </div>
+                
+                <!-- Delivery Settings (per schedule) -->
+                <div class="row g-3 mt-2 border-top pt-3">
+                    <div class="col-md-6">
+                        <label class="form-label" for="alert-digest-schedule-{{ schedule_num }}-mode">Delivery Mode</label>
+                        <select class="form-select form-select-sm" id="alert-digest-schedule-{{ schedule_num }}-mode" name="alert_digest_schedule_{{ schedule_num }}_mode">
+                            <option value="none">📁 None (Save Only)</option>
+                            <option value="dm">💬 DM (Instant Alerts)</option>
+                            <option value="digest">📋 Digest (Scheduled Summary)</option>
+                            <option value="both">🔄 Both DM & Digest</option>
+                        </select>
+                        <small class="form-text">How alerts are delivered to you</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="alert-digest-schedule-{{ schedule_num }}-target-channel">Target Channel/User</label>
+                        <input type="text" class="form-control form-control-sm" id="alert-digest-schedule-{{ schedule_num }}-target-channel" name="alert_digest_schedule_{{ schedule_num }}_target_channel" placeholder="@username or user_id" value="{{ alert_channel }}" data-default-channel="{{ alert_channel }}">
+                        <small class="form-text">Username (@handle) or numeric ID – auto-detected</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <!-- Action Buttons -->
+    <div class="d-flex gap-3 border-top pt-3">
+        <button class="btn btn-primary" type="submit" id="btn-save-alert-profile">
+            <span id="alert-save-btn-text">Save Profile</span>
+        </button>
+        <button class="btn btn-outline-primary" type="button" id="btn-backtest-alert-profile">
+            <svg width="16" height="16" fill="currentColor" class="bi bi-speedometer me-1" viewBox="0 0 16 16">
+                <path d="M8 2a.5.5 0 0 1 .5.5V4a.5.5 0 0 1-1 0V2.5A.5.5 0 0 1 8 2zM3.732 3.732a.5.5 0 0 1 .707 0l.915.914a.5.5 0 1 1-.708.708l-.914-.915a.5.5 0 0 1 0-.707zM2 8a.5.5 0 0 1 .5-.5h1.586a.5.5 0 0 1 0 1H2.5A.5.5 0 0 1 2 8zm9.5 0a.5.5 0 0 1 .5-.5h1.5a.5.5 0 0 1 0 1H12a.5.5 0 0 1-.5-.5zm.754-4.246a.389.389 0 0 0-.527-.02L7.547 7.31A.91.91 0 1 0 8.85 8.569l3.434-4.297a.389.389 0 0 0-.029-.518z"/>
+                <path fill-rule="evenodd" d="M6.664 15.889A8 8 0 1 1 9.336.11a8 8 0 0 1-2.672 15.78zm-4.665-4.283A11.945 11.945 0 0 1 8 10c2.186 0 4.236.585 6.001 1.606a7 7 0 1 0-12.002 0z"/>
+            </svg>
+            Backtest
+        </button>
+        <button class="btn btn-outline-secondary" type="button" id="btn-reset-alert-profile">Clear</button>
+        <button class="btn btn-outline-danger d-none" type="button" id="btn-delete-alert-profile">Delete</button>
+    </div>
+</form>

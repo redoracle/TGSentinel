@@ -1,0 +1,44 @@
+{
+  "id": 3005,
+  "name": "Regulatory & Compliance Updates",
+  "description": "Tracks impactful regulatory moves and compliance mandates that affect product teams.",
+  "enabled": false,
+  "threshold": 0.46,
+  "positive_weight": 1.0,
+  "negative_weight": 0.12,
+  "positive_samples": [
+    "New GDPR enforcement action results in €20M fine",
+    "SEC announces stricter regulations for cryptocurrency exchanges",
+    "Updated data protection requirements effective next quarter",
+    "Court ruling establishes new precedent for software liability",
+    "Federal agency issues guidance on AI system compliance",
+    "New export control regulations affecting tech companies",
+    "Privacy law update requires changes to user consent flows"
+  ],
+  "negative_samples": [
+    "General legal advice question",
+    "Contract template request",
+    "How to incorporate a business",
+    "Tax filing reminder",
+    "Generic compliance checklist"
+  ],
+  "channels": [],
+  "users": [],
+  "vip_senders": [],
+  "webhooks": [],
+  "excluded_users": [],
+  "reaction_threshold": 8,
+  "reply_threshold": 4,
+  "tags": ["compliance", "regulatory", "legal", "governance"],
+  "digest": {
+    "schedules": [
+      {
+        "schedule": "weekly",
+        "weekly_day": 1,
+        "weekly_hour": 9,
+        "top_n": 20,
+        "min_score": 0.46
+      }
+    ]
+  }
+}

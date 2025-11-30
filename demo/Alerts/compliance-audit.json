@@ -1,0 +1,68 @@
+{
+  "name": "Compliance & Audit Monitor",
+  "description": "Tracks regulatory, policy, and audit discussions that could require legal follow up.",
+  "enabled": false,
+  "min_score": 5.5,
+  "keywords": [
+    "policy",
+    "terms of service",
+    "TOS",
+    "terms and conditions",
+    "regulation",
+    "compliance",
+    "audit",
+    "governance"
+  ],
+  "action_keywords": [],
+  "decision_keywords": [],
+  "urgency_keywords": [
+    "urgent",
+    "immediate",
+    "deadline",
+    "confidential",
+    "NDA"
+  ],
+  "importance_keywords": ["legal", "lawsuit", "subpoena", "investigation"],
+  "release_keywords": [],
+  "security_keywords": ["data breach", "PII", "GDPR", "privacy violation"],
+  "risk_keywords": ["insider", "material information"],
+  "opportunity_keywords": [],
+  "detect_codes": false,
+  "detect_documents": true,
+  "detect_links": true,
+  "require_forwarded": false,
+  "prioritize_pinned": true,
+  "prioritize_admin": true,
+  "prioritize_private": false,
+  "detect_polls": false,
+  "detect_mentions": false,
+  "detect_questions": true,
+  "scoring_weights": {
+    "urgency": 1.6,
+    "importance": 1.4,
+    "security": 1.3,
+    "risk": 1.2,
+    "keywords": 0.9
+  },
+  "vip_senders": [],
+  "webhooks": [],
+  "excluded_users": [],
+  "reaction_threshold": 0,
+  "reply_threshold": 0,
+  "positive_weight": 1.0,
+  "negative_weight": 0.15,
+  "channels": [],
+  "users": [],
+  "tags": ["compliance", "legal", "governance", "audit"],
+  "digest": {
+    "schedules": [
+      {
+        "schedule": "daily",
+        "daily_hour": 9,
+        "top_n": 10,
+        "min_score": 5.5,
+        "mode": "digest"
+      }
+    ]
+  }
+}

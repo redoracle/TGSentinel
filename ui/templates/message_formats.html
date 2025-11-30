@@ -1,0 +1,592 @@
+{% extends "base.html" %}
+{% block title %}Message Formats · TG Sentinel{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/editor/editor.main.min.css" />
+{% endblock %}
+
+{% block content %}
+<!-- Header Card with Tabs -->
+<section class="card mb-4">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div>
+            <h1 class="card-title mb-0">Message Formats</h1>
+            <small class="text-muted">Customize alert and digest message templates</small>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-info btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#variablesModal" title="View all available variables">
+                <i class="bi bi-code-slash"></i> All Variables
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" type="button" id="btn-export-formats" title="Export formats as YAML">
+                <i class="bi bi-download"></i> Export
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" type="button" id="btn-import-formats" title="Import formats from YAML">
+                <i class="bi bi-upload"></i> Import
+            </button>
+            <button class="btn btn-outline-warning btn-sm" type="button" id="btn-reset-formats" title="Reset to defaults">
+                <i class="bi bi-arrow-counterclockwise"></i> Reset
+            </button>
+            <button class="btn btn-primary btn-sm" type="button" id="btn-save-formats">
+                <i class="bi bi-save"></i> Save All
+            </button>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <ul class="nav nav-tabs nav-fill border-bottom-0" id="format-tabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="dm-alerts-tab" data-bs-toggle="tab" data-bs-target="#dm-alerts-content" type="button" role="tab" aria-controls="dm-alerts-content" aria-selected="true">
+                    <i class="bi bi-bell me-2"></i>DM Alerts
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="saved-messages-tab" data-bs-toggle="tab" data-bs-target="#saved-messages-content" type="button" role="tab" aria-controls="saved-messages-content" aria-selected="false">
+                    <i class="bi bi-bookmark me-2"></i>Saved Messages
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="digest-tab" data-bs-toggle="tab" data-bs-target="#digest-content" type="button" role="tab" aria-controls="digest-content" aria-selected="false">
+                    <i class="bi bi-newspaper me-2"></i>Digest
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="webhook-tab" data-bs-toggle="tab" data-bs-target="#webhook-content" type="button" role="tab" aria-controls="webhook-content" aria-selected="false">
+                    <i class="bi bi-plug me-2"></i>Webhooks
+                </button>
+            </li>
+        </ul>
+    </div>
+</section>
+
+<!-- Tab Contents -->
+<div class="tab-content" id="format-tabs-content">
+    <!-- DM Alerts Tab -->
+    <div class="tab-pane fade show active" id="dm-alerts-content" role="tabpanel" aria-labelledby="dm-alerts-tab">
+        <div class="format-section">
+            <!-- Section Header -->
+            <div class="d-flex justify-content-between align-items-start mb-4">
+                <div>
+                    <h5 class="card-title mb-1">DM Alert Template</h5>
+                    <p class="text-muted small mb-0">Format for instant alerts sent to you or a target channel</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-primary btn-sm" type="button" data-format-type="dm_alerts" data-action="preview">
+                        <i class="bi bi-eye"></i> Preview
+                    </button>
+                    <button class="btn btn-outline-success btn-sm" type="button" data-format-type="dm_alerts" data-action="test">
+                        <i class="bi bi-send"></i> Test
+                    </button>
+                </div>
+            </div>
+            <div class="row g-4">
+                <!-- Editor Column -->
+                <div class="col-12 col-xl-6">
+                    <div id="editor-dm-alerts" class="format-editor-container" style="height: 280px;"></div>
+                    <div class="mt-3">
+                        <button class="btn btn-outline-secondary btn-sm variables-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#variables-dm-alerts-collapse" aria-expanded="false" aria-controls="variables-dm-alerts-collapse">
+                            <i class="bi bi-code-slash me-1"></i>Available Variables
+                        </button>
+                        <div class="collapse mt-2" id="variables-dm-alerts-collapse">
+                            <div class="variable-legend p-2 border rounded bg-body-tertiary">
+                                <dl class="small mb-0" id="variables-dm-alerts"></dl>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Preview Column -->
+                <div class="col-12 col-xl-6">
+                    <div id="preview-dm-alerts" class="preview-container"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Saved Messages Tab -->
+    <div class="tab-pane fade" id="saved-messages-content" role="tabpanel" aria-labelledby="saved-messages-tab">
+        <div class="format-section">
+            <!-- Section Header -->
+            <div class="d-flex justify-content-between align-items-start mb-4">
+                <div>
+                    <h5 class="card-title mb-1">Saved Messages Template</h5>
+                    <p class="text-muted small mb-0">Format for messages saved to Telegram's Saved Messages</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-primary btn-sm" type="button" data-format-type="saved_messages" data-action="preview">
+                        <i class="bi bi-eye"></i> Preview
+                    </button>
+                    <button class="btn btn-outline-success btn-sm" type="button" data-format-type="saved_messages" data-action="test">
+                        <i class="bi bi-send"></i> Test
+                    </button>
+                </div>
+            </div>
+            <div class="row g-4">
+                <!-- Editor Column -->
+                <div class="col-12 col-xl-6">
+                    <div id="editor-saved-messages" class="format-editor-container" style="height: 280px;"></div>
+                    <div class="mt-3">
+                        <button class="btn btn-outline-secondary btn-sm variables-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#variables-saved-collapse" aria-expanded="false" aria-controls="variables-saved-collapse">
+                            <i class="bi bi-code-slash me-1"></i>Available Variables
+                        </button>
+                        <div class="collapse mt-2" id="variables-saved-collapse">
+                            <div class="variable-legend p-2 border rounded bg-body-tertiary">
+                                <dl class="small mb-0" id="variables-saved-messages"></dl>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Preview Column -->
+                <div class="col-12 col-xl-6">
+                    <div id="preview-saved-messages" class="preview-container"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Digest Tab -->
+    <div class="tab-pane fade" id="digest-content" role="tabpanel" aria-labelledby="digest-tab">
+        <!-- Digest Header Section -->
+        <div class="format-section mb-4">
+            <!-- Section Header -->
+            <div class="d-flex justify-content-between align-items-start mb-4">
+                <div>
+                    <h5 class="card-title mb-1">Digest Header</h5>
+                    <p class="text-muted small mb-0">Header shown at the top of digest messages</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-primary btn-sm" type="button" data-format-type="digest.header" data-action="preview">
+                        <i class="bi bi-eye"></i> Preview
+                    </button>
+                </div>
+            </div>
+            <div class="row g-4">
+                <!-- Editor Column -->
+                <div class="col-12 col-xl-6">
+                    <div id="editor-digest-header" class="format-editor-container" style="height: 180px;"></div>
+                    <div class="mt-3">
+                        <button class="btn btn-outline-secondary btn-sm variables-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#variables-digest-header-collapse" aria-expanded="false" aria-controls="variables-digest-header-collapse">
+                            <i class="bi bi-code-slash me-1"></i>Available Variables
+                        </button>
+                        <div class="collapse mt-2" id="variables-digest-header-collapse">
+                            <div class="variable-legend p-2 border rounded bg-body-tertiary">
+                                <dl class="small mb-0" id="variables-digest-header"></dl>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Preview Column -->
+                <div class="col-12 col-xl-6">
+                    <div id="preview-digest-header" class="preview-container" style="min-height: 100px;"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Digest Entry Section -->
+        <div class="format-section mb-4">
+            <!-- Section Header -->
+            <div class="d-flex justify-content-between align-items-start mb-4">
+                <div>
+                    <h5 class="card-title mb-1">Digest Entry</h5>
+                    <p class="text-muted small mb-0">Format for each message in the digest</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-primary btn-sm" type="button" data-format-type="digest.entry" data-action="preview">
+                        <i class="bi bi-eye"></i> Preview
+                    </button>
+                    <button class="btn btn-outline-success btn-sm" type="button" data-format-type="digest.entry" data-action="test">
+                        <i class="bi bi-send"></i> Test
+                    </button>
+                </div>
+            </div>
+            <div class="row g-4">
+                <!-- Editor Column -->
+                <div class="col-12 col-xl-6">
+                    <div id="editor-digest-entry" class="format-editor-container" style="height: 280px;"></div>
+                    <div class="mt-3">
+                        <button class="btn btn-outline-secondary btn-sm variables-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#variables-digest-entry-collapse" aria-expanded="false" aria-controls="variables-digest-entry-collapse">
+                            <i class="bi bi-code-slash me-1"></i>Available Variables
+                        </button>
+                        <div class="collapse mt-2" id="variables-digest-entry-collapse">
+                            <div class="variable-legend p-2 border rounded bg-body-tertiary">
+                                <dl class="small mb-0" id="variables-digest-entry"></dl>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Preview Column -->
+                <div class="col-12 col-xl-6">
+                    <div id="preview-digest-entry" class="preview-container"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recent Messages Section -->
+        <div class="format-section">
+            <div class="d-flex justify-content-between align-items-start mb-4">
+                <div>
+                    <h5 class="card-title mb-1"><i class="bi bi-clock-history me-2"></i>Recent Messages</h5>
+                    <p class="text-muted small mb-0">Latest stored messages that would appear in digests</p>
+                </div>
+                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-messages">
+                    <i class="bi bi-arrow-clockwise"></i> Refresh
+                </button>
+            </div>
+            <div id="recent-messages-container" class="border rounded p-3" style="max-height: 400px; overflow-y: auto; background: var(--bs-tertiary-bg);">
+                <div class="text-center text-muted py-4" id="messages-loading">
+                    <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                    Loading messages...
+                </div>
+                <div id="messages-list" class="d-none"></div>
+                <div id="messages-empty" class="text-center text-muted py-4 d-none">
+                    <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                    No messages found. Messages will appear here once alerts are triggered.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Webhook Tab -->
+    <div class="tab-pane fade" id="webhook-content" role="tabpanel" aria-labelledby="webhook-tab">
+        <div class="format-section">
+            <!-- Section Header -->
+            <div class="d-flex justify-content-between align-items-start mb-4">
+                <div>
+                    <h5 class="card-title mb-1">JSON Payload Template</h5>
+                    <p class="text-muted small mb-0">JSON structure sent to webhook endpoints</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-primary btn-sm" type="button" data-format-type="webhook_payload" data-action="preview">
+                        <i class="bi bi-eye"></i> Preview
+                    </button>
+                </div>
+            </div>
+            <div class="row g-4">
+                <!-- Editor Column -->
+                <div class="col-12 col-xl-6">
+                    <div id="editor-webhook" class="format-editor-container" style="height: 400px;"></div>
+                    <div class="mt-3">
+                        <button class="btn btn-outline-secondary btn-sm variables-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#variables-webhook-collapse" aria-expanded="false" aria-controls="variables-webhook-collapse">
+                            <i class="bi bi-code-slash me-1"></i>Available Variables
+                        </button>
+                        <div class="collapse mt-2" id="variables-webhook-collapse">
+                            <div class="variable-legend p-2 border rounded bg-body-tertiary">
+                                <dl class="small mb-0" id="variables-webhook"></dl>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Preview Column -->
+                <div class="col-12 col-xl-6">
+                    <div id="preview-webhook" class="preview-container" style="font-family: var(--bs-font-monospace); font-size: 0.85em;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden file input for import -->
+<input type="file" id="import-file-input" accept=".yml,.yaml" class="d-none">
+
+<!-- Reset Confirmation Modal -->
+<div class="modal fade" id="resetModal" tabindex="-1" aria-labelledby="resetModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="resetModalLabel">Reset Message Formats</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to reset all message formats to defaults?</p>
+                <p class="text-muted small">This will overwrite any customizations you've made. A backup will be created automatically.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning" id="btn-confirm-reset">Reset to Defaults</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Unified Variables Reference Modal -->
+<div class="modal fade" id="variablesModal" tabindex="-1" aria-labelledby="variablesModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="variablesModalLabel">
+                    <i class="bi bi-code-slash me-2"></i>Available Variables - Quick Reference
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Template Syntax Guide -->
+                <div class="alert alert-info mb-4">
+                    <h6 class="alert-heading"><i class="bi bi-info-circle me-2"></i>Template Syntax</h6>
+                    <dl class="row mb-0 small">
+                        <dt class="col-sm-4"><code>{var}</code></dt>
+                        <dd class="col-sm-8">Required variable</dd>
+                        
+                        <dt class="col-sm-4"><code>{?var}</code></dt>
+                        <dd class="col-sm-8">Optional (empty if missing)</dd>
+                        
+                        <dt class="col-sm-4"><code>{var:.2f}</code></dt>
+                        <dd class="col-sm-8">Format specifier (2 decimals)</dd>
+                        
+                        <dt class="col-sm-4"><code>{var|filter}</code></dt>
+                        <dd class="col-sm-8">Apply filter (date, time, relative, link)</dd>
+                        
+                        <dt class="col-sm-4"><code>{?var|filter:.2f}</code></dt>
+                        <dd class="col-sm-8">Combine all features</dd>
+                    </dl>
+                </div>
+
+                <!-- Available Filters -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <strong><i class="bi bi-funnel me-2"></i>Available Filters</strong>
+                    </div>
+                    <div class="card-body">
+                        <dl class="row mb-0 small">
+                            <dt class="col-sm-3"><code>|date</code></dt>
+                            <dd class="col-sm-9">"Jan 15, 2024"</dd>
+                            
+                            <dt class="col-sm-3"><code>|time</code></dt>
+                            <dd class="col-sm-9">"14:30"</dd>
+                            
+                            <dt class="col-sm-3"><code>|datetime</code></dt>
+                            <dd class="col-sm-9">"Jan 15, 2024 14:30"</dd>
+                            
+                            <dt class="col-sm-3"><code>|relative</code></dt>
+                            <dd class="col-sm-9">"2h ago", "3d ago"</dd>
+                            
+                            <dt class="col-sm-3"><code>|link</code></dt>
+                            <dd class="col-sm-9">[View](url) - Markdown clickable link</dd>
+                        </dl>
+                    </div>
+                </div>
+
+                <!-- Variable Categories -->
+                <div class="accordion" id="variablesAccordion">
+                    <!-- Message / Chat Metadata -->
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#vars-message" aria-expanded="true">
+                                <i class="bi bi-chat-left-text me-2"></i>Message / Chat Metadata
+                            </button>
+                        </h2>
+                        <div id="vars-message" class="accordion-collapse collapse show" data-bs-parent="#variablesAccordion">
+                            <div class="accordion-body">
+                                <dl class="row mb-0 small">
+                                    <dt class="col-sm-4"><code>{chat_id}</code></dt>
+                                    <dd class="col-sm-8">Chat or channel numeric ID</dd>
+                                    
+                                    <dt class="col-sm-4"><code>{chat_title}</code></dt>
+                                    <dd class="col-sm-8">Title of the channel or chat</dd>
+                                    
+                                    <dt class="col-sm-4"><code>{msg_id}</code></dt>
+                                    <dd class="col-sm-8">Message ID within the chat</dd>
+                                    
+                                    <dt class="col-sm-4"><code>{message_link}</code></dt>
+                                    <dd class="col-sm-8">Link to original message<br><small class="text-info">Use <code>{message_link|link}</code> for clickable</small></dd>
+                                    
+                                    <dt class="col-sm-4"><code>{message_text}</code></dt>
+                                    <dd class="col-sm-8">Full message content</dd>
+                                    
+                                    <dt class="col-sm-4"><code>{message_preview}</code></dt>
+                                    <dd class="col-sm-8">Truncated preview of message (auto-generated from message_text)<br><small class="text-muted">Available in all message formats</small></dd>
+                                    
+                                    <dt class="col-sm-4"><code>{timestamp}</code></dt>
+                                    <dd class="col-sm-8">Message timestamp<br><small class="text-info">Use filters: <code>|date</code>, <code>|time</code>, <code>|relative</code></small></dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sender Information -->
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#vars-sender">
+                                <i class="bi bi-person me-2"></i>Sender Information
+                            </button>
+                        </h2>
+                        <div id="vars-sender" class="accordion-collapse collapse" data-bs-parent="#variablesAccordion">
+                            <div class="accordion-body">
+                                <dl class="row mb-0 small">
+                                    <dt class="col-sm-4"><code>{sender_id}</code></dt>
+                                    <dd class="col-sm-8">Numeric ID of the message sender</dd>
+                                    
+                                    <dt class="col-sm-4"><code>{sender_name}</code></dt>
+                                    <dd class="col-sm-8">Name of the message sender</dd>
+                                    
+                                    <dt class="col-sm-4"><code>{is_vip}</code></dt>
+                                    <dd class="col-sm-8">Whether sender is a VIP (true/false)<br><small class="text-muted">Available in all message formats</small></dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Profile Matching -->
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#vars-profile">
+                                <i class="bi bi-bullseye me-2"></i>Profile Matching
+                            </button>
+                        </h2>
+                        <div id="vars-profile" class="accordion-collapse collapse" data-bs-parent="#variablesAccordion">
+                            <div class="accordion-body">
+                                <dl class="row mb-0 small">
+                                    <dt class="col-sm-4"><code>{profile_id}</code></dt>
+                                    <dd class="col-sm-8">ID of the matching or digest profile</dd>
+                                    
+                                    <dt class="col-sm-4"><code>{profile_name}</code></dt>
+                                    <dd class="col-sm-8">Name of the matching or digest profile</dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Scoring & Ranking -->
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#vars-scoring">
+                                <i class="bi bi-graph-up me-2"></i>Scoring & Ranking
+                            </button>
+                        </h2>
+                        <div id="vars-scoring" class="accordion-collapse collapse" data-bs-parent="#variablesAccordion">
+                            <div class="accordion-body">
+                                <dl class="row mb-0 small">
+                                    <dt class="col-sm-4"><code>{score:.2f}</code></dt>
+                                    <dd class="col-sm-8">Combined relevance score (0.0-1.0)</dd>
+                                    
+                                    <dt class="col-sm-4"><code>{?keyword_score:.2f}</code></dt>
+                                    <dd class="col-sm-8">Keyword/heuristic match score (optional)<br><small class="text-warning">Use <code>{?...}</code> syntax - may be missing</small></dd>
+                                    
+                                    <dt class="col-sm-4"><code>{?semantic_score:.2f}</code></dt>
+                                    <dd class="col-sm-8">Semantic similarity score from AI (optional)<br><small class="text-warning">Use <code>{?...}</code> syntax - may be missing</small></dd>
+                                    
+                                    <dt class="col-sm-4"><code>{reactions}</code></dt>
+                                    <dd class="col-sm-8">Number of reactions on the message</dd>
+                                    
+                                    <dt class="col-sm-4"><code>{rank}</code></dt>
+                                    <dd class="col-sm-8">Message rank (1-based)<br><small class="text-info">Primarily used in Digest Entry format. Available in other formats for testing.</small></dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Triggers -->
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#vars-triggers">
+                                <i class="bi bi-lightning me-2"></i>Triggers
+                            </button>
+                        </h2>
+                        <div id="vars-triggers" class="accordion-collapse collapse" data-bs-parent="#variablesAccordion">
+                            <div class="accordion-body">
+                                <dl class="row mb-0 small">
+                                    <dt class="col-sm-4"><code>{triggers}</code></dt>
+                                    <dd class="col-sm-8">Comma-separated matched trigger keywords</dd>
+                                    
+                                    <dt class="col-sm-4"><code>{triggers_json}</code></dt>
+                                    <dd class="col-sm-8">Triggers as JSON array<br><small class="text-info">Recommended for webhooks</small></dd>
+                                    
+                                    <dt class="col-sm-4"><code>{triggers_formatted}</code></dt>
+                                    <dd class="col-sm-8">Formatted trigger list with icons<br><small class="text-success">Recommended for display in all message formats</small></dd>
+                                    
+                                    <dt class="col-sm-4"><code>{trigger_section}</code></dt>
+                                    <dd class="col-sm-8"><small class="text-warning">Deprecated - use <code>triggers_formatted</code></small></dd>
+                                    
+                                    <dt class="col-sm-4"><code>{trigger_display}</code></dt>
+                                    <dd class="col-sm-8"><small class="text-warning">Deprecated - use <code>triggers_formatted</code></small></dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Digest-Specific -->
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#vars-digest">
+                                <i class="bi bi-newspaper me-2"></i>Digest-Specific (Header Only)
+                            </button>
+                        </h2>
+                        <div id="vars-digest" class="accordion-collapse collapse" data-bs-parent="#variablesAccordion">
+                            <div class="accordion-body">
+                                <div class="alert alert-info mb-3 small">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    These variables are only available in the <strong>Digest Header</strong> template.
+                                </div>
+                                <dl class="row mb-0 small">
+                                    <dt class="col-sm-4"><code>{channel_count}</code></dt>
+                                    <dd class="col-sm-8">Number of unique channels in digest</dd>
+                                    
+                                    <dt class="col-sm-4"><code>{schedule}</code></dt>
+                                    <dd class="col-sm-8">Digest schedule (hourly/daily)</dd>
+                                    
+                                    <dt class="col-sm-4"><code>{time_range}</code></dt>
+                                    <dd class="col-sm-8">Time window covered (e.g., "last 24h")</dd>
+                                    
+                                    <dt class="col-sm-4"><code>{top_n}</code></dt>
+                                    <dd class="col-sm-8">Number of top messages included</dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Examples Section -->
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <strong><i class="bi bi-lightbulb me-2"></i>Common Examples</strong>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <strong>Show optional scores:</strong>
+                            <pre class="bg-dark text-light p-2 rounded small mb-1"><code>🧠 {?semantic_score:.2f} 🔑 {?keyword_score:.2f}</code></pre>
+                            <small class="text-muted">Only displays scores if available</small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <strong>Format timestamps:</strong>
+                            <pre class="bg-dark text-light p-2 rounded small mb-1"><code>📅 {timestamp|relative} 🕐 {timestamp|time}</code></pre>
+                            <small class="text-muted">Shows "2h ago" and "14:30"</small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <strong>Clickable message link:</strong>
+                            <pre class="bg-dark text-light p-2 rounded small mb-1"><code>🔗 {message_link|link}</code></pre>
+                            <small class="text-muted">Renders as Telegram Markdown link [View](url)</small>
+                        </div>
+                        
+                        <div>
+                            <strong>Combine features:</strong>
+                            <pre class="bg-dark text-light p-2 rounded small mb-1"><code>{rank}. 💬 **{chat_title}** ({?semantic_score|label:"AI":.2f})</code></pre>
+                            <small class="text-muted">Message rank, bold title, optional AI score</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- Monaco Editor loader (only load once globally) -->
+<script>
+if (!window.__monacoLoaderPromise) {
+    window.__monacoLoaderPromise = new Promise((resolve, reject) => {
+        const loaderScript = document.createElement('script');
+        loaderScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js';
+        loaderScript.async = true;
+        loaderScript.onload = () => resolve();
+        loaderScript.onerror = (err) => {
+            console.error('[TG Sentinel] Failed to load Monaco loader', err);
+            reject(err);
+        };
+        document.head.appendChild(loaderScript);
+    });
+}
+</script>
+<script src="{{ url_for('static', filename='js/developer/message_formats.js') }}"></script>
+{% endblock %}

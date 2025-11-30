@@ -1,0 +1,43 @@
+{
+  "id": 3003,
+  "name": "DeFi Protocol Analysis",
+  "description": "Captures protocol governance changes, exploits, and token economics updates in DeFi.",
+  "enabled": false,
+  "threshold": 0.42,
+  "positive_weight": 1.0,
+  "negative_weight": 0.2,
+  "positive_samples": [
+    "New governance proposal to adjust staking rewards mechanism",
+    "Protocol exploit drained $10M from the liquidity pool",
+    "Smart contract audit revealed critical vulnerability in the lending module",
+    "Token economics update: new emission schedule announced",
+    "Major partnership announced with leading DeFi aggregator",
+    "Governance vote results: proposal passed with 85% approval",
+    "New liquidity mining program launching next week"
+  ],
+  "negative_samples": [
+    "What's the current APY?",
+    "How do I stake my tokens?",
+    "General market discussion",
+    "Good morning crypto fam",
+    "When moon?"
+  ],
+  "channels": [],
+  "users": [],
+  "vip_senders": [],
+  "webhooks": [],
+  "excluded_users": [],
+  "reaction_threshold": 20,
+  "reply_threshold": 10,
+  "tags": ["crypto", "defi", "governance", "protocol"],
+  "digest": {
+    "schedules": [
+      {
+        "schedule": "daily",
+        "daily_hour": 9,
+        "top_n": 12,
+        "min_score": 0.42
+      }
+    ]
+  }
+}

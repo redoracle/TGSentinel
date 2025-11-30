@@ -1,0 +1,45 @@
+<!-- Live Metrics (Prometheus) -->
+<section class="row g-4 mb-4">
+    <div class="col-12">
+        <article class="card" aria-labelledby="live-metrics-heading">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" 
+                        type="button" 
+                        data-bs-toggle="collapse" 
+                        data-bs-target="#live-metrics-body" 
+                        aria-expanded="false" 
+                        aria-controls="live-metrics-body">
+                    <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
+                    <div>
+                        <h2 class="card-title mb-0" id="live-metrics-heading">Live Metrics (Prometheus)</h2>
+                        <small class="text-muted">Real-time system and application metrics</small>
+                    </div>
+                </button>
+                <div class="d-flex gap-2">
+                    <a href="/docs#live-metrics" 
+                       class="btn btn-outline-primary btn-sm" 
+                       title="View live metrics documentation" 
+                       target="_blank" 
+                       rel="noopener">
+                        <i class="bi bi-info-circle"></i>
+                    </a>
+                    <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-metrics">
+                        <i class="bi bi-arrow-clockwise"></i>
+                        Refresh
+                    </button>
+                </div>
+            </div>
+            <div class="collapse card-body" id="live-metrics-body">
+                <div class="metrics-grid" id="metrics-grid">
+                    <!-- Metrics will be dynamically inserted here -->
+                    <div class="text-center text-muted py-4">
+                        <div class="spinner-border spinner-border-sm me-2" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        Loading live metrics...
+                    </div>
+                </div>
+            </div>
+        </article>
+    </div>
+</section>

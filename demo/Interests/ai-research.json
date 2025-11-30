@@ -1,0 +1,43 @@
+{
+  "id": 3004,
+  "name": "AI & Machine Learning Research",
+  "description": "Tracks major AI research breakthroughs, model releases, and benchmark wins.",
+  "enabled": false,
+  "threshold": 0.44,
+  "positive_weight": 1.0,
+  "negative_weight": 0.1,
+  "positive_samples": [
+    "Breakthrough in transformer architecture achieving 40% efficiency gains",
+    "New open-source LLM released with state-of-the-art performance",
+    "Research paper on novel attention mechanism for video understanding",
+    "GPT-5 announcement with multimodal capabilities",
+    "Major advancement in reinforcement learning for robotics",
+    "New dataset released for training large language models",
+    "Significant improvement in zero-shot learning benchmarks"
+  ],
+  "negative_samples": [
+    "How do I install TensorFlow?",
+    "Looking for ML job opportunities",
+    "What's the best course for beginners?",
+    "General Python programming question",
+    "Daily motivation quote"
+  ],
+  "channels": [],
+  "users": [],
+  "vip_senders": [],
+  "webhooks": [],
+  "excluded_users": [],
+  "reaction_threshold": 10,
+  "reply_threshold": 5,
+  "tags": ["ai", "machine-learning", "research", "innovation"],
+  "digest": {
+    "schedules": [
+      {
+        "schedule": "daily",
+        "daily_hour": 20,
+        "top_n": 15,
+        "min_score": 0.44
+      }
+    ]
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "id": 3008,
+  "name": "Technical Deep Dives",
+  "description": "Surfaces long-form engineering analyses and architecture retrospectives worth studying.",
+  "enabled": false,
+  "threshold": 0.4,
+  "positive_weight": 1.0,
+  "negative_weight": 0.25,
+  "positive_samples": [
+    "Detailed analysis of our microservices architecture and scaling challenges",
+    "Deep dive into the new caching layer implementation using Redis Cluster",
+    "Technical post-mortem: how we reduced database query time by 80%",
+    "Architecture decision record: migrating from REST to GraphQL",
+    "Performance optimization case study with benchmarks and results",
+    "Explanation of our event-driven system design patterns",
+    "In-depth comparison of different load balancing strategies"
+  ],
+  "negative_samples": [
+    "How do I install this library?",
+    "Basic tutorial question",
+    "What's the syntax for this?",
+    "Beginner question about variables",
+    "General coding help request"
+  ],
+  "channels": [],
+  "users": [],
+  "vip_senders": [],
+  "webhooks": [],
+  "excluded_users": [],
+  "reaction_threshold": 15,
+  "reply_threshold": 8,
+  "tags": ["engineering", "architecture", "technical", "learning"],
+  "digest": {
+    "schedules": [
+      {
+        "schedule": "weekly",
+        "weekly_day": 5,
+        "weekly_hour": 17,
+        "top_n": 15,
+        "min_score": 0.4
+      }
+    ]
+  }
+}

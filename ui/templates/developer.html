@@ -1,0 +1,942 @@
+{% extends "base.html" %}
+{% block title %}Developer · TG Sentinel{% endblock %}
+
+{% block content %}
+<section class="row g-4 mb-4">
+    <div class="col-12 col-xl-6">
+        <article class="card h-100" aria-labelledby="integration-heading">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#integration-body" aria-expanded="true" aria-controls="integration-body">
+                    <i class="bi bi-chevron-right collapse-icon"></i>
+                    <div>
+                        <h1 class="card-title mb-0" id="integration-heading">Integration Settings</h1>
+                        <small class="text-muted">Configure API keys and external services</small>
+                    </div>
+                </button>
+                <a href="/docs#integration-settings" class="btn btn-outline-primary btn-sm" title="View integration settings documentation" target="_blank" rel="noopener">
+                    <i class="bi bi-info-circle"></i>
+                </a>
+            </div>
+            <div class="collapse show card-body d-grid gap-3" id="integration-body">
+                <div>
+                    <label class="form-label" for="prometheus-port">Prometheus port</label>
+                    <input class="form-control" id="prometheus-port" type="number" value="9100" min="1" max="65535">
+                </div>
+                <div>
+                    <label class="form-label" for="api-key">API key</label>
+                    <div class="input-group">
+                        <input class="form-control" id="api-key" type="text" value="" placeholder="Generate secure key" autocomplete="off" readonly>
+                        <button class="btn btn-outline-primary" type="button" id="btn-generate-key">Generate</button>
+                        <button class="btn btn-outline-secondary" type="button" id="btn-copy-key" aria-label="Copy generated API key" disabled>Copy</button>
+                    </div>
+                    <small class="text-muted">Keys are only shown once, copy immediately after generation.</small>
+                </div>
+                <div class="d-flex gap-3">
+                    <button class="btn btn-outline-primary" type="button" id="btn-open-docs">Open local API docs</button>
+                    <button class="btn btn-outline-primary" type="button" id="btn-save-developer">Save</button>
+                </div>
+            </div>
+        </article>
+    </div>
+    <div class="col-12 col-xl-6">
+        <article class="card h-100" aria-labelledby="webhook-table-heading">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#webhook-table-body-container" aria-expanded="true" aria-controls="webhook-table-body-container">
+                    <i class="bi bi-chevron-right collapse-icon"></i>
+                    <div>
+                        <h2 class="card-title mb-0" id="webhook-table-heading">Webhooks</h2>
+                        <small class="text-muted">Manage external notification endpoints</small>
+                    </div>
+                </button>
+                <div class="d-flex gap-2">
+                    <a href="/docs#webhooks-api" class="btn btn-outline-primary btn-sm" title="View webhooks documentation" target="_blank" rel="noopener">
+                        <i class="bi bi-info-circle"></i>
+                    </a>
+                    <button class="btn btn-primary btn-sm" type="button" id="btn-add-webhook">
+                        <i class="bi bi-plus-circle"></i> Add Webhook
+                    </button>
+                </div>
+            </div>
+            <div class="collapse show card-body" id="webhook-table-body-container">
+                <div id="webhook-form" class="d-none mb-3">
+                    <form id="form-webhook">
+                        <div class="mb-2">
+                            <label class="form-label" for="webhook-template">Template</label>
+                            <select class="form-select form-select-sm" id="webhook-template">
+                                <option value="">Custom</option>
+                                <option value="slack">Slack</option>
+                                <option value="discord">Discord</option>
+                                <option value="pagerduty">PagerDuty</option>
+                            </select>
+                            <small class="text-muted">Pre-fill common service settings.</small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="webhook-service">Service Name</label>
+                            <input class="form-control form-control-sm" id="webhook-service" type="text" placeholder="e.g., Pushover, Discord, Slack" required>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label" for="webhook-url">Webhook URL</label>
+                            <input class="form-control form-control-sm" id="webhook-url" type="url" placeholder="https://" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="webhook-secret">Secret/Token (optional)</label>
+                            <!-- Hidden username field for password form accessibility -->
+                            <input type="text" name="webhook-username" autocomplete="username" class="d-none" aria-hidden="true" tabindex="-1">
+                            <input class="form-control form-control-sm" id="webhook-secret" type="password" placeholder="Authentication token" autocomplete="current-password">
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-primary btn-sm" type="submit">Create</button>
+                            <button class="btn btn-outline-secondary btn-sm" type="button" id="btn-cancel-webhook">Cancel</button>
+                        </div>
+                    </form>
+                    <hr class="my-3">
+                </div>
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0" id="webhook-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Service</th>
+                                <th scope="col">URL</th>
+                                <th scope="col">Secret</th>
+                                <th scope="col">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="webhook-table-body">
+                            <tr id="webhook-loading">
+                                <td colspan="4" class="text-center text-muted">
+                                    <div class="spinner-border spinner-border-sm me-2" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    Loading webhooks...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </article>
+    </div>
+</section>
+
+<section class="card mb-4" aria-labelledby="webhook-history-heading">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#webhook-history-body" aria-expanded="true" aria-controls="webhook-history-body">
+            <i class="bi bi-chevron-right collapse-icon"></i>
+            <div>
+                <h2 class="card-title mb-0" id="webhook-history-heading">Webhook Delivery History</h2>
+                <small class="text-muted">Recent webhook deliveries and their status</small>
+            </div>
+        </button>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-history" title="Refresh delivery history">
+                <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+        </div>
+    </div>
+    <div class="collapse show card-body" id="webhook-history-body">
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0" id="webhook-history-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Time</th>
+                        <th scope="col">Service</th>
+                        <th scope="col">Profile</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Response</th>
+                        <th scope="col">Error</th>
+                    </tr>
+                </thead>
+                <tbody id="webhook-history-body-table">
+                    <tr id="webhook-history-loading">
+                        <td colspan="6" class="text-center text-muted">
+                            <div class="spinner-border spinner-border-sm me-2" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            Loading delivery history...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<section class="card" aria-labelledby="developer-console-heading">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#developer-console-body" aria-expanded="true" aria-controls="developer-console-body">
+            <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
+            <div>
+                <h2 class="card-title mb-0" id="developer-console-heading">Integration Console</h2>
+                <small class="text-muted">Live webhook and integration event logs</small>
+            </div>
+        </button>
+        <div class="d-flex gap-2">
+            <a href="/docs#integration-console" class="btn btn-outline-primary btn-sm" title="View integration console documentation" target="_blank" rel="noopener">
+                <i class="bi bi-info-circle"></i>
+            </a>
+            <button class="btn btn-outline-primary btn-sm" type="button" id="btn-webhook-test">Send sample alert</button>
+            <div class="form-check form-check-inline ms-2">
+                <input class="form-check-input" type="checkbox" id="webhook-dry-run">
+                <label class="form-check-label small" for="webhook-dry-run">Dry-run</label>
+            </div>
+        </div>
+    </div>
+    <div class="collapse show card-body" id="developer-console-body">
+        <div class="logs-viewer" id="developer-log" aria-live="polite">
+            <pre class="mb-0">Awaiting integration events...</pre>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+{{ super() }}
+<script>
+    // Rotate chevrons consistently when collapses toggle
+    document.addEventListener("DOMContentLoaded", () => {
+        document.querySelectorAll(".collapse").forEach((collapseEl) => {
+            const trigger = document.querySelector(`[data-bs-target="#${collapseEl.id}"] .collapse-icon`);
+            if (!trigger) return;
+            const update = () => {
+                trigger.style.transform = collapseEl.classList.contains("show") ? "rotate(90deg)" : "";
+            };
+            collapseEl.addEventListener("shown.bs.collapse", update);
+            collapseEl.addEventListener("hidden.bs.collapse", update);
+            update();
+        });
+    });
+</script>
+<script>
+    const MAX_LOG_ENTRIES = 100; // Limit console entries to prevent memory bloat
+
+    function appendDeveloperLog(message) {
+        const log = document.getElementById("developer-log");
+        if (!log) {
+            return;
+        }
+        const entry = document.createElement("div");
+        entry.className = "log-entry";
+        const time = document.createElement("span");
+        time.className = "log-time";
+        time.textContent = new Date().toLocaleTimeString();
+
+        const spacer = document.createTextNode(" ");
+
+        const logMessage = document.createElement("span");
+        logMessage.className = "log-message";
+        logMessage.textContent = String(message ?? "");
+
+        entry.appendChild(time);
+        entry.appendChild(spacer);
+        entry.appendChild(logMessage);
+        log.appendChild(entry);
+        
+        // Limit buffer size to prevent memory bloat
+        while (log.children.length > MAX_LOG_ENTRIES) {
+            log.removeChild(log.firstChild);
+        }
+        
+        log.scrollTop = log.scrollHeight;
+    }
+
+    function randomKey() {
+        // Require Web Crypto API for secure key generation
+        if (!window.crypto || !window.crypto.getRandomValues) {
+            const errorMsg = "Secure random number generation unavailable. " +
+                           "Web Crypto API is required for API key generation. " +
+                           "Please use a modern browser (Chrome 11+, Firefox 21+, Safari 6.1+, Edge 12+).";
+            console.error("[Security] " + errorMsg);
+            showToast(errorMsg, "error");
+            throw new Error("Web Crypto API unavailable - cannot generate secure API keys");
+        }
+        
+        // Generate cryptographically secure random key
+        const array = window.crypto.getRandomValues(new Uint8Array(32));
+        return Array.from(array, (byte) => byte.toString(16).padStart(2, "0")).join("");
+    }
+
+    let pendingApiKey = null;
+    const API_KEY_MASK = "•".repeat(16);
+
+    function clearPendingApiKey() {
+        pendingApiKey = null;
+        const input = document.getElementById("api-key");
+        const copyBtn = document.getElementById("btn-copy-key");
+        if (input) {
+            input.value = "";
+        }
+        if (copyBtn) {
+            copyBtn.disabled = true;
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        const apiKeyInput = document.getElementById("api-key");
+        const copyButton = document.getElementById("btn-copy-key");
+
+        // Initialize SSE connection for real-time console
+        let eventSource = null;
+        let reconnectAttempts = 0;
+        const MAX_RECONNECT_ATTEMPTS = 5;
+        
+        function connectSSE() {
+            if (eventSource) {
+                eventSource.close();
+            }
+            
+            eventSource = new EventSource("/api/events/integration");
+            
+            eventSource.onopen = () => {
+                reconnectAttempts = 0;
+                appendDeveloperLog("✓ Connected to real-time console");
+            };
+            
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === "webhook_test") {
+                        appendDeveloperLog(`Webhook test: ${data.service} - ${data.status} (${data.status_code})`);
+                    } else if (data.type === "webhook_created") {
+                        appendDeveloperLog(`Webhook created: ${data.service}`);
+                    } else if (data.type === "webhook_deleted") {
+                        appendDeveloperLog(`Webhook deleted: ${data.service}`);
+                    } else if (data.type === "webhook_updated") {
+                        appendDeveloperLog(`Webhook updated: ${data.service}`);
+                    } else if (data.type === "api_key_revoked") {
+                        appendDeveloperLog(`API key revoked: ${data.key_hash}...`);
+                    } else if (data.type === "settings_updated") {
+                        appendDeveloperLog(`Settings updated`);
+                    }
+                } catch (err) {
+                    console.error("Failed to parse SSE event:", err);
+                }
+            };
+            
+            eventSource.onerror = () => {
+                eventSource.close();
+                reconnectAttempts++;
+                
+                if (reconnectAttempts <= MAX_RECONNECT_ATTEMPTS) {
+                    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+                    appendDeveloperLog(`⚠ Connection lost, reconnecting in ${delay/1000}s...`);
+                    setTimeout(connectSSE, delay);
+                } else {
+                    appendDeveloperLog("✗ Real-time console unavailable (max retries exceeded)");
+                }
+            };
+        }
+        
+        connectSSE();
+        
+        // Load developer settings on page load
+        fetch("/api/developer/settings")
+            .then(response => response.json())
+            .then(data => {
+                const prometheusInput = document.getElementById("prometheus-port");
+                if (prometheusInput && data.prometheus_port) {
+                    prometheusInput.value = data.prometheus_port;
+                }
+            })
+            .catch(err => {
+                console.error("Failed to load developer settings:", err);
+            });
+
+        // Load webhooks and history on page load
+        loadWebhooks();
+        loadWebhookHistory();
+
+        // Add webhook button
+        document.getElementById("btn-add-webhook")?.addEventListener("click", () => {
+            const webhookForm = document.getElementById("webhook-form");
+            webhookForm?.classList.remove("d-none");
+            document.getElementById("webhook-service")?.focus();
+        });
+
+        // Cancel webhook button
+        document.getElementById("btn-cancel-webhook")?.addEventListener("click", () => {
+            const webhookForm = document.getElementById("webhook-form");
+            webhookForm?.classList.add("d-none");
+            document.getElementById("form-webhook")?.reset();
+        });
+
+        // Template selector
+        const templateSelect = document.getElementById("webhook-template");
+        if (templateSelect) {
+            const templateMap = {
+                slack: {
+                    service: "Slack",
+                    url: "https://hooks.slack.com/services/XXX/YYY/ZZZ",
+                },
+                discord: {
+                    service: "Discord",
+                    url: "https://discord.com/api/webhooks/XXX/YYY",
+                },
+                pagerduty: {
+                    service: "PagerDuty",
+                    url: "https://events.pagerduty.com/v2/enqueue",
+                },
+            };
+            templateSelect.addEventListener("change", (e) => {
+                const val = e.target.value;
+                const tpl = templateMap[val];
+                if (tpl) {
+                    document.getElementById("webhook-service").value = tpl.service;
+                    document.getElementById("webhook-url").value = tpl.url;
+                }
+            });
+        }
+
+        // Submit webhook form
+        document.getElementById("form-webhook")?.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const service = document.getElementById("webhook-service").value.trim();
+            const url = document.getElementById("webhook-url").value.trim();
+            const secret = document.getElementById("webhook-secret").value.trim();
+
+            if (!service || !url) {
+                showToast("Service name and URL are required", "error");
+                return;
+            }
+            
+            // Warn about HTTP (non-HTTPS) URLs except for localhost
+            if (url.startsWith("http://") && !url.includes("localhost") && !url.includes("127.0.0.1")) {
+                const confirmed = confirm(
+                    "⚠️ WARNING: This URL uses HTTP instead of HTTPS.\n\n" +
+                    "Webhook secrets and data will be transmitted unencrypted over the network.\n\n" +
+                    "Do you want to continue?"
+                );
+                if (!confirmed) {
+                    return;
+                }
+            }
+
+            try {
+                const response = await fetch("/api/webhooks", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ service, url, secret }),
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showToast(`Webhook '${service}' created successfully`, "success");
+                    appendDeveloperLog(`Created webhook: ${service}`);
+                    const webhookForm = document.getElementById("webhook-form");
+                    webhookForm?.classList.add("d-none");
+                    document.getElementById("form-webhook")?.reset();
+                    
+                    // Reload webhooks with a small delay to ensure file write completed
+                    console.log("Webhook created, reloading table...");
+                    setTimeout(() => {
+                        loadWebhooks();
+                    }, 100);
+                } else {
+                    showToast(data.message || "Failed to create webhook", "error");
+                }
+            } catch (error) {
+                console.error("Error creating webhook:", error);
+                showToast("Failed to create webhook", "error");
+            }
+        });
+
+        document.getElementById("btn-generate-key")?.addEventListener("click", () => {
+            try {
+                pendingApiKey = randomKey();
+                if (apiKeyInput) {
+                    apiKeyInput.value = API_KEY_MASK;
+                }
+                if (copyButton) {
+                    copyButton.disabled = false;
+                }
+                appendDeveloperLog("Generated new API key");
+            } catch (error) {
+                console.error("Failed to generate API key:", error);
+                appendDeveloperLog("ERROR: " + error.message);
+                if (apiKeyInput) {
+                    apiKeyInput.value = "";
+                }
+                if (copyButton) {
+                    copyButton.disabled = true;
+                }
+            }
+        });
+        document.getElementById("btn-open-docs")?.addEventListener("click", () => {
+            window.open("/docs", "_blank");
+        });
+        copyButton?.addEventListener("click", async () => {
+            if (!pendingApiKey) {
+                showToast("Generate an API key first", "warning");
+                return;
+            }
+            let secret = pendingApiKey;
+            clearPendingApiKey();
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(secret);
+                } else {
+                    const helper = document.createElement("textarea");
+                    helper.value = secret;
+                    helper.setAttribute("readonly", "");
+                    helper.style.position = "absolute";
+                    helper.style.left = "-9999px";
+                    document.body.appendChild(helper);
+                    helper.select();
+                    helper.setSelectionRange(0, helper.value.length);
+                    document.execCommand("copy");
+                    helper.remove();
+                }
+                showToast("API key copied to clipboard", "success");
+            } catch (error) {
+                console.error("Failed to copy API key", error);
+                showToast("Unable to copy API key. Generate a new one.", "error");
+            } finally {
+                secret = "";
+            }
+        });
+        document.getElementById("btn-save-developer")?.addEventListener("click", async () => {
+            const port = document.getElementById("prometheus-port")?.value;
+            
+            if (!port) {
+                showToast("Prometheus port is required", "error");
+                return;
+            }
+
+            const payload = {
+                prometheus_port: parseInt(port, 10)
+            };
+
+            // Include API key if one was generated
+            if (pendingApiKey) {
+                payload.api_key = pendingApiKey;
+                clearPendingApiKey(); // Clear after including in save
+            }
+
+            try {
+                const response = await fetch("/api/developer/settings", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showToast("Developer settings saved", "success");
+                    appendDeveloperLog("Settings saved successfully");
+                } else {
+                    showToast(data.message || "Failed to save settings", "error");
+                    appendDeveloperLog("ERROR: " + (data.message || "Failed to save"));
+                }
+            } catch (error) {
+                console.error("Error saving developer settings:", error);
+                showToast("Failed to save developer settings", "error");
+                appendDeveloperLog("ERROR: " + error.message);
+            }
+        });
+        document.getElementById("btn-webhook-test")?.addEventListener("click", async () => {
+            const button = document.getElementById("btn-webhook-test");
+            if (button) {
+                button.disabled = true;
+                button.textContent = "Sending...";
+            }
+
+            try {
+                const dryRun = document.getElementById("webhook-dry-run")?.checked;
+                const response = await fetch(`/api/webhooks/test-all${dryRun ? '?dry_run=true' : ''}`, {
+                    method: "POST",
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    const results = data.results || [];
+                    let successCount = 0;
+                    let failCount = 0;
+                    
+                    results.forEach(result => {
+                        if (result.status === "ok") {
+                            successCount++;
+                            appendDeveloperLog(`✓ ${result.service}: HTTP ${result.status_code} (${result.response_time_ms}ms)`);
+                        } else {
+                            failCount++;
+                            appendDeveloperLog(`✗ ${result.service}: ${result.message}`);
+                        }
+                    });
+
+                    if (results.length === 0) {
+                        showToast("No webhooks configured to test", "warning");
+                        appendDeveloperLog("No webhooks configured");
+                    } else {
+                        showToast(`Webhooks tested: ${successCount} OK, ${failCount} failed`, successCount > 0 ? "success" : "error");
+                    }
+                } else {
+                    showToast(data.message || "Failed to test webhooks", "error");
+                    appendDeveloperLog("ERROR: " + (data.message || "Test failed"));
+                }
+            } catch (error) {
+                console.error("Error testing webhooks:", error);
+                showToast("Failed to test webhooks", "error");
+                appendDeveloperLog("ERROR: " + error.message);
+            } finally {
+                if (button) {
+                    button.disabled = false;
+                    button.textContent = "Send Sample Alert";
+                }
+            }
+        });
+    });
+
+    async function loadWebhooks() {
+        const tbody = document.getElementById("webhook-table-body");
+        if (!tbody) return;
+
+        try {
+            const response = await fetch("/api/webhooks");
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || "Failed to load webhooks");
+            }
+
+            // Check if webhooks are disabled
+            if (data.enabled === false) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="text-center py-3">
+                            <div class="alert alert-warning mb-0">
+                                <i class="bi bi-exclamation-triangle me-2"></i>
+                                ${data.message || "Webhooks are disabled. Set WEBHOOK_SECRET_KEY environment variable to enable."}
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = "";
+
+            if (!data.webhooks || data.webhooks.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="text-center text-muted py-3">
+                            No webhooks configured. Click "Add Webhook" to create one.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            data.webhooks.forEach((webhook) => {
+                const row = document.createElement("tr");
+                
+                // Service column
+                const serviceCell = document.createElement("td");
+                serviceCell.textContent = webhook.service || "Unknown";
+                row.appendChild(serviceCell);
+
+                // URL column with copy button and tooltip
+                const urlCell = document.createElement("td");
+                const urlContainer = document.createElement("div");
+                urlContainer.className = "d-flex align-items-center gap-2";
+                
+                const urlSpan = document.createElement("span");
+                urlSpan.className = "text-truncate";
+                urlSpan.style.maxWidth = "200px";
+                urlSpan.textContent = webhook.url || "";
+                urlSpan.title = webhook.url || ""; // Full URL on hover
+                
+                const copyBtn = document.createElement("button");
+                copyBtn.className = "btn btn-outline-secondary btn-sm";
+                copyBtn.innerHTML = '<i class="bi bi-clipboard"></i>';
+                copyBtn.title = "Copy URL";
+                copyBtn.setAttribute("data-url", webhook.url);
+                copyBtn.addEventListener("click", async function() {
+                    const url = this.getAttribute("data-url");
+                    try {
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                            await navigator.clipboard.writeText(url);
+                        } else {
+                            // Fallback for browsers without Clipboard API
+                            const textarea = document.createElement("textarea");
+                            textarea.value = url;
+                            textarea.setAttribute("readonly", "");
+                            textarea.style.position = "absolute";
+                            textarea.style.left = "-9999px";
+                            document.body.appendChild(textarea);
+                            textarea.select();
+                            textarea.setSelectionRange(0, textarea.value.length);
+                            const success = document.execCommand("copy");
+                            document.body.removeChild(textarea);
+                            if (!success) {
+                                throw new Error("execCommand failed");
+                            }
+                        }
+                        showToast("URL copied to clipboard", "success");
+                    } catch (err) {
+                        console.error("Failed to copy:", err);
+                        showToast("Failed to copy URL", "error");
+                    }
+                });
+                
+                urlContainer.appendChild(urlSpan);
+                urlContainer.appendChild(copyBtn);
+                urlCell.appendChild(urlContainer);
+                row.appendChild(urlCell);
+
+                // Secret column
+                const secretCell = document.createElement("td");
+                secretCell.textContent = webhook.secret || "—";
+                row.appendChild(secretCell);
+
+                // Actions column
+                const actionsCell = document.createElement("td");
+                const actionsContainer = document.createElement("div");
+                actionsContainer.className = "d-flex align-items-center gap-2";
+
+                const testBtn = document.createElement("button");
+                testBtn.className = "btn btn-link p-0 text-primary";
+                testBtn.innerHTML = '<i class="bi bi-play-circle"></i>';
+                testBtn.title = "Test webhook";
+                testBtn.addEventListener("click", async () => {
+                    // Disable button during test
+                    testBtn.disabled = true;
+                    testBtn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+                    
+                    try {
+                        const dryRun = document.getElementById("webhook-dry-run")?.checked;
+                        const response = await fetch(`/api/webhooks/${encodeURIComponent(webhook.service)}/test${dryRun ? '?dry_run=true' : ''}`, {
+                            method: "POST",
+                        });
+
+                        const result = await response.json();
+
+                        if (response.ok) {
+                            appendDeveloperLog(`Webhook test successful: ${webhook.service} (${result.status_code || 200})`);
+                            showToast(`Webhook test successful: ${webhook.service}`, "success");
+                        } else {
+                            appendDeveloperLog(`Webhook test failed: ${webhook.service} - ${result.message || "Unknown error"}`);
+                            showToast(result.message || "Webhook test failed", "error");
+                        }
+                    } catch (error) {
+                        console.error("Error testing webhook:", error);
+                        appendDeveloperLog(`ERROR: Webhook test failed: ${error.message}`);
+                        showToast("Failed to test webhook", "error");
+                    } finally {
+                        testBtn.disabled = false;
+                        testBtn.innerHTML = '<i class="bi bi-play-circle"></i>';
+                    }
+                });
+
+                const deleteBtn = document.createElement("button");
+                deleteBtn.className = "btn btn-link p-0 text-danger";
+                deleteBtn.innerHTML = '<i class="bi bi-trash"></i>';
+                deleteBtn.title = "Delete webhook";
+                deleteBtn.addEventListener("click", async () => {
+                    if (!confirm(`Remove webhook '${webhook.service}'? This action cannot be undone.`)) {
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch(`/api/webhooks/${encodeURIComponent(webhook.service)}`, {
+                            method: "DELETE",
+                        });
+
+                        const result = await response.json();
+
+                        if (response.ok) {
+                            showToast(`Webhook '${webhook.service}' deleted`, "success");
+                            appendDeveloperLog(`Deleted webhook: ${webhook.service}`);
+                            loadWebhooks(); // Reload the table
+                        } else {
+                            showToast(result.message || "Failed to delete webhook", "error");
+                        }
+                    } catch (error) {
+                        console.error("Error deleting webhook:", error);
+                        showToast("Failed to delete webhook", "error");
+                    }
+                });
+
+                actionsContainer.appendChild(testBtn);
+                actionsContainer.appendChild(deleteBtn);
+                actionsCell.appendChild(actionsContainer);
+                row.appendChild(actionsCell);
+
+                tbody.appendChild(row);
+            });
+
+        } catch (error) {
+            console.error("Error loading webhooks:", error);
+            // Clear tbody safely
+            tbody.innerHTML = "";
+            
+            // Create error row with safe text insertion
+            const errorRow = document.createElement("tr");
+            const errorCell = document.createElement("td");
+            errorCell.colSpan = 4;
+            errorCell.className = "text-center text-danger py-3";
+            errorCell.textContent = `Failed to load webhooks: ${error.message}`;
+            errorRow.appendChild(errorCell);
+            tbody.appendChild(errorRow);
+        }
+    }
+
+    // =========================================================================
+    // Webhook Delivery History
+    // =========================================================================
+
+    async function loadWebhookHistory() {
+        const tbody = document.getElementById("webhook-history-body-table");
+        if (!tbody) {
+            console.error("Webhook history tbody not found");
+            return;
+        }
+
+        try {
+            const response = await fetch("/api/webhooks/history?limit=10");
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const result = await response.json();
+            
+            // Clear loading message
+            tbody.innerHTML = "";
+
+            if (!result.data || !result.data.deliveries || result.data.deliveries.length === 0) {
+                const emptyRow = document.createElement("tr");
+                const emptyCell = document.createElement("td");
+                emptyCell.colSpan = 6;
+                emptyCell.className = "text-center text-muted py-3";
+                emptyCell.textContent = "No webhook deliveries yet";
+                emptyRow.appendChild(emptyCell);
+                tbody.appendChild(emptyRow);
+                return;
+            }
+
+            // Populate table with delivery records
+            result.data.deliveries.forEach((delivery) => {
+                const row = document.createElement("tr");
+
+                // Time column
+                const timeCell = document.createElement("td");
+                timeCell.className = "text-nowrap";
+                const deliveryTime = new Date(delivery.created_at);
+                if (isNaN(deliveryTime)) {
+                    timeCell.textContent = "—";
+                    timeCell.title = "Invalid timestamp";
+                } else {
+                    timeCell.textContent = deliveryTime.toLocaleString();
+                    timeCell.title = deliveryTime.toISOString();
+                }
+                row.appendChild(timeCell);
+
+                // Service column
+                const serviceCell = document.createElement("td");
+                serviceCell.textContent = delivery.webhook_service || "—";
+                row.appendChild(serviceCell);
+
+                // Profile column
+                const profileCell = document.createElement("td");
+                profileCell.className = "text-truncate";
+                profileCell.style.maxWidth = "150px";
+                profileCell.textContent = delivery.profile_name || "—";
+                profileCell.title = delivery.profile_name || "";
+                row.appendChild(profileCell);
+
+                // Status column with color coding
+                const statusCell = document.createElement("td");
+                const statusBadge = document.createElement("span");
+                statusBadge.className = "badge";
+                
+                switch (delivery.status) {
+                    case "success":
+                        statusBadge.classList.add("bg-success");
+                        statusBadge.textContent = "Success";
+                        break;
+                    case "failed":
+                        statusBadge.classList.add("bg-danger");
+                        statusBadge.textContent = "Failed";
+                        break;
+                    case "retry_1":
+                    case "retry_2":
+                    case "retry_3":
+                        statusBadge.classList.add("bg-warning", "text-dark");
+                        statusBadge.textContent = `Retry ${delivery.attempt || delivery.status.split('_')[1]}`;
+                        break;
+                    default:
+                        statusBadge.classList.add("bg-secondary");
+                        statusBadge.textContent = delivery.status || "Unknown";
+                }
+                
+                statusCell.appendChild(statusBadge);
+                row.appendChild(statusCell);
+
+                // Response column (HTTP status + timing)
+                const responseCell = document.createElement("td");
+                responseCell.className = "text-nowrap";
+                
+                if (delivery.http_status) {
+                    const statusCode = document.createElement("code");
+                    statusCode.textContent = `HTTP ${delivery.http_status}`;
+                    const statusNum = Number(delivery.http_status);
+                    statusCode.className = !isNaN(statusNum) && statusNum < 400 ? "text-success" : "text-danger";
+                    responseCell.appendChild(statusCode);
+                    if (delivery.response_time_ms) {
+                        responseCell.appendChild(document.createTextNode(" "));
+                        const timing = document.createElement("span");
+                        timing.className = "text-muted";
+                        timing.textContent = `(${delivery.response_time_ms}ms)`;
+                        responseCell.appendChild(timing);
+                    }
+                } else {
+                    responseCell.textContent = "—";
+                }
+                
+                row.appendChild(responseCell);
+
+                // Error column
+                const errorCell = document.createElement("td");
+                errorCell.className = "text-truncate";
+                errorCell.style.maxWidth = "200px";
+                
+                if (delivery.error_message) {
+                    errorCell.textContent = delivery.error_message;
+                    errorCell.title = delivery.error_message;
+                    errorCell.classList.add("text-danger");
+                } else {
+                    errorCell.textContent = "—";
+                }
+                
+                row.appendChild(errorCell);
+
+                tbody.appendChild(row);
+            });
+
+        } catch (error) {
+            console.error("Error loading webhook history:", error);
+            tbody.innerHTML = "";
+            
+            const errorRow = document.createElement("tr");
+            const errorCell = document.createElement("td");
+            errorCell.colSpan = 6;
+            errorCell.className = "text-center text-danger py-3";
+            errorCell.textContent = `Failed to load webhook history: ${error.message}`;
+            errorRow.appendChild(errorCell);
+            tbody.appendChild(errorRow);
+        }
+    }
+
+    // Refresh button handler
+    document.getElementById("btn-refresh-history")?.addEventListener("click", () => {
+        loadWebhookHistory();
+    });
+
+    // Auto-refresh every 30 seconds
+    setInterval(() => {
+        loadWebhookHistory();
+    }, 30000);
+
+</script>
+{% endblock %}

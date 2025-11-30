@@ -1,0 +1,42 @@
+{
+  "id": 3001,
+  "name": "Security Vulnerabilities & Incidents",
+  "description": "Aggregates breach reports, zero-days, and incident chatter for security teams.",
+  "enabled": false,
+  "threshold": 0.5,
+  "positive_weight": 1.0,
+  "negative_weight": 0.08,
+  "positive_samples": [
+    "Critical security vulnerability discovered in the authentication system",
+    "We've identified a remote code execution flaw that needs immediate patching",
+    "Security incident report: unauthorized access detected in production",
+    "Zero-day exploit affecting multiple versions",
+    "Data breach notification: customer information may have been compromised",
+    "Emergency security advisory for all users",
+    "Privilege escalation vulnerability in the admin panel"
+  ],
+  "negative_samples": [
+    "Security update completed successfully",
+    "Regular security audit scheduled",
+    "Security best practices documentation",
+    "Password reset request",
+    "Two-factor authentication enabled"
+  ],
+  "channels": [],
+  "users": [],
+  "vip_senders": [],
+  "webhooks": [],
+  "excluded_users": [],
+  "reaction_threshold": 8,
+  "reply_threshold": 4,
+  "tags": ["security", "threat-intel", "incident-response", "vulnerability"],
+  "digest": {
+    "schedules": [
+      {
+        "schedule": "hourly",
+        "top_n": 15,
+        "min_score": 0.5
+      }
+    ]
+  }
+}

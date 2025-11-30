@@ -1,0 +1,635 @@
+{% extends "base.html" %}
+{% block title %}Alerts · TG Sentinel{% endblock %}
+
+{% block content %}
+<section class="row g-4 mb-4">
+    <div class="col-12">
+        <article class="card" aria-labelledby="alerts-table-heading">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent text-decoration-none text-reset" type="button" data-bs-toggle="collapse" data-bs-target="#alerts-table-body" aria-expanded="true" aria-controls="alerts-table-body">
+                    <i class="bi bi-chevron-right collapse-icon fs-7"></i>
+                    <div>
+                        <h1 class="card-title mb-0" id="alerts-table-heading">Alerts Feed</h1>
+                        <small class="text-muted">Sortable table of triggered notifications</small>
+                    </div>
+                </button>
+                <div class="d-flex gap-2">
+                    <a href="/docs#alerts-api" class="btn btn-outline-primary btn-sm" title="View alerts documentation" target="_blank" rel="noopener">
+                        <i class="bi bi-info-circle"></i>
+                    </a>
+                    <button class="btn btn-outline-primary btn-sm" type="button" id="btn-export-alerts">Export CSV</button>
+                    <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-alerts">Refresh</button>
+                </div>
+            </div>
+            <div class="collapse show card-body p-0" id="alerts-table-body">
+                <div class="alerts-list-container" id="alerts-list-container">
+                    <div class="list-group list-group-flush" id="alerts-list">
+                        {%- for alert in alerts %}
+                        <div class="list-group-item list-group-item-action alert-list-item" data-alert-id="{{ alert.msg_id }}">
+                            <div class="d-flex w-100 justify-content-between align-items-start gap-3">
+                                <div class="flex-grow-1 min-w-0">
+                                    <!-- Channel and Sender -->
+                                    <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+                                        <a href="#" class="text-decoration-none channel-link fw-semibold" 
+                                           data-chat-id="{{ alert.chat_id }}" 
+                                           data-chat-name="{{ alert.chat_name | e }}" 
+                                           data-bs-toggle="modal" 
+                                           data-bs-target="#channelActionsModal"
+                                           title="Click to manage channel">
+                                            {{ alert.chat_name }}
+                                        </a>
+                                        <span class="text-muted">•</span>
+                                        <small class="text-muted">{{ alert.sender | default("Unknown") }}</small>
+                                        <span class="badge bg-danger ms-auto">{{ '%.2f'|format(alert.score) }}</span>
+                                    </div>
+                                    
+                                    <!-- Message Excerpt -->
+                                    <p class="mb-2 text-truncate" 
+                                       data-bs-toggle="tooltip"
+                                       data-bs-placement="auto"
+                                       data-bs-custom-class="excerpt-tooltip"
+                                       data-bs-title="{{ (alert.message_text or alert.excerpt) | e }}">
+                                        {{ alert.excerpt }}
+                                    </p>
+                                    
+                                    <!-- Metadata Row -->
+                                    <div class="d-flex gap-2 flex-wrap align-items-center">
+                                        {% if alert.trigger and alert.trigger != 'N/A' %}
+                                        <small class="text-muted">🔔 {{ alert.trigger|e }}</small>
+                                        {% endif %}
+                                        {% if alert.matched_profiles %}
+                                        <small class="text-primary">
+                                            📋 Profiles: 
+                                            {% for profile_id in alert.matched_profiles %}
+                                                <span class="badge bg-primary">{{ profile_id }}</span>{% if not loop.last %}, {% endif %}
+                                            {% endfor %}
+                                        </small>
+                                        {% endif %}
+                                        {% if alert.semantic_scores %}
+                                        <small class="text-info" data-bs-toggle="tooltip" data-bs-html="true" 
+                                               data-bs-title="Semantic scores: {% for pid, score in alert.semantic_scores.items() %}{{ pid }}={{ '%.3f'|format(score) }}{% if not loop.last %}, {% endif %}{% endfor %}">
+                                            🧠 {{ alert.semantic_scores|length }} semantic
+                                        </small>
+                                        {% endif %}
+                                        {% set _date = alert.created_at.split(' ')[0] if alert.created_at else '' %}
+                                        {% set _time = alert.created_at.split(' ')[1] if alert.created_at and alert.created_at.split(' ')|length > 1 else '' %}
+                                        {% if alert.created_at %}
+                                        <small class="text-muted" 
+                                               data-bs-toggle="tooltip"
+                                               data-bs-html="true"
+                                               data-bs-placement="top"
+                                               data-bs-title='<div><div><strong>Date:</strong> {{ _date }}</div><div><strong>Time:</strong> {{ _time }}</div><div><strong>Destination:</strong> {{ alert.sent_to }}</div></div>'>
+                                            ⏰ {{ _date }} {{ _time }}
+                                        </small>
+                                        {% endif %}
+                                        {% set webhook_payload = {
+                                            "event": "alert_triggered",
+                                            "chat_id": alert.chat_id,
+                                            "chat_name": alert.chat_name,
+                                            "message_id": alert.msg_id | default(0),
+                                            "sender": alert.sender,
+                                            "score": alert.score,
+                                            "matched_profiles": alert.matched_profiles or [],
+                                            "triggers": alert.trigger,
+                                            "text_preview": alert.excerpt,
+                                            "sent_to": alert.sent_to
+                                        } %}
+                                        <span class="text-info badge-raised"
+                                              role="img"
+                                              aria-label="Webhook payload"
+                                              data-bs-toggle="tooltip"
+                                              data-bs-placement="top"
+                                              data-bs-html="true"
+                                              data-bs-title="{{ webhook_payload | tojson | e }}">
+                                            <i class="bi bi-webhook"></i>
+                                        </span>
+                                    </div>
+                                </div>
+                                
+                                <!-- Feedback Actions -->
+                                <div class="d-flex flex-column gap-2">
+                                    <div class="btn-group btn-group-sm" role="group" aria-label="Feedback controls">
+                                        {% set alert_profiles_json = (alert.matched_profiles or []) | tojson | e %}
+                                        <button class="btn btn-outline-warning btn-feedback"
+                                            data-score="up"
+                                            data-chat-id="{{ alert.chat_id }}"
+                                            data-msg-id="{{ alert.msg_id | default(0) }}"
+                                            data-feed-type="alert"
+                                            data-semantic-type="alert_keyword"
+                                            data-profiles='{{ alert_profiles_json }}'
+                                            type="button"
+                                            aria-label="Give positive feedback"
+                                            title="Helpful">👍</button>
+                                        <button class="btn btn-outline-warning btn-feedback"
+                                            data-score="down"
+                                            data-chat-id="{{ alert.chat_id }}"
+                                            data-msg-id="{{ alert.msg_id | default(0) }}"
+                                            data-feed-type="alert"
+                                            data-semantic-type="alert_keyword"
+                                            data-profiles='{{ alert_profiles_json }}'
+                                            type="button"
+                                            aria-label="Give negative feedback"
+                                            title="Not helpful">👎</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {%- else %}
+                        <div class="alert-profiles-empty">
+                            <svg width="48" height="48" fill="currentColor" viewBox="0 0 16 16">
+                                <path d="M8 16a2 2 0 0 0 2-2H6a2 2 0 0 0 2 2zM8 1.918l-.797.161A4.002 4.002 0 0 0 4 6c0 .628-.134 2.197-.459 3.742-.16.767-.376 1.566-.663 2.258h10.244c-.287-.692-.502-1.49-.663-2.258C12.134 8.197 12 6.628 12 6a4.002 4.002 0 0 0-3.203-3.92L8 1.917zM14.22 12c.223.447.481.801.78 1H1c.299-.199.557-.553.78-1C2.68 10.2 3 6.88 3 6c0-2.42 1.72-4.44 4.005-4.901a1 1 0 1 1 1.99 0A5.002 5.002 0 0 1 13 6c0 .88.32 4.2 1.22 6z"/>
+                            </svg>
+                            <p class="mb-2">No alerts recorded yet</p>
+                            <small>System will populate this list as triggers fire</small>
+                        </div>
+                        {%- endfor %}
+                    </div>
+                </div>
+            </div>
+        </article>
+    </div>
+</section>
+
+<section class="row g-4 mb-4">
+    <div class="col-12">
+        <article class="card" aria-labelledby="digest-timeline-heading">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent text-decoration-none text-reset" type="button" data-bs-toggle="collapse" data-bs-target="#digest-timeline-body" aria-expanded="true" aria-controls="digest-timeline-body">
+                    <i class="bi bi-chevron-right collapse-icon fs-7"></i>
+                    <div>
+                        <h2 class="card-title mb-0" id="digest-timeline-heading">Digest Timeline</h2>
+                        <small class="text-muted">Aggregated alert batches</small>
+                    </div>
+                </button>
+                <div class="d-flex gap-2">
+                    <a href="/docs#digest-api" class="btn btn-outline-primary btn-sm" title="View digest documentation" target="_blank" rel="noopener">
+                        <i class="bi bi-info-circle"></i>
+                    </a>
+                    <button class="btn btn-outline-primary btn-sm" type="button" id="btn-download-digest">Download JSON</button>
+                </div>
+            </div>
+            <div class="collapse show card-body" id="digest-timeline-body">
+                <h5 class="mb-3">Sent Digest Batches</h5>
+                <div id="digest-timeline">
+                    <div class="text-center text-muted">
+                        <div class="spinner-border spinner-border-sm me-2" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        Loading digest history...
+                    </div>
+                </div>
+            </div>
+        </article>
+    </div>
+</section>
+
+<!-- Channel Quick Actions Modal -->
+<div class="modal fade" id="channelActionsModal" tabindex="-1" aria-labelledby="channelActionsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="channelActionsModalLabel">
+                    <i class="bi bi-gear-fill me-2"></i>
+                    <span id="modal-channel-name">Channel Actions</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Channel/User Information Display -->
+                <div class="row g-3">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-subtitle mb-3 text-muted">
+                                    <i class="bi bi-info-circle-fill me-2"></i>Information
+                                </h6>
+                                <dl class="row mb-0">
+                                    <dt class="col-sm-4">Name:</dt>
+                                    <dd class="col-sm-8" id="modal-info-chat-name">—</dd>
+                                    
+                                    <dt class="col-sm-4">Chat ID:</dt>
+                                    <dd class="col-sm-8">
+                                        <code id="modal-info-chat-id">—</code>
+                                        <button class="btn btn-sm btn-outline-secondary ms-2" id="copy-chat-id-btn" type="button" title="Copy to clipboard">
+                                            <i class="bi bi-clipboard"></i>
+                                        </button>
+                                    </dd>
+                                    
+                                    <dt class="col-sm-4">Status:</dt>
+                                    <dd class="col-sm-8">
+                                        <span class="badge" id="modal-info-monitoring-status">—</span>
+                                    </dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-subtitle mb-3 text-muted">
+                                    <i class="bi bi-envelope-fill me-2"></i>Latest Message Context
+                                </h6>
+                                <dl class="row mb-0">
+                                    <dt class="col-sm-4">Sender:</dt>
+                                    <dd class="col-sm-8" id="modal-info-sender">—</dd>
+                                    
+                                    <dt class="col-sm-4">Message ID:</dt>
+                                    <dd class="col-sm-8"><code id="modal-info-msg-id">—</code></dd>
+                                    
+                                    <dt class="col-sm-4">Timestamp:</dt>
+                                    <dd class="col-sm-8" id="modal-info-created-at">—</dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-subtitle mb-3 text-muted">
+                                    <i class="bi bi-bar-chart-fill me-2"></i>Scoring & Profiles
+                                </h6>
+                                <dl class="row mb-0">
+                                    <dt class="col-sm-4">Score:</dt>
+                                    <dd class="col-sm-8">
+                                        <span class="badge bg-primary" id="modal-info-score">—</span>
+                                    </dd>
+                                    
+                                    <dt class="col-sm-4">Feed Type:</dt>
+                                    <dd class="col-sm-8" id="modal-info-feed-type">—</dd>
+                                    
+                                    <dt class="col-sm-4">Trigger:</dt>
+                                    <dd class="col-sm-8" id="modal-info-trigger">—</dd>
+                                    
+                                    <dt class="col-sm-4">Matched Profiles:</dt>
+                                    <dd class="col-sm-8" id="modal-info-profiles">—</dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-12">
+                        <div class="alert alert-light mb-0">
+                            <small class="text-muted">
+                                <i class="bi bi-lightbulb me-1"></i>
+                                <strong>Tip:</strong> To manage this channel's monitoring settings, visit the 
+                                <a href="/config" class="alert-link">Configuration</a> page.
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="close-channel-modal-btn">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    const alertsEndpoint = "{{ url_for('dashboard.recent_alerts') }}";
+    const digestsEndpoint = "{{ url_for('dashboard.alert_digests') }}";
+    const digestSchedulesEndpoint = "/api/digest/schedules"; // Proxied through UI or direct to Sentinel
+
+    function escapeHtml(value) {
+        if (value === null || value === undefined) {
+            return "";
+        }
+        return String(value)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }
+
+    async function refreshAlerts() {
+        try {
+            const response = await fetch(`${alertsEndpoint}?limit=250`);
+            if (!response.ok) {
+                throw new Error("Alerts fetch failed");
+            }
+            const payload = await response.json();
+            renderAlertsTable(payload.alerts || []);
+        } catch (error) {
+            console.error(error);
+            showToast("Unable to refresh alerts", "error");
+        }
+    }
+
+    async function loadThreshold() {
+        const sliderEl = document.getElementById("threshold-slider");
+        const valueEl = document.getElementById("threshold-value");
+        if (!sliderEl || !valueEl) {
+            return; // Element doesn't exist in alerts.html
+        }
+        
+        try {
+            // Fetch from UI proxy endpoint (which queries Sentinel internally)
+            const response = await fetch("/api/config/threshold");
+            if (!response.ok) {
+                throw new Error("Failed to load config from Sentinel");
+            }
+            const data = await response.json();
+            if (data.status === "ok" && data.threshold !== undefined) {
+                const threshold = Number(data.threshold);
+                sliderEl.value = threshold;
+                valueEl.textContent = threshold.toFixed(1);
+            }
+        } catch (error) {
+            console.error("Error loading threshold:", error);
+            // Keep default value if load fails
+        }
+    }
+
+    async function saveThreshold() {
+        const slider = document.getElementById("threshold-slider");
+        if (!slider) {
+            return; // Element doesn't exist in alerts.html
+        }
+        const threshold = Number(slider.value);
+        
+        try {
+            // Save via UI proxy endpoint (which updates Sentinel config)
+            const response = await fetch("/api/config/threshold", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ threshold })
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || "Failed to save threshold");
+            }
+            
+            const data = await response.json();
+            if (data.status === "ok") {
+                showToast("Threshold saved successfully", "success");
+            } else {
+                throw new Error(data.message || "Unknown error");
+            }
+        } catch (error) {
+            console.error("Error saving threshold:", error);
+            showToast(`Failed to save threshold: ${error.message}`, "error");
+        }
+    }
+
+    // Channel modal state
+    let currentChannelId = null;
+    let currentChannelName = null;
+    let currentChannelConfig = null;
+
+    // Initialize channel modal
+    function initChannelModal() {
+        const modal = document.getElementById('channelActionsModal');
+        if (!modal) return;
+
+        modal.addEventListener('show.bs.modal', async function(event) {
+            const button = event.relatedTarget;
+            currentChannelId = button.getAttribute('data-chat-id');
+            currentChannelName = button.getAttribute('data-chat-name');
+
+            // Update modal title
+            document.getElementById('modal-channel-name').textContent = currentChannelName;
+            document.getElementById('modal-channel-name-2').textContent = currentChannelName;
+
+            // Load channel configuration from Sentinel
+            await loadChannelConfig(currentChannelId);
+        });
+
+        // Handle channel actions using event delegation
+        modal.addEventListener('click', async function(event) {
+            const button = event.target.closest('.channel-action');
+            if (button) {
+                const action = button.getAttribute('data-action');
+                await handleChannelAction(action);
+            }
+        });
+    }
+
+    async function loadChannelConfig(chatId) {
+        try {
+            // Fetch full config for channel details
+            const configResponse = await fetch(`/api/config/channels`);
+            if (configResponse.ok) {
+                const configData = await configResponse.json();
+                const channels = configData.channels || [];
+                currentChannelConfig = channels.find(ch => ch.id == chatId || ch.chat_id == chatId);
+
+                if (currentChannelConfig) {
+                    // Populate form fields with current values
+                    document.getElementById('channel-reaction-threshold').value = currentChannelConfig.reaction_threshold || 5;
+                    document.getElementById('channel-reply-threshold').value = currentChannelConfig.reply_threshold || 3;
+                    document.getElementById('channel-rate-limit').value = currentChannelConfig.rate_limit_per_hour || 10;
+                    document.getElementById('channel-keywords').value = (currentChannelConfig.keywords || []).join(', ');
+                }
+            }
+        } catch (error) {
+            console.error('Error loading channel config:', error);
+            showToast('Failed to load channel configuration', 'error');
+        }
+    }
+
+    async function handleChannelAction(action) {
+        if (!currentChannelId) {
+            showToast('No channel selected', 'error');
+            return;
+        }
+
+        try {
+            switch(action) {
+                case 'mute':
+                    await muteChannel(currentChannelId, true);
+                    break;
+                case 'unmute':
+                    await muteChannel(currentChannelId, false);
+                    break;
+                case 'update-thresholds':
+                    await updateChannelThresholds(currentChannelId);
+                    break;
+                case 'update-keywords':
+                    await updateChannelKeywords(currentChannelId);
+                    break;
+                case 'remove':
+                    await removeChannel(currentChannelId);
+                    break;
+                default:
+                    showToast('Unknown action', 'warning');
+            }
+        } catch (error) {
+            console.error(`Error handling ${action}:`, error);
+            showToast(`Failed to ${action}: ${error.message}`, 'error');
+        }
+    }
+
+    async function muteChannel(chatId, mute) {
+        try {
+            // Update rate_limit to effectively mute/unmute (set to 0 or restore)
+            const rateLimit = mute ? 0 : (currentChannelConfig?.rate_limit_per_hour || 10);
+            
+            const response = await fetch(`/api/config/channels/${chatId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rate_limit_per_hour: rateLimit })
+            });
+
+            if (!response.ok) {
+                let errorMessage = 'Failed to update config';
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData.message || errorMessage;
+                } catch {
+                    // JSON parsing failed, use default message
+                }
+                throw new Error(errorMessage);
+            }
+
+            showToast(`Channel ${mute ? 'muted' : 'unmuted'} successfully`, 'success');
+            bootstrap.Modal.getInstance(document.getElementById('channelActionsModal'))?.hide();
+            refreshAlerts();
+        } catch (error) {
+            throw new Error(`Failed to ${mute ? 'mute' : 'unmute'} channel: ${error.message}`);
+        }
+    }
+
+    async function updateChannelThresholds(chatId) {
+        try {
+            const reactionThreshold = parseInt(document.getElementById('channel-reaction-threshold').value, 10);
+            const replyThreshold = parseInt(document.getElementById('channel-reply-threshold').value, 10);
+            const rateLimit = parseInt(document.getElementById('channel-rate-limit').value, 10);
+
+            const response = await fetch(`/api/config/channels/${chatId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    reaction_threshold: reactionThreshold,
+                    reply_threshold: replyThreshold,
+                    rate_limit_per_hour: rateLimit
+                })
+            });
+
+            if (!response.ok) {
+                let errorMessage = 'Failed to update config';
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData.message || errorMessage;
+                } catch {
+                    // JSON parsing failed, use default message
+                }
+                throw new Error(errorMessage);
+            }
+
+            showToast('Thresholds updated successfully', 'success');
+        } catch (error) {
+            throw new Error(`Failed to update thresholds: ${error.message}`);
+        }
+    }
+
+    async function updateChannelKeywords(chatId) {
+        try {
+            const keywordsText = document.getElementById('channel-keywords').value;
+            const keywords = keywordsText.split(',').map(k => k.trim()).filter(k => k.length > 0);
+
+            const response = await fetch(`/api/config/channels/${chatId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ keywords })
+            });
+
+            if (!response.ok) {
+                let errorMessage = 'Failed to update config';
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData.message || errorMessage;
+                } catch {
+                    // JSON parsing failed, use default message
+                }
+                throw new Error(errorMessage);
+            }
+
+            showToast('Keywords updated successfully', 'success');
+        } catch (error) {
+            throw new Error(`Failed to update keywords: ${error.message}`);
+        }
+    }
+
+    async function removeChannel(chatId) {
+        if (!confirm(`Are you sure you want to remove "${currentChannelName}" from monitoring?`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/config/channels/${chatId}`, {
+                method: 'DELETE'
+            });
+
+            if (!response.ok) {
+                let errorMessage = 'Failed to remove channel';
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData.message || errorMessage;
+                } catch {
+                    // JSON parsing failed, use default message
+                }
+                throw new Error(errorMessage);
+            }
+
+            showToast('Channel removed successfully', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('channelActionsModal'))?.hide();
+            refreshAlerts();
+        } catch (error) {
+            throw new Error(`Failed to remove channel: ${error.message}`);
+        }
+    }
+
+    // Interval management to prevent duplicate timers
+    let alertsIntervalId = null;
+    let digestsIntervalId = null;
+
+    function startIntervals() {
+        // Clear any existing intervals before starting new ones
+        stopIntervals();
+        alertsIntervalId = setInterval(refreshAlerts, 120000);
+        digestsIntervalId = setInterval(refreshDigests, 300000);
+    }
+
+    function stopIntervals() {
+        if (alertsIntervalId !== null) {
+            clearInterval(alertsIntervalId);
+            alertsIntervalId = null;
+        }
+        if (digestsIntervalId !== null) {
+            clearInterval(digestsIntervalId);
+            digestsIntervalId = null;
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        loadThreshold();
+        refreshAlerts();
+        refreshDigests();
+        bindInteractions();
+        initChannelModal();
+        startIntervals();
+    });
+
+    // Clean up intervals on page unload
+    window.addEventListener("beforeunload", stopIntervals);
+
+    // Pause intervals when page is hidden, resume when visible
+    document.addEventListener("visibilitychange", () => {
+        if (document.hidden) {
+            stopIntervals();
+        } else {
+            startIntervals();
+        }
+    });
+</script>
+<script src="{{ url_for('static', filename='js/feed-renderer.js') }}"></script>
+<script src="{{ url_for('static', filename='js/feeds.js') }}"></script>
+{% endblock %}

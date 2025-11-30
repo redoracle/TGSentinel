@@ -1,0 +1,195 @@
+/* ============================================================================
+   Module 6 – Overlays, Notifications & Error Views
+   ========================================================================= */
+
+/* Sticky navigation in docs */
+.sticky-nav {
+  position: sticky;
+  top: calc(var(--navbar-height, 76px) + 0.1rem);
+  max-height: calc(100vh - var(--navbar-height, 76px) - 2rem);
+  overflow-y: auto;
+}
+
+@media (max-width: 991.98px) {
+  .sticky-nav {
+    position: static;
+    max-height: none;
+  }
+}
+
+/* Sticky header section for docs page */
+.sticky-header {
+  position: sticky;
+  top: var(--navbar-height, 76px);
+  background: var(--bg-primary);
+  z-index: 100;
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+  margin-top: -1rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+@media (max-width: 991.98px) {
+  .sticky-header {
+    position: static;
+  }
+}
+
+/* Floating Animation */
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.float-animation {
+  animation: float 3s ease-in-out infinite;
+}
+
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1300;
+}
+
+.loading-spinner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.85);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 1300;
+  flex-direction: column;
+}
+
+.loading-spinner.show {
+  display: flex;
+}
+
+.loading-spinner .spinner-border {
+  width: 4rem;
+  height: 4rem;
+  margin-bottom: 1rem;
+  border-width: 0.3rem;
+}
+
+.loading-spinner .loading-message {
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: #ffffff;
+  text-align: center;
+  margin-top: 1rem;
+  max-width: 80%;
+}
+
+/* Alerts and Notifications */
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1050;
+}
+
+.alert-floating {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1050;
+  max-width: 350px;
+  animation: slideInRight 0.3s ease;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Error Page Styles */
+.error-icon {
+  font-size: 4rem !important;
+  color: var(--danger-color);
+  margin-bottom: 1rem;
+}
+
+.error-action-icon {
+  font-size: 2rem !important;
+  margin-bottom: 0.5rem;
+}
+
+/* History Page */
+.pagination .page-link {
+  color: var(--primary-color);
+  border-color: var(--border-color);
+}
+
+.pagination .page-item.active .page-link {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.pagination .page-link:hover {
+  color: var(--primary-color);
+  background-color: rgba(102, 126, 234, 0.1);
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .stat-value {
+    font-size: 1.5rem;
+  }
+
+  .blockchain-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-container {
+    height: 250px;
+  }
+}
+
+@media (max-width: 576px) {
+  .navbar-brand {
+    font-size: 1rem;
+  }
+
+  .btn {
+    font-size: 0.875rem;
+  }
+
+  .alert-floating {
+    max-width: 90%;
+    left: 5%;
+    right: 5%;
+  }
+}
+
+/* Dark mode support (future enhancement) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --light-color: #212529;
+    --dark-color: #f8f9fa;
+  }
+}
+

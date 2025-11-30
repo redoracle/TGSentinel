@@ -1,0 +1,433 @@
+{% extends "base.html" %}
+{% block title %}Console · TG Sentinel{% endblock %}
+
+{% block content %}
+<section class="row g-4 mb-4">
+    <div class="col-12 col-xl-7">
+        <article class="card h-100" aria-labelledby="log-tail-heading">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#log-tail-body" aria-expanded="true" aria-controls="log-tail-body">
+                    <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
+                    <div>
+                        <h1 class="card-title mb-0" id="log-tail-heading">Real-time Log Tail</h1>
+                        <small class="text-muted">Live system event stream</small>
+                    </div>
+                </button>
+                <a href="/docs#console-logs" class="btn btn-outline-primary btn-sm" title="View log viewer documentation" target="_blank" rel="noopener">
+                    <i class="bi bi-info-circle"></i>
+                </a>
+            </div>
+            <div class="collapse show card-body" id="log-tail-body">
+                <div class="logs-console" id="log-console" role="log" aria-label="Real-time log console" aria-live="polite">
+                    <div class="log-entry log-info"><span class="log-time">--:--</span> <span class="log-message">Console ready. Recent events will appear here.</span></div>
+                </div>
+            </div>
+        </article>
+    </div>
+    <div class="col-12 col-xl-5">
+        <article class="card h-100" aria-labelledby="command-center-heading">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#command-center-body" aria-expanded="true" aria-controls="command-center-body">
+                    <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
+                    <div>
+                        <h2 class="card-title mb-0" id="command-center-heading">Command Center</h2>
+                        <small class="text-muted">Execute system commands and quick actions</small>
+                    </div>
+                </button>
+                <a href="/docs#console-commands" class="btn btn-outline-primary btn-sm" title="View system commands documentation" target="_blank" rel="noopener">
+                    <i class="bi bi-info-circle"></i>
+                </a>
+            </div>
+            <div class="collapse show card-body d-grid gap-3" id="command-center-body">
+                <label class="form-label" for="console-command">Command bar</label>
+                <input class="form-control" id="console-command" type="text" placeholder="/restart">
+                <button class="btn btn-outline-primary" type="button" id="btn-run-command">Execute</button>
+                <div class="d-grid gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-outline-primary btn-sm btn-action flex-grow-1" type="button" data-command="/flush redis">Flush Redis</button>
+                        <i class="bi bi-info-circle text-muted" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="left" title="Clear Redis cache (streams, participant data, avatars). Does not affect database."></i>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-outline-primary btn-sm btn-action flex-grow-1" type="button" data-command="/purge db">Purge Database</button>
+                        <i class="bi bi-info-circle text-muted" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="left" title="Delete ALL data: messages, feedback, Redis stream, all caches. Vacuums database. Cannot be undone."></i>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-outline-primary btn-sm btn-action flex-grow-1" type="button" data-command="/reload config">Reload Config</button>
+                        <i class="bi bi-info-circle text-muted" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="left" title="Reload configuration from YAML files without restarting the application."></i>
+                    </div>
+                </div>
+            </div>
+        </article>
+    </div>
+</section>
+
+<section class="row g-4">
+    <div class="col-12 col-xl-6">
+        <article class="card h-100" aria-labelledby="maintenance-heading">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#maintenance-body" aria-expanded="true" aria-controls="maintenance-body">
+                    <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
+                    <div>
+                        <h2 class="card-title mb-0" id="maintenance-heading">Maintenance Actions</h2>
+                        <small class="text-muted">Database optimization and log management</small>
+                    </div>
+                </button>
+                <a href="/docs#maintenance" class="btn btn-outline-primary btn-sm" title="View maintenance tools documentation" target="_blank" rel="noopener">
+                    <i class="bi bi-info-circle"></i>
+                </a>
+            </div>
+            <div class="collapse show card-body d-grid gap-2" id="maintenance-body">
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-outline-primary flex-grow-1" type="button" data-command="vacuum">Vacuum database</button>
+                    <i class="bi bi-info-circle text-muted" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="left" title="Optimize SQLite database by rebuilding it. Reclaims free space and improves query performance."></i>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-outline-primary flex-grow-1" type="button" data-command="rotate">Rotate logs</button>
+                    <i class="bi bi-info-circle text-muted" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="left" title="Archive current logs and start fresh log files. Not yet implemented."></i>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-outline-primary flex-grow-1" type="button" id="btn-download-session">Backup session</button>
+                    <i class="bi bi-info-circle text-muted" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="left" title="Download a backup of the Telegram session file (.session)."></i>
+                </div>
+            </div>
+        </article>
+    </div>
+    <div class="col-12 col-xl-6">
+        <article class="card h-100" aria-labelledby="diagnostics-heading">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#diagnostics-body" aria-expanded="true" aria-controls="diagnostics-body">
+                    <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
+                    <div>
+                        <h2 class="card-title mb-0" id="diagnostics-heading">Diagnostics Export</h2>
+                        <small class="text-muted">Download system diagnostics for support</small>
+                    </div>
+                </button>
+                <a href="/docs#diagnostics" class="btn btn-outline-primary btn-sm" title="View diagnostics documentation" target="_blank" rel="noopener">
+                    <i class="bi bi-info-circle"></i>
+                </a>
+            </div>
+            <div class="collapse show card-body d-grid gap-3" id="diagnostics-body">
+                <p class="text-muted mb-0">Download anonymised telemetry snapshot for support.</p>
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-outline-primary flex-grow-1" type="button" id="btn-export-diagnostics">Export diagnostics</button>
+                    <i class="bi bi-info-circle text-muted" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="left" title="Download a JSON file with system status, health metrics, and anonymized configuration for troubleshooting."></i>
+                </div>
+            </div>
+        </article>
+    </div>
+</section>
+
+<!-- Confirmation Modal for Dangerous Operations -->
+<div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="confirmationModalLabel">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    Confirm Dangerous Operation
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger mb-3">
+                    <strong>⚠️ WARNING: This action cannot be undone!</strong>
+                </div>
+                <p id="confirmationMessage" class="mb-3"></p>
+                <p class="mb-3">Type <strong class="text-danger">DELETE_ALL_DATA</strong> to confirm:</p>
+                <input type="text" class="form-control" id="confirmationInput" placeholder="DELETE_ALL_DATA" autocomplete="off">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="btnConfirmDanger" disabled>
+                    <i class="bi bi-trash-fill me-2"></i>
+                    Confirm & Execute
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    const commandEndpoint = "{{ url_for('console.api_console_command') }}";
+    const diagnosticsEndpoint = "{{ url_for('analytics.api_export_diagnostics') }}";
+
+    function appendConsoleLog(message, level = "info") {
+        const consoleEl = document.getElementById("log-console");
+        if (!consoleEl) {
+            return;
+        }
+        const entry = document.createElement("div");
+        entry.className = `log-entry log-${level}`;
+        const timeSpan = document.createElement("span");
+        timeSpan.className = "log-time";
+        timeSpan.textContent = new Date().toLocaleTimeString();
+
+        const messageSpan = document.createElement("span");
+        messageSpan.className = "log-message";
+        messageSpan.textContent = message != null ? String(message) : "";
+
+        entry.appendChild(timeSpan);
+        entry.appendChild(document.createTextNode(" "));
+        entry.appendChild(messageSpan);
+        consoleEl.appendChild(entry);
+        consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+
+    async function pollVacuumJob(jobId, maxAttempts = 120) {
+        // Poll vacuum job status every 5 seconds, max 10 minutes
+        const statusUrl = `/api/console/vacuum/status/${jobId}`;
+        let attempts = 0;
+        
+        const poll = async () => {
+            attempts++;
+            
+            if (attempts > maxAttempts) {
+                appendConsoleLog("VACUUM job status polling timed out. Job may still be running.", "warning");
+                showToast("VACUUM status check timed out", "warning");
+                return;
+            }
+            
+            try {
+                const response = await fetch(statusUrl);
+                const result = await response.json();
+                
+                if (result.status === "ok" && result.data) {
+                    const jobData = result.data;
+                    const jobStatus = jobData.status;
+                    
+                    if (jobStatus === "running") {
+                        // Still running, show progress if available
+                        if (jobData.progress) {
+                            appendConsoleLog(`VACUUM: ${jobData.progress}`, "info");
+                        }
+                        // Poll again in 5 seconds
+                        setTimeout(poll, 5000);
+                    } else if (jobStatus === "completed") {
+                        // Job completed successfully
+                        const reclaimedMb = jobData.reclaimed_mb || 0;
+                        const duration = jobData.duration_seconds || 0;
+                        appendConsoleLog(
+                            `✓ VACUUM completed in ${duration.toFixed(1)}s. Reclaimed ${reclaimedMb.toFixed(2)} MB`,
+                            "success"
+                        );
+                        showToast(`Database optimized: ${reclaimedMb.toFixed(2)} MB reclaimed`, "success");
+                    } else if (jobStatus === "failed") {
+                        // Job failed
+                        const error = jobData.error || "Unknown error";
+                        appendConsoleLog(`✗ VACUUM failed: ${error}`, "error");
+                        showToast("VACUUM failed", "error");
+                    } else {
+                        appendConsoleLog(`VACUUM job status: ${jobStatus}`, "info");
+                    }
+                } else {
+                    appendConsoleLog(`VACUUM status check failed: ${result.error || "Unknown error"}`, "error");
+                }
+            } catch (error) {
+                console.error("VACUUM status poll error:", error);
+                appendConsoleLog(`VACUUM status check error: ${error.message}`, "error");
+                // Don't retry on network errors after a few attempts
+                if (attempts < 3) {
+                    setTimeout(poll, 5000);
+                }
+            }
+        };
+        
+        // Start polling after 2 seconds
+        setTimeout(poll, 2000);
+    }
+
+    async function sendCommand(command, confirmed = false) {
+        const trimmed = command.trim();
+        if (!trimmed) {
+            showToast("Enter a command", "warning");
+            return;
+        }
+        
+        // Check if this is a dangerous command requiring confirmation
+        const isDangerous = trimmed.toLowerCase().includes("/purge");
+        
+        if (isDangerous && !confirmed) {
+            // Show confirmation modal
+            const modal = new bootstrap.Modal(document.getElementById('confirmationModal'));
+            document.getElementById('confirmationMessage').textContent = 
+                `You are about to execute: ${trimmed}\n\nThis will DELETE ALL database data, Redis cache, and cannot be undone.`;
+            
+            // Store the command for later execution
+            document.getElementById('confirmationModal').dataset.pendingCommand = trimmed;
+            modal.show();
+            return;
+        }
+        
+        appendConsoleLog(trimmed, "info");
+        try {
+            const payload = { command: trimmed };
+            
+            // Add confirmation for dangerous commands
+            if (isDangerous && confirmed) {
+                payload.confirm = "DELETE_ALL_DATA";
+            }
+            
+            const response = await fetch(commandEndpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: "Command failed" }));
+                throw new Error(errorData.message || "Command failed");
+            }
+            const result = await response.json();
+            
+            // Display command result with details
+            if (result.status === "accepted") {
+                let resultMessage = `✓ ${result.command}`;
+                
+                // Add specific result details based on command type
+                if (result.deleted !== undefined) {
+                    resultMessage += ` - Deleted: ${result.deleted} items`;
+                }
+                if (result.redis_cleared !== undefined) {
+                    resultMessage += `, Redis cleared: ${result.redis_cleared} keys`;
+                }
+                if (result.reclaimed_mb !== undefined) {
+                    resultMessage += ` - Reclaimed: ${result.reclaimed_mb.toFixed(2)} MB`;
+                }
+                if (result.message) {
+                    resultMessage += ` - ${result.message}`;
+                }
+                
+                // Handle async vacuum job
+                if (result.job_id && result.status_url) {
+                    appendConsoleLog(`${resultMessage} (Job ID: ${result.job_id})`, "info");
+                    appendConsoleLog("Polling VACUUM job status...", "info");
+                    showToast("VACUUM job started", "info");
+                    pollVacuumJob(result.job_id);
+                } else {
+                    appendConsoleLog(resultMessage, "success");
+                    showToast("Command executed successfully", "success");
+                }
+            } else if (result.status === "confirmation_required") {
+                appendConsoleLog(`⚠️ ${result.message}`, "warning");
+                showToast(result.message, "warning");
+            } else {
+                appendConsoleLog(`Result: ${JSON.stringify(result)}`, "info");
+            }
+        } catch (error) {
+            console.error(error);
+            appendConsoleLog(`✗ Error: ${error.message}`, "error");
+            showToast("Command execution failed", "error");
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        // Initialize Bootstrap tooltips
+        const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+        [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+
+        const input = document.getElementById("console-command");
+        document.getElementById("btn-run-command")?.addEventListener("click", () => sendCommand(input.value));
+        input?.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                sendCommand(input.value);
+            }
+        });
+        
+        // Single event listener for all command buttons
+        document.querySelectorAll("[data-command]").forEach((button) => {
+            button.addEventListener("click", () => {
+                const command = button.getAttribute("data-command");
+                sendCommand(command);
+            });
+        });
+        
+        document.getElementById("btn-export-diagnostics")?.addEventListener("click", async () => {
+            appendConsoleLog("Generating diagnostics archive...", "info");
+            try {
+                const response = await fetch(diagnosticsEndpoint);
+                if (!response.ok) {
+                    throw new Error("Export failed");
+                }
+                
+                // Download the file
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `tgsentinel_diagnostics_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                appendConsoleLog("Diagnostics exported successfully", "success");
+                showToast("Diagnostics exported", "success");
+            } catch (error) {
+                console.error(error);
+                appendConsoleLog("Diagnostics export failed", "error");
+                showToast("Export failed. Check console for details.", "error");
+            }
+        });
+        
+        // Confirmation modal handlers
+        const confirmationInput = document.getElementById("confirmationInput");
+        const btnConfirm = document.getElementById("btnConfirmDanger");
+        const confirmationModal = document.getElementById("confirmationModal");
+        
+        // Enable/disable confirm button based on input
+        confirmationInput?.addEventListener("input", (e) => {
+            const isValid = e.target.value.trim() === "DELETE_ALL_DATA";
+            btnConfirm.disabled = !isValid;
+        });
+        
+        // Reset input when modal is closed
+        confirmationModal?.addEventListener("hidden.bs.modal", () => {
+            confirmationInput.value = "";
+            btnConfirm.disabled = true;
+        });
+        
+        // Handle confirmation
+        btnConfirm?.addEventListener("click", () => {
+            const command = confirmationModal.dataset.pendingCommand;
+            if (command && confirmationInput.value.trim() === "DELETE_ALL_DATA") {
+                const modal = bootstrap.Modal.getInstance(confirmationModal);
+                modal?.hide();
+                sendCommand(command, true); // Execute with confirmation
+            }
+        });
+
+        // Socket.IO log streaming
+        if (typeof io !== "undefined") {
+            const socket = io();
+            
+            socket.on("connect", () => {
+                console.log("[Console] Socket.IO connected");
+                appendConsoleLog("Connected to real-time log stream", "success");
+                socket.emit("subscribe_logs");
+            });
+            
+            socket.on("log_message", (data) => {
+                if (data && data.message) {
+                    const level = data.level || "info";
+                    appendConsoleLog(data.message, level);
+                }
+            });
+            
+            socket.on("disconnect", () => {
+                console.log("[Console] Socket.IO disconnected");
+                appendConsoleLog("Disconnected from log stream", "warning");
+            });
+            
+            socket.on("connect_error", (error) => {
+                console.error("[Console] Socket.IO connection error:", error);
+                appendConsoleLog("Connection error - retrying...", "error");
+            });
+        } else {
+            appendConsoleLog("Socket.IO not available - real-time logs disabled", "warning");
+        }
+    });
+</script>
+<script src="{{ url_for('static', filename='js/console.js') }}?v=20251123-5"></script>
+{% endblock %}

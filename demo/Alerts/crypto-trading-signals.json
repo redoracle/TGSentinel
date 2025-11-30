@@ -1,0 +1,73 @@
+{
+  "name": "Crypto Alpha Signals",
+  "description": "Surfaces high-impact crypto events, exploits, and listings that can move markets.",
+  "enabled": false,
+  "min_score": 7.0,
+  "keywords": ["regulation", "SEC", "regulatory", "compliance"],
+  "action_keywords": [],
+  "decision_keywords": ["governance vote", "proposal"],
+  "urgency_keywords": [
+    "breaking",
+    "alert",
+    "urgent",
+    "now",
+    "exploit",
+    "hack",
+    "rug pull"
+  ],
+  "importance_keywords": [
+    "listing",
+    "exchange",
+    "binance",
+    "coinbase",
+    "token launch",
+    "airdrop"
+  ],
+  "release_keywords": [],
+  "security_keywords": [
+    "smart contract",
+    "audit",
+    "security issue",
+    "vulnerability"
+  ],
+  "risk_keywords": ["scam"],
+  "opportunity_keywords": ["price", "APY", "yield"],
+  "detect_codes": false,
+  "detect_documents": false,
+  "detect_links": true,
+  "require_forwarded": false,
+  "prioritize_pinned": true,
+  "prioritize_admin": true,
+  "prioritize_private": false,
+  "detect_polls": true,
+  "detect_mentions": false,
+  "detect_questions": false,
+  "scoring_weights": {
+    "urgency": 2.0,
+    "decision": 1.4,
+    "importance": 1.3,
+    "security": 1.5,
+    "opportunity": 1.2,
+    "keywords": 0.7
+  },
+  "vip_senders": [],
+  "webhooks": [],
+  "excluded_users": [],
+  "reaction_threshold": 15,
+  "reply_threshold": 8,
+  "positive_weight": 1.0,
+  "negative_weight": 0.15,
+  "channels": [],
+  "users": [],
+  "tags": ["crypto", "defi", "trading", "alpha"],
+  "digest": {
+    "schedules": [
+      {
+        "schedule": "hourly",
+        "top_n": 10,
+        "min_score": 7.0,
+        "mode": "dm"
+      }
+    ]
+  }
+}

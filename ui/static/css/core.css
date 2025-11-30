@@ -1,0 +1,284 @@
+/* ============================================================================
+   Module 1 – Core Theme & Globals
+   ========================================================================= */
+
+:root {
+  /* Color Palette - Modern & Elegant */
+  --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --secondary-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  --success-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  --dark-gradient: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+
+  --primary-color: #667eea;
+  --primary-dark: #5568d3;
+  --secondary-color: #764ba2;
+  --success-color: #00f2fe;
+  --danger-color: #f5576c;
+  --warning-color: #c27e17;
+  --info-color: #4facfe;
+
+  /* Color opacity variants for consistent theming */
+  --primary-color-01: rgba(102, 126, 234, 0.1);
+  --primary-color-02: rgba(102, 126, 234, 0.2);
+  --primary-color-04: rgba(102, 126, 234, 0.4);
+  --primary-color-06: rgba(102, 126, 234, 0.6);
+  --focus-ring-color: rgba(102, 126, 234, 0.2);
+  --success-shadow: rgba(74, 172, 254, 0.4);
+  --danger-color-12: rgba(245, 87, 108, 0.12);
+  --danger-color-35: rgba(245, 87, 108, 0.35);
+  --danger-color-75: rgba(245, 87, 108, 0.75);
+  --danger-color-80: rgba(245, 87, 108, 0.8);
+
+  --bg-primary: #0f0f23;
+  --bg-secondary: #1a1a2e;
+  --bg-card: #16213e;
+  --bg-elevated: #1f2937;
+
+  --text-primary: #ffffff;
+  --text-secondary: #a0aec0;
+  --text-muted: #718096;
+
+  /* Layout dimensions */
+  --navbar-height: 70px;
+
+  --border-color: rgba(102, 126, 234, 0.2);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.3);
+  --shadow-glow: 0 0 20px rgba(102, 126, 234, 0.3);
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+
+  /* Code Block Colors */
+  --code-bg: #0d1117;
+  --code-border: #30363d;
+  --code-text: #cfe2ff;
+  --radius-xl: 24px;
+
+  --transition-fast: 0.2s ease;
+  --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Global Styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Login modal uses the same glass effect as other modals for consistency */
+
+body {
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Oxygen, Ubuntu, Cantarell, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  font-size: 16px;
+  overflow-x: hidden;
+  padding-top: 0; /* No extra padding needed with sticky navbar */
+}
+
+.collapse-trigger {
+  text-decoration: none;
+  color: inherit;
+}
+
+.chevron-sm {
+  font-size: 0.875rem;
+  transition: transform var(--transition-fast);
+}
+
+.chart-container-lg,
+.chart-container-md {
+  position: relative;
+  width: 100%;
+}
+.chart-container-lg {
+  height: 400px;
+}
+.chart-container-md {
+  height: 300px;
+}
+
+.badge-raised {
+  position: relative;
+  z-index: 1;
+}
+
+.avatar-lg {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+}
+
+.health-score-value {
+  font-size: 3rem;
+  font-weight: bold;
+}
+
+.health-indicator {
+  height: 8px;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.health-indicator-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #dc3545 0%, #ffc107 50%, #28a745 100%);
+  transition: width 0.3s ease;
+}
+
+.min-w-0 {
+  min-width: 0;
+}
+
+.word-break-all {
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.link-underline-pointer {
+  cursor: pointer;
+  text-decoration: underline;
+  color: var(--bs-link-color, #0d6efd);
+}
+
+.lock-screen {
+  min-height: 100vh;
+}
+
+.lock-card {
+  max-width: 440px;
+  width: 92%;
+}
+/* --- UI Lock & Icon styling --- */
+.btn-ghost {
+  color: var(--primary-color);
+  background: rgba(102, 126, 234, 0.06); /* uses --primary-color */
+  border: 1px solid rgba(102, 126, 234, 0.28);
+  box-shadow: 0 0 12px rgba(102,126,234,0.18) inset, 0 0 12px rgba(102,126,234,0.10);
+}
+.btn-ghost:hover,
+.btn-ghost:focus {
+  color: #fff;
+  background: rgba(102, 126, 234, 0.18);
+  border-color: rgba(102, 126, 234, 0.45);
+  box-shadow: 0 0 16px rgba(102,126,234,0.28) inset, 0 0 18px rgba(102,126,234,0.18);
+}
+.btn-lock .icon-lg {
+  font-size: 0.85rem;
+  text-shadow: 0 0 6px rgba(102,126,234,0.35);
+}
+
+/* Lock overlay to block app interaction until login */
+.lock-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 1200; /* Below Bootstrap modal (z-index ~ 1055 for modal, 1040 for backdrop) */
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lock-overlay .lock-message {
+  background: rgba(22,33,62,0.85);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--text-primary);
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+
+.lock-overlay .lock-message .lock-title {
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.lock-overlay .lock-message .lock-subtitle {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+/* Animated Background */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(
+      circle at 20% 50%,
+      rgba(102, 126, 234, 0.1) 0%,
+      transparent 50%
+    ),
+    radial-gradient(
+      circle at 80% 80%,
+      rgba(118, 75, 162, 0.1) 0%,
+      transparent 50%
+    ),
+    radial-gradient(
+      circle at 40% 20%,
+      rgba(0, 242, 254, 0.05) 0%,
+      transparent 50%
+    );
+  z-index: -1;
+  animation: backgroundShift 20s ease infinite;
+}
+
+@keyframes backgroundShift {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+/* Typography */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+h1 {
+  font-size: 2.5rem;
+}
+h2 {
+  font-size: 2rem;
+}
+h3 {
+  font-size: 1.75rem;
+}
+h4 {
+  font-size: 1.5rem;
+}
+h5 {
+  font-size: 1.25rem;
+}
+h6 {
+  font-size: 1rem;
+}
+
+/* Background Utility Classes */
+.bg-warning {
+  background-color: var(--warning-color) !important;
+  color: #fff !important;
+}

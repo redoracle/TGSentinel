@@ -1,0 +1,813 @@
+/* ============================================================================
+   Module 5 – Alerts, Profiles & Live Activity
+   ========================================================================= */
+
+/* Alert Improvements */
+.alert {
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 1.25rem 1.5rem;
+  border-left: 4px solid;
+  margin-bottom: 1.5rem;
+}
+
+.alert h6 {
+  margin-bottom: 0.75rem;
+  font-weight: 700;
+}
+
+.alert ul {
+  margin-bottom: 0;
+  padding-left: 1.5rem;
+}
+
+.alert ul li {
+  margin-bottom: 0.5rem;
+}
+
+.alert ul li:last-child {
+  margin-bottom: 0;
+}
+
+.alert-success {
+  background: rgba(0, 242, 254, 0.1);
+  border-left-color: var(--success-color);
+  color: var(--success-color);
+}
+
+.alert-danger {
+  background: rgba(245, 87, 108, 0.1);
+  border-left-color: var(--danger-color);
+  color: var(--danger-color);
+}
+
+.alert-warning {
+  background: rgba(254, 202, 87, 0.1);
+  border-left-color: var(--warning-color);
+  color: var(--warning-color);
+}
+
+.alert-info {
+  background: rgba(74, 172, 254, 0.1);
+  border-left-color: var(--info-color);
+  color: var(--info-color);
+}
+
+/* Glass Morphism Effect */
+.glass-effect {
+  background: rgba(255, 255, 255, 0.05);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Modal Glass Effect */
+.modal-backdrop {
+  /* Default backdrop with blur */
+  background: rgba(15, 15, 35, 0.85);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+/* Enhanced glass backdrop with saturation (applied via JavaScript) */
+.modal-backdrop.glass-backdrop {
+  background: rgba(0, 0, 0, 0.5);
+  -webkit-backdrop-filter: blur(15px) saturate(130%);
+  backdrop-filter: blur(15px) saturate(130%);
+}
+
+.modal-content {
+  /* Fallback for browsers without backdrop-filter support */
+  background: linear-gradient(
+    135deg,
+    rgba(22, 33, 62, 0.95) 0%,
+    rgba(15, 15, 35, 0.95) 100%
+  );
+  border: 1px solid var(--border-color);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), var(--shadow-glow);
+}
+
+/* Progressive enhancement for browsers with backdrop-filter support */
+@supports (backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px)) {
+  .modal-content {
+    /* Increased transparency when backdrop-filter is supported on backdrop */
+    background: rgba(22, 33, 62, 0.85);
+  }
+}
+
+.modal-header {
+  background: rgba(102, 126, 234, 0.1);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.modal-footer {
+  background: rgba(0, 0, 0, 0.2);
+  border-top: 1px solid var(--border-color);
+}
+
+/* Profile Card */
+.profile-card {
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.profile-card:hover,
+.profile-card:focus {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+  border-color: rgba(102, 126, 234, 0.6);
+}
+
+.profile-card.active {
+  border-color: var(--primary-color);
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.5);
+}
+
+.profile-card.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.profile-card.disabled .profile-status-badge {
+  background-color: #6c757d !important;
+}
+
+.profile-name-clickable,
+.profile-desc-clickable,
+.profile-badge-clickable {
+  cursor: pointer;
+  transition: color 0.2s ease, text-decoration 0.2s ease;
+}
+
+.profile-name-clickable:focus-visible,
+.profile-desc-clickable:focus-visible,
+.profile-badge-clickable:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+.profile-toggle {
+  cursor: pointer;
+}
+
+/* Alert Profiles List Improvements */
+.alert-profiles-list-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.alert-profiles-list-card .collapse.show {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+}
+
+.alert-profiles-list-card .collapse .card-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.alert-profiles-list-container {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: calc(100vh - 320px);
+}
+
+/* Scrollbar styling with fallbacks for browser compatibility */
+.alert-profiles-list-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.alert-profiles-list-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.alert-profiles-list-container::-webkit-scrollbar-thumb {
+  background: rgba(102, 126, 234, 0.5);
+  border-radius: 3px;
+}
+
+/* Modern scrollbar properties (Firefox 64+, Chrome 121+) */
+@supports (scrollbar-width: thin) {
+  .alert-profiles-list-container {
+    scrollbar-width: thin;
+  }
+}
+
+@supports (scrollbar-color: auto) {
+  .alert-profiles-list-container {
+    scrollbar-color: rgba(102, 126, 234, 0.5) transparent;
+  }
+}
+
+.alert-profiles-list-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.alert-profiles-list-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.alert-profiles-list-container::-webkit-scrollbar-thumb {
+  background: rgba(102, 126, 234, 0.5);
+  border-radius: 3px;
+}
+
+.alert-profiles-list-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(102, 126, 234, 0.7);
+}
+
+/* Alert Profile Item */
+.alert-profile-item {
+  position: relative;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: transparent;
+  transition: all 0.2s ease;
+  padding: 0.875rem 1rem;
+}
+
+.alert-profile-item:hover {
+  background: rgba(102, 126, 234, 0.08);
+  border-color: rgba(102, 126, 234, 0.2);
+  transform: translateX(4px);
+}
+
+.alert-profile-item:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+  z-index: 1;
+}
+
+.alert-profile-item.active {
+  background: rgba(102, 126, 234, 0.15);
+  border-left: 3px solid var(--primary-color);
+  padding-left: calc(1rem - 3px);
+}
+
+.alert-profile-item:last-child {
+  border-bottom: none;
+}
+
+.alert-profile-item-content {
+  min-width: 0;
+}
+
+.alert-profile-item-actions {
+  flex-shrink: 0;
+  align-items: flex-end;
+  gap: 0.35rem;
+}
+
+.alert-profile-actions {
+  display: none;
+}
+
+.alert-profile-item:hover .alert-profile-actions {
+  display: flex;
+}
+
+.alert-profile-description {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* Profile Metadata */
+.alert-profile-metadata {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.375rem;
+  flex-wrap: wrap;
+}
+
+.alert-profile-meta-badge {
+  font-size: 0.7rem;
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.alert-profile-meta-badge svg {
+  width: 10px;
+  height: 10px;
+  opacity: 0.7;
+}
+
+/* Activity Indicator */
+.alert-profile-activity {
+  position: absolute;
+  top: 0.875rem;
+  right: 4.5rem;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #28a745;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.2);
+  }
+}
+
+/* Toggle Switch - Reduced Prominence */
+.alert-profile-toggle-wrapper {
+  position: relative;
+  z-index: 10;
+}
+
+.alert-profile-item .form-check-input {
+  width: 2.5rem;
+  height: 1.25rem;
+  cursor: pointer;
+  background-color: rgba(108, 117, 125, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+}
+
+.alert-profile-item .form-check-input:checked {
+  background-color: rgba(102, 126, 234, 0.6);
+  border-color: var(--primary-color);
+}
+
+.alert-profile-item .form-check-input:focus {
+  box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+}
+
+/* Profile Actions Menu */
+.alert-profile-actions {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.alert-profile-item:hover .alert-profile-actions {
+  opacity: 1;
+}
+
+.alert-profile-action-btn {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+  border-radius: 4px;
+}
+
+.alert-profile-action-btn:hover {
+  background: rgba(102, 126, 234, 0.2);
+  color: var(--primary-color);
+}
+
+/* Alert List Items (matching Profile List design) */
+.alerts-list-container {
+  max-height: 600px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(102, 126, 234, 0.5) transparent;
+}
+
+.alerts-list-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.alerts-list-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.alerts-list-container::-webkit-scrollbar-thumb {
+  background: rgba(102, 126, 234, 0.5);
+  border-radius: 3px;
+}
+
+.alerts-list-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(102, 126, 234, 0.7);
+}
+
+.alert-list-item {
+  position: relative;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: transparent;
+  transition: all 0.2s ease;
+  padding: 0.875rem 1rem;
+  cursor: default;
+}
+
+.alert-list-item:hover {
+  background: rgba(102, 126, 234, 0.08);
+  border-color: rgba(102, 126, 234, 0.2);
+}
+
+.alert-list-item:last-child {
+  border-bottom: none;
+}
+
+.alert-list-item .channel-link {
+  color: var(--primary-color);
+  transition: color 0.2s ease;
+}
+
+.alert-list-item .channel-link:hover {
+  color: var(--primary-color-light);
+  text-decoration: underline;
+}
+
+.alert-list-item .btn-feedback {
+  transition: all 0.2s ease;
+}
+
+.alert-list-item .btn-feedback:hover {
+  background: rgba(102, 126, 234, 0.2);
+  border-color: var(--primary-color);
+  transform: scale(1.1);
+}
+
+/* Empty State */
+.alert-profiles-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.alert-profiles-empty svg {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 1rem;
+  opacity: 0.3;
+}
+
+.alert-profiles-loading .spinner-border {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-width: 0.2rem;
+}
+
+/* Search Bar Styling */
+#alert-profiles-search {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+}
+
+#alert-profiles-search:focus {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.15);
+}
+
+#alert-profiles-search::placeholder {
+  color: var(--text-muted);
+}
+
+/* Bulk Actions Dropdown */
+.alert-bulk-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 0.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  min-width: 180px;
+  z-index: 1000;
+  display: none;
+}
+
+.alert-bulk-dropdown.show {
+  display: block;
+}
+
+.alert-bulk-dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 1rem;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  transition: background 0.2s ease;
+  font-size: 0.875rem;
+}
+
+.alert-bulk-dropdown-item:hover {
+  background: rgba(102, 126, 234, 0.1);
+}
+
+/* Alerts Feed Table Enhancements */
+.alert-excerpt {
+  max-width: 400px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: help;
+}
+
+/* Tooltip for long excerpts */
+.excerpt-tooltip .tooltip-inner {
+  max-width: 640px;
+  text-align: left;
+  white-space: normal;
+  word-wrap: break-word;
+}
+
+.alert-timestamp {
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  font-size: 0.85rem;
+  line-height: 1.3;
+  cursor: help;
+  /* Ensure enough width for YYYY-MM-DD on one line plus padding */
+  min-width: 16ch;
+}
+
+.timestamp-date {
+  color: var(--text-primary);
+  font-weight: 500;
+  white-space: nowrap; /* keep date on one line */
+}
+
+.timestamp-time {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+/* Tooltip for timestamp + destination */
+.timestamp-tooltip .tooltip-inner {
+  text-align: left;
+  white-space: normal;
+}
+
+/* Better table row hover */
+.table tbody tr {
+  transition: background-color 0.2s ease;
+}
+
+.table tbody tr:hover {
+  background-color: rgba(102, 126, 234, 0.05);
+}
+
+/* Collapsible card header styles - moved from inline styles */
+.card-header-collapsible {
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.card-header-collapsible:hover {
+  background-color: rgba(102, 126, 234, 0.05);
+}
+
+/* Scrollable container with fixed height - moved from inline styles */
+.scrollable-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* Utility classes for inline style replacements */
+.z-index-1 {
+  z-index: 1;
+}
+
+.max-w-100 {
+  max-width: 100%;
+}
+
+.overflow-x-auto {
+  overflow-x: auto;
+}
+
+.white-space-pre-wrap {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.font-size-sm {
+  font-size: 0.8rem;
+}
+
+/* Table column width utilities */
+.w-10 {
+  width: 10%;
+}
+
+.w-15 {
+  width: 15%;
+}
+
+.w-20 {
+  width: 20%;
+}
+
+.w-35 {
+  width: 35%;
+}
+
+/* Live Activity Toggle Switch */
+.live-toggle-container {
+  display: inline-flex;
+  align-items: center;
+}
+
+.live-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.live-toggle-text {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+}
+
+.live-toggle-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 90px;
+  height: 32px;
+  background: rgba(108, 117, 125, 0.2);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  padding: 0 8px;
+}
+
+.live-toggle-switch:hover {
+  background: rgba(108, 117, 125, 0.3);
+}
+
+.live-toggle-switch:focus {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+.live-toggle-slider {
+  position: absolute;
+  left: 4px;
+  width: 24px;
+  height: 24px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.live-toggle-status {
+  position: absolute;
+  right: 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  transition: all 0.3s ease;
+  z-index: 1;
+}
+
+/* Active state (ON) */
+.live-toggle-switch.active {
+  background: rgba(40, 167, 69, 0.2);
+  border-color: rgba(40, 167, 69, 0.5);
+}
+
+.live-toggle-switch.active .live-toggle-slider {
+  left: calc(100% - 28px);
+  background: var(--success-color, #28a745);
+}
+
+.live-toggle-switch.active .live-toggle-status {
+  left: 10px;
+  right: auto;
+  color: var(--success-color, #28a745);
+}
+
+/* Collapsible Section Styling - Match Alerts Feed exactly */
+.collapse-icon {
+  display: inline-block;
+  transition: transform 0.3s ease-in-out;
+  transform: rotate(90deg);
+}
+
+button.collapsed .collapse-icon,
+button[aria-expanded="false"] .collapse-icon {
+  transform: rotate(0deg);
+}
+
+.card-header[role="button"]:hover {
+  background: rgba(102, 126, 234, 0.05);
+}
+
+/* Responsive Adjustments */
+@media (max-width: 1199.98px) {
+  .alert-profiles-list-container {
+    max-height: 500px;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .alert-profile-item {
+    padding: 0.75rem;
+  }
+  
+  .alert-profile-metadata {
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  
+  .alert-profile-actions {
+    opacity: 1;
+  }
+}
+
+/* ============================================================================
+   Utility Classes for Code Quality Fixes
+   ========================================================================= */
+
+/* Entity selector container - replaces inline min-height */
+.entity-selector-container {
+  min-height: 80px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* Modal entity list - replaces inline max-height and overflow */
+.modal-entity-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* Small font size utility - replaces inline font-size: 0.875rem */
+.fs-7 {
+  font-size: 0.875rem !important;
+}
+
+/* Text reset - inherits parent color */
+.text-reset {
+  color: inherit !important;
+}
+
+/* Similarity tester progress bar */
+.similarity-progress-bar {
+  width: 200px;
+  height: 30px;
+}
+
+/* ============================================================================
+   Profile Badge Links in Feed Items
+   ========================================================================= */
+
+/* Clickable profile badges in feed items */
+.profile-badge-link {
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.profile-badge-link:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  filter: brightness(1.1);
+}
+
+.profile-badge-link:active {
+  transform: translateY(0);
+}
+
+/* Alert profile badges (primary color) */
+.profile-badge-link.bg-primary:hover {
+  background-color: var(--bs-primary) !important;
+  color: white !important;
+}
+
+/* Interest profile badges (info color) */
+.profile-badge-link.bg-info:hover {
+  background-color: var(--bs-info) !important;
+  color: white !important;
+}

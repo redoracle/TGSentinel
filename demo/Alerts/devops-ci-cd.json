@@ -1,0 +1,73 @@
+{
+  "name": "DevOps CI/CD Monitor",
+  "description": "Highlights deployment failures and CI/CD breakages that demand engineering attention.",
+  "enabled": false,
+  "min_score": 4.5,
+  "keywords": [
+    "build failed",
+    "deployment failed",
+    "test failure",
+    "pipeline error",
+    "timeout",
+    "out of memory",
+    "disk full",
+    "connection refused",
+    "production",
+    "staging",
+    "CI/CD",
+    "deployment",
+    "release"
+  ],
+  "action_keywords": [],
+  "decision_keywords": [],
+  "urgency_keywords": [
+    "rollback",
+    "revert",
+    "emergency",
+    "hotfix",
+    "incident",
+    "failed",
+    "error",
+    "failure"
+  ],
+  "importance_keywords": ["broken", "crashed", "down"],
+  "release_keywords": [],
+  "security_keywords": [],
+  "risk_keywords": [],
+  "opportunity_keywords": [],
+  "detect_codes": true,
+  "detect_documents": false,
+  "detect_links": false,
+  "require_forwarded": false,
+  "prioritize_pinned": true,
+  "prioritize_admin": true,
+  "prioritize_private": false,
+  "detect_polls": false,
+  "detect_mentions": true,
+  "detect_questions": true,
+  "scoring_weights": {
+    "urgency": 1.8,
+    "importance": 1.3,
+    "keywords": 0.9
+  },
+  "vip_senders": [],
+  "webhooks": [],
+  "excluded_users": [],
+  "reaction_threshold": 3,
+  "reply_threshold": 2,
+  "positive_weight": 1.0,
+  "negative_weight": 0.15,
+  "channels": [],
+  "users": [],
+  "tags": ["devops", "sre", "ci-cd", "monitoring"],
+  "digest": {
+    "schedules": [
+      {
+        "schedule": "every_4h",
+        "top_n": 20,
+        "min_score": 4.5,
+        "mode": "both"
+      }
+    ]
+  }
+}

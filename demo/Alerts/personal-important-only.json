@@ -1,0 +1,60 @@
+{
+  "name": "Personal Important Only",
+  "description": "Filters chats down to urgent personal messages so you only see time-sensitive pings.",
+  "enabled": false,
+  "min_score": 2.5,
+  "keywords": [],
+  "action_keywords": [],
+  "decision_keywords": [],
+  "urgency_keywords": [
+    "urgent",
+    "asap",
+    "important",
+    "critical",
+    "emergency",
+    "deadline",
+    "due",
+    "today",
+    "tomorrow",
+    "now"
+  ],
+  "importance_keywords": [],
+  "release_keywords": [],
+  "security_keywords": [],
+  "risk_keywords": [],
+  "opportunity_keywords": [],
+  "detect_codes": false,
+  "detect_documents": false,
+  "detect_links": false,
+  "require_forwarded": false,
+  "prioritize_pinned": true,
+  "prioritize_admin": false,
+  "prioritize_private": false,
+  "detect_polls": false,
+  "detect_mentions": true,
+  "detect_questions": true,
+  "scoring_weights": {
+    "urgency": 2.0,
+    "mentions": 1.5
+  },
+  "vip_senders": [],
+  "webhooks": [],
+  "excluded_users": [],
+  "reaction_threshold": 0,
+  "reply_threshold": 0,
+  "positive_weight": 1.0,
+  "negative_weight": 0.15,
+  "channels": [],
+  "users": [],
+  "tags": ["personal", "productivity", "signal-over-noise"],
+  "digest": {
+    "schedules": [
+      {
+        "schedule": "every_6h",
+        "top_n": 30,
+        "min_score": 2.5,
+        "mode": "dm"
+      }
+    ]
+  }
+}

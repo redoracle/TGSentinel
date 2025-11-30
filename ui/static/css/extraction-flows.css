@@ -1,0 +1,121 @@
+/* Module 8 – Extraction Flows & Accessibility
+   ========================================================================= */
+
+/* Extraction Page Specific Styles */
+.validation-feedback {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  border-radius: 0.375rem;
+}
+
+.validation-feedback.success {
+  background-color: rgba(0, 242, 254, 0.1);
+  color: var(--success-color);
+}
+
+.validation-feedback.error {
+  background-color: rgba(245, 87, 108, 0.1);
+  color: var(--danger-color);
+}
+
+.validation-feedback.warning {
+  background-color: rgba(254, 202, 87, 0.1);
+  color: var(--warning-color);
+}
+
+.select-all-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background-color: rgba(102, 126, 234, 0.05);
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.select-all-container label {
+  margin: 0;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+/* Progress Bar Enhancements */
+.progress-container {
+  margin-top: 1.5rem;
+  display: none;
+  opacity: 0;
+  transition: opacity var(--transition-smooth);
+}
+
+.progress-container.active {
+  display: block;
+  opacity: 1;
+}
+
+.progress {
+  height: 12px;
+  background-color: var(--bg-elevated);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background: var(--success-gradient);
+  transition: width 0.3s ease-in-out;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+/* RTL Support */
+[dir="rtl"] .action-buttons {
+  justify-content: flex-start;
+}
+
+@media (min-width: 640px) {
+  [dir="rtl"] .action-buttons {
+    justify-content: flex-end;
+  }
+}
+
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  .btn-action,
+  .filter-control,
+  .progress-bar,
+  .spinner {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Utility classes */
+.hidden-section {
+  display: none;
+}
+
+.text-success-color {
+  color: var(--success-color);
+}
+
+/* Print styles */
+@media print {
+  .navbar,
+  .btn,
+  .alert {
+    display: none !important;
+  }
+
+  .container-fluid {
+    max-width: 100% !important;
+  }
+}
+

@@ -1,0 +1,330 @@
+{# Interest Profile Form - Extracted from profiles.html #}
+{# This form includes all fields for Interest Profile configuration #}
+
+<form id="interest-profile-form" class="d-grid gap-3" novalidate>
+    <input type="hidden" id="interest-profile-id" value="">
+    
+    <!-- Basic Fields -->
+    <div class="row">
+        <div class="col-md-4 d-none">
+            <label class="form-label" for="interest-profile-id-display">Profile ID</label>
+            <input class="form-control bg-light" id="interest-profile-id-display" type="text" placeholder="Auto-generated" readonly>
+            <small class="form-text text-muted">Auto-assigned integer ID (3000-3999)</small>
+        </div>
+        <div class="col-md-8">
+            <label class="form-label" for="topic-name">Topic name <span class="text-danger">*</span></label>
+            <input class="form-control" id="topic-name" name="topic" type="text" placeholder="e.g., marketing core development" required>
+            <small class="form-text">A unique identifier for this interest profile</small>
+        </div>
+    </div>
+    
+    <div>
+        <label class="form-label" for="topic-description">Description</label>
+        <input class="form-control" id="topic-description" name="description" type="text" placeholder="Brief description of this profile">
+        <small class="form-text">Optional: helps document the profile's purpose</small>
+    </div>
+    
+    <div>
+        <label class="form-label" for="positive-samples">Positive examples</label>
+        <textarea class="form-control" id="positive-samples" name="positive" rows="6" placeholder="Paste messages that should match this profile&#10;One example per line"></textarea>
+        <small class="form-text">Messages that represent the interest</small>
+    </div>
+    
+    <div>
+        <label class="form-label" for="negative-samples">Negative examples</label>
+        <textarea class="form-control" id="negative-samples" name="negative" rows="4" placeholder="Paste noise or unrelated content&#10;One example per line"></textarea>
+        <small class="form-text">Messages that should NOT match (helps refine the profile)</small>
+    </div>
+    
+    <!-- Scope Restriction (Channels & Users) -->
+    <div class="border-top pt-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h3 class="h6 mb-0">Apply Profile To</h3>
+            <div class="d-flex gap-2">
+                <a href="/docs#profile-scope" class="btn btn-outline-primary btn-sm" title="View profile scope documentation" target="_blank" rel="noopener">
+                    <i class="bi bi-info-circle"></i>
+                </a>
+                <button type="button" class="btn btn-primary btn-sm" id="btn-select-entities-interest" data-bs-toggle="modal" data-bs-target="#selectEntitiesModal">
+                    <span aria-hidden="true">+</span> ADD
+                </button>
+            </div>
+        </div>
+        <div id="selected-entities-interest" class="border rounded p-3 bg-dark entity-selector-container">
+            <div class="text-muted small" id="entities-placeholder-interest">No channels or users selected. Profile applies to all monitored entities configured in the settings section.</div>
+            <div id="entities-badges-interest" class="d-flex flex-wrap gap-2"></div>
+        </div>
+        <small class="text-muted">Select specific channels/users or leave empty to apply to all monitored entities</small>
+    </div>
+    
+    <!-- Webhook Integration -->
+    <div class="border-top pt-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h3 class="h6 mb-0">
+                <svg width="16" height="16" fill="currentColor" class="bi bi-send me-1" viewBox="0 0 16 16">
+                    <path d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11ZM6.636 10.07l2.761 4.338L14.13 2.576 6.636 10.07Zm6.787-8.201L1.591 6.602l4.339 2.76 7.494-7.493Z"/>
+                </svg>
+                Webhook Notifications
+            </h3>
+            <a href="/docs#webhooks-api" class="btn btn-outline-primary btn-sm" title="View webhook documentation" target="_blank" rel="noopener">
+                <i class="bi bi-info-circle"></i>
+            </a>
+        </div>
+        <div>
+            <label class="form-label" for="interest-webhooks">Notify Webhooks (optional)</label>
+            <select class="form-select" id="interest-webhooks" name="webhooks" multiple size="5" aria-busy="true">
+                <option disabled selected>Loading webhooks...</option>
+            </select>
+            <small class="text-muted">Select one or more webhooks. Alerts matching this profile will be sent to selected webhooks.</small>
+        </div>
+    </div>
+    
+    <!-- Advanced Section (Collapsible) -->
+    <div class="border-top pt-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <button class="btn btn-link p-0 text-decoration-none d-flex align-items-center gap-2" type="button" data-bs-toggle="collapse" data-bs-target="#advanced-config" aria-expanded="false" aria-controls="advanced-config">
+                <svg width="16" height="16" fill="currentColor" class="bi bi-chevron-right" viewBox="0 0 16 16" id="collapse-icon">
+                    <path fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/>
+                </svg>
+                <strong>Advanced Configuration</strong>
+            </button>
+            <a href="/docs#interest-profiles" class="btn btn-outline-primary btn-sm" title="View advanced configuration documentation" target="_blank" rel="noopener">
+                <i class="bi bi-info-circle"></i>
+            </a>
+        </div>
+    </div>
+    
+    <div class="collapse" id="advanced-config">
+        <div class="card card-body bg-dark border-secondary">
+            <div class="d-grid gap-3">
+                <div class="row">
+                    <div class="col-md-4">
+                        <label class="form-label" for="similarity-threshold">
+                            Similarity Threshold
+                            <i class="bi bi-info-circle" data-bs-toggle="tooltip" title="Minimum score (0.0-1.0) for a message to match this profile"></i>
+                        </label>
+                        <input class="form-control" id="similarity-threshold" name="threshold" type="number" min="0" max="1" step="0.01" value="0.42" placeholder="0.42">
+                        <small class="form-text">Score threshold (0.0 - 1.0) for semantic matches</small>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" for="positive-weight">
+                            Positive Weight
+                            <i class="bi bi-info-circle" data-bs-toggle="tooltip" title="Multiplier for positive similarity. Higher = stronger positive signal. Range: 0.1-2.0. Default: 1.0"></i>
+                        </label>
+                        <input class="form-control" id="positive-weight" name="positive_weight" type="number" min="0.1" max="2.0" step="0.05" value="1.0" placeholder="1.0">
+                        <small class="form-text text-muted">Default: 1.0 (standard)</small>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" for="negative-weight">
+                            Negative Weight
+                            <i class="bi bi-info-circle" data-bs-toggle="tooltip" title="Penalty multiplier for negative similarity. Lower = less aggressive filtering. Range: 0.0-0.5. Default: 0.15"></i>
+                        </label>
+                        <input class="form-control" id="negative-weight" name="negative_weight" type="number" min="0" max="0.5" step="0.01" value="0.15" placeholder="0.15">
+                        <small class="form-text text-muted">Default: 0.15 (balanced)</small>
+                    </div>
+                </div>
+                
+                <!-- Coefficient Presets -->
+                <div class="row mt-2">
+                    <div class="col-12">
+                        <label class="form-label">Coefficient Presets</label>
+                        <div class="btn-group w-100" role="group">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.InterestProfiles.setCoefficients(1.0, 0.05)">
+                                🎯 High Precision<br>
+                                <small class="text-muted">(Security, Compliance)</small>
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.InterestProfiles.setCoefficients(1.0, 0.15)">
+                                ⚖️ Balanced<br>
+                                <small class="text-muted">(General Use)</small>
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.InterestProfiles.setCoefficients(1.0, 0.30)">
+                                🔇 Strict Filtering<br>
+                                <small class="text-muted">(Noisy Channels)</small>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <label class="form-label" for="profile-enabled">Status</label>
+                        <select class="form-select" id="profile-enabled" name="enabled">
+                            <option value="true" selected>Enabled</option>
+                            <option value="false">Disabled</option>
+                        </select>
+                        <small class="form-text">Active/inactive state</small>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info mt-2">
+                    <strong>💡 Tuning Guide:</strong>
+                    <ul class="mb-0 small">
+                        <li><strong>High Precision</strong> (Security, Compliance): negative_weight = 0.05-0.10 (sensitive to critical content)</li>
+                        <li><strong>Balanced</strong> (General Topics): negative_weight = 0.15-0.20 (standard discrimination)</li>
+                        <li><strong>Strict Filtering</strong> (Noisy Channels): negative_weight = 0.25-0.35 (aggressive noise reduction)</li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <label class="form-label" for="interest-vip-senders">VIP Senders (comma-separated user IDs)</label>
+                    <input class="form-control" id="interest-vip-senders" name="vip_senders" type="text" 
+                           placeholder="123456789, 987654321"
+                           pattern="^\s*\d+(\s*,\s*\d+)*\s*$"
+                           title="Numeric Telegram user IDs separated by commas (spaces are trimmed automatically)">
+                    <small class="form-text">Always alert when these users post content matching this interest. Enter numeric IDs separated by commas. Whitespace will be trimmed. Duplicates will be removed. Max 100 IDs.</small>
+                </div>
+                
+                <div>
+                    <label class="form-label" for="interest-excluded-users">Excluded Users (comma-separated user IDs)</label>
+                    <input class="form-control" id="interest-excluded-users" name="excluded_users" type="text" 
+                           placeholder="111111111, 222222222"
+                           pattern="^\s*\d+(\s*,\s*\d+)*\s*$"
+                           title="Numeric Telegram user IDs separated by commas (spaces are trimmed automatically)">
+                    <small class="form-text">Never alert for these users, even if semantically matching (blacklist). Enter numeric IDs separated by commas. Whitespace will be trimmed. Duplicates will be removed. Max 100 IDs.</small>
+                </div>
+                
+                <div>
+                    <label class="form-label" for="profile-tags">Tags (comma-separated)</label>
+                    <input class="form-control" id="profile-tags" name="tags" type="text" placeholder="security, urgent, technical">
+                    <small class="form-text">Organizational tags for filtering and grouping</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Digest Configuration for Interest Profiles -->
+    <div class="border rounded p-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3 class="h6 mb-0">
+                <svg width="14" height="14" fill="currentColor" class="bi bi-send me-1" viewBox="0 0 16 16">
+                    <path d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11ZM6.636 10.07l2.761 4.338L14.13 2.576 6.636 10.07Zm6.787-8.201L1.591 6.602l4.339 2.76 7.494-7.493Z"/>
+                </svg>
+                Delivery Schedules
+            </h3>
+            <div class="d-flex gap-2">
+                <a href="/docs#digest-api" class="btn btn-outline-primary btn-sm" title="View digest documentation" target="_blank" rel="noopener">
+                    <i class="bi bi-info-circle"></i>
+                </a>
+                <button type="button" class="btn btn-sm btn-outline-info" data-bs-toggle="collapse" data-bs-target="#interest-digest-help" aria-label="Show digest schedule help">
+                    <svg width="14" height="14" fill="currentColor" class="bi bi-question-circle" viewBox="0 0 16 16">
+                        <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                        <path d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286zm1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94z"/>
+                    </svg>
+                    <span class="visually-hidden">Digest schedule help</span>
+                </button>
+            </div>
+        </div>
+        
+        <div class="collapse mb-3" id="interest-digest-help">
+            <div class="alert alert-info small mb-0">
+                <p class="mb-1"><strong>What are delivery schedules?</strong></p>
+                <p class="mb-1"><strong>DM</strong> sends instant alerts to a user/channel. <strong>Digest</strong> batches messages and sends scheduled summaries. <strong>Both</strong> sends instant DMs plus scheduled digests.</p>
+                <p class="mb-0 mt-2"><em>Configure up to 3 delivery schedules for this interest profile.</em></p>
+            </div>
+        </div>
+        
+        {# Render 3 schedule cards for Interest Profiles #}
+        {% for schedule_num in range(1, 4) %}
+        <div class="card mb-3">
+            <div class="card-header py-2">
+                {% if schedule_num > 1 %}
+                <button class="btn btn-link p-0 text-decoration-none text-white d-flex align-items-center gap-2 w-100" type="button" data-bs-toggle="collapse" data-bs-target="#interest-schedule-{{ schedule_num }}-body" aria-expanded="false">
+                    <svg width="14" height="14" fill="currentColor" class="bi bi-chevron-right schedule-chevron" viewBox="0 0 16 16">
+                        <path fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/>
+                    </svg>
+                    <strong>Schedule {{ schedule_num }}</strong> <span class="badge bg-dark">Optional</span>
+                </button>
+                {% else %}
+                <strong>Schedule {{ schedule_num }}</strong>
+                {% endif %}
+            </div>
+            <div class="{% if schedule_num > 1 %}collapse {% endif %}card-body" id="interest-schedule-{{ schedule_num }}-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label" for="interest-digest-schedule-{{ schedule_num }}-type">Schedule Type</label>
+                        <select class="form-select form-select-sm interest-digest-schedule-type" id="interest-digest-schedule-{{ schedule_num }}-type" name="interest_digest_schedule_{{ schedule_num }}_type">
+                            <option value="">{% if schedule_num == 1 %}None (Instant Alerts){% else %}None{% endif %}</option>
+                            <option value="hourly">⏰ Hourly</option>
+                            <option value="every_4h">🕓 Every 4 Hours</option>
+                            <option value="every_6h">🕕 Every 6 Hours</option>
+                            <option value="every_12h">🕛 Every 12 Hours</option>
+                            <option value="daily">📅 Daily</option>
+                            <option value="weekly">📊 Weekly</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 interest-digest-batch-settings" id="interest-digest-schedule-{{ schedule_num }}-topn-wrapper">
+                        <label class="form-label" for="interest-digest-schedule-{{ schedule_num }}-top-n">
+                            Top N Messages
+                            <span class="text-muted" data-bs-toggle="tooltip" data-bs-placement="top" 
+                                  title="Maximum messages to include in each digest summary. Only applies to Digest/Both modes.">ⓘ</span>
+                        </label>
+                        <input type="number" class="form-control form-control-sm" id="interest-digest-schedule-{{ schedule_num }}-top-n" name="interest_digest_schedule_{{ schedule_num }}_top_n" min="1" max="100" value="{{ 10 * schedule_num }}" placeholder="{{ 10 * schedule_num }}">
+                    </div>
+                    <div class="col-md-4 interest-digest-batch-settings" id="interest-digest-schedule-{{ schedule_num }}-minscore-wrapper">
+                        <label class="form-label" for="interest-digest-schedule-{{ schedule_num }}-min-score">
+                            Digest Min Score
+                            <span class="text-muted" data-bs-toggle="tooltip" data-bs-placement="top" 
+                                  title="Optional additional filter for digest inclusion. For Interest Profiles, the Similarity Threshold above is the primary filter. This can add a secondary keyword-based filter (0-1 scale).">ⓘ</span>
+                        </label>
+                        <input type="number" class="form-control form-control-sm" id="interest-digest-schedule-{{ schedule_num }}-min-score" name="interest_digest_schedule_{{ schedule_num }}_min_score" min="0" max="1" step="0.05" value="{{ 0.45 }}" placeholder="0.45">
+                    </div>
+                    <div class="col-md-6 interest-digest-daily-settings d-none" id="interest-digest-schedule-{{ schedule_num }}-daily-settings">
+                        <label class="form-label" for="interest-digest-schedule-{{ schedule_num }}-daily-hour">Daily Hour (UTC)</label>
+                        <input type="number" class="form-control form-control-sm" id="interest-digest-schedule-{{ schedule_num }}-daily-hour" name="interest_digest_schedule_{{ schedule_num }}_daily_hour" min="0" max="23" value="8" placeholder="8">
+                    </div>
+                    <div class="col-md-6 interest-digest-weekly-settings d-none" id="interest-digest-schedule-{{ schedule_num }}-weekly-settings">
+                        <label class="form-label" for="interest-digest-schedule-{{ schedule_num }}-weekly-day">Weekly Day</label>
+                        <select class="form-select form-select-sm" id="interest-digest-schedule-{{ schedule_num }}-weekly-day" name="interest_digest_schedule_{{ schedule_num }}_weekly_day">
+                            <option value="0">Monday</option>
+                            <option value="1">Tuesday</option>
+                            <option value="2">Wednesday</option>
+                            <option value="3">Thursday</option>
+                            <option value="4">Friday</option>
+                            <option value="5">Saturday</option>
+                            <option value="6">Sunday</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 interest-digest-weekly-settings d-none" id="interest-digest-schedule-{{ schedule_num }}-weekly-hour-settings">
+                        <label class="form-label" for="interest-digest-schedule-{{ schedule_num }}-weekly-hour">Weekly Hour (UTC)</label>
+                        <input type="number" class="form-control form-control-sm" id="interest-digest-schedule-{{ schedule_num }}-weekly-hour" name="interest_digest_schedule_{{ schedule_num }}_weekly_hour" min="0" max="23" value="8" placeholder="8">
+                    </div>
+                </div>
+                
+                <!-- Delivery Settings (per schedule) -->
+                <div class="row g-3 mt-2 border-top pt-3">
+                    <div class="col-md-6">
+                        <label class="form-label" for="interest-digest-schedule-{{ schedule_num }}-mode">Delivery Mode</label>
+                        <select class="form-select form-select-sm" id="interest-digest-schedule-{{ schedule_num }}-mode" name="interest_digest_schedule_{{ schedule_num }}_mode">
+                            <option value="none">📁 None (Save Only)</option>
+                            <option value="dm">💬 DM (Instant Alerts)</option>
+                            <option value="digest">📋 Digest (Scheduled Summary)</option>
+                            <option value="both">🔄 Both DM & Digest</option>
+                        </select>
+                        <small class="form-text">How alerts are delivered to you</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="interest-digest-schedule-{{ schedule_num }}-target-channel">Target Channel/User</label>
+                        <input type="text" class="form-control form-control-sm" id="interest-digest-schedule-{{ schedule_num }}-target-channel" name="interest_digest_schedule_{{ schedule_num }}_target_channel" placeholder="@username or user_id" value="{{ alert_channel }}" data-default-channel="{{ alert_channel }}">
+                        <small class="form-text">Username (@handle) or numeric ID – auto-detected</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <!-- Form Actions -->
+    <div class="d-flex gap-3">
+        <button class="btn btn-primary" type="submit" id="btn-save-interest-profile">
+            <span id="interest-save-btn-text">Save Profile</span>
+        </button>
+        <button class="btn btn-outline-primary" type="button" id="btn-backtest-interest-profile">
+            <svg width="16" height="16" fill="currentColor" class="bi bi-speedometer me-1" viewBox="0 0 16 16">
+                <path d="M8 2a.5.5 0 0 1 .5.5V4a.5.5 0 0 1-1 0V2.5A.5.5 0 0 1 8 2zM3.732 3.732a.5.5 0 0 1 .707 0l.915.914a.5.5 0 1 1-.708.708l-.914-.915a.5.5 0 0 1 0-.707zM2 8a.5.5 0 0 1 .5-.5h1.586a.5.5 0 0 1 0 1H2.5A.5.5 0 0 1 2 8zm9.5 0a.5.5 0 0 1 .5-.5h1.5a.5.5 0 0 1 0 1H12a.5.5 0 0 1-.5-.5zm.754-4.246a.389.389 0 0 0-.527-.02L7.547 7.31A.91.91 0 1 0 8.85 8.569l3.434-4.297a.389.389 0 0 0-.029-.518z"/>
+                <path fill-rule="evenodd" d="M6.664 15.889A8 8 0 1 1 9.336.11a8 8 0 0 1-2.672 15.78zm-4.665-4.283A11.945 11.945 0 0 1 8 10c2.186 0 4.236.585 6.001 1.606a7 7 0 1 0-12.002 0z"/>
+            </svg>
+            Backtest
+        </button>
+        <button class="btn btn-outline-secondary" type="button" id="btn-reset-interest-profile">Clear</button>
+        <button class="btn btn-outline-danger d-none" type="button" id="btn-delete-interest-profile">Delete</button>
+    </div>
+</form>

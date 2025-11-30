@@ -1,0 +1,75 @@
+services:
+  redis:
+    image: redis:7
+    restart: always
+    ports: ["6379:6379"]
+    command: ["redis-server", "--save", "60", "1000", "--appendonly", "yes"]
+    volumes:
+      - tgsentinel_redis_data:/data
+    networks:
+      - tgsentinel_net
+
+  sentinel:
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
+    image: tgsentinel/app:latest
+    restart: unless-stopped
+    env_file: [.env]
+    ports:
+      - "8080:8080"
+    environment:
+      - SESSION_WAIT_SECS=0
+      - TG_SESSION_PATH=/app/data/tgsentinel.session
+      - DB_URI=sqlite:////app/data/sentinel.db
+      - SENTINEL_API_PORT=8080
+      - HF_HOME=/app/.cache/huggingface
+      - SENTENCE_TRANSFORMERS_HOME=/app/.cache/sentence_transformers
+    volumes:
+      - ./config:/app/config
+      - tgsentinel_sentinel_data:/app/data
+      - tgsentinel_models_cache:/app/.cache
+    depends_on:
+      - redis
+    networks:
+      - tgsentinel_net
+
+  ui:
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
+    image: tgsentinel/app:latest
+    command: python /app/ui/app.py
+    restart: always
+    ports:
+      - "5001:5000"
+    env_file: [.env]
+    environment:
+      - UI_PORT=5000
+      - SENTINEL_API_BASE_URL=http://sentinel:8080/api
+    volumes:
+      - tgsentinel_ui_data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - redis
+      - sentinel
+    networks:
+      - tgsentinel_net
+
+  # Optional: expose Prometheus metrics via textfile collector or a tiny HTTP
+  # metrics endpoint. For simplicity, metrics are logged; integrate with your
+  # existing Prometheus stack if desired.
+
+volumes:
+  tgsentinel_redis_data:
+    driver: local
+  tgsentinel_sentinel_data:
+    driver: local
+  tgsentinel_ui_data:
+    driver: local
+  tgsentinel_models_cache:
+    driver: local
+
+networks:
+  tgsentinel_net:
+    driver: bridge

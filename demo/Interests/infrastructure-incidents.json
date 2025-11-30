@@ -1,0 +1,43 @@
+{
+  "id": 3002,
+  "name": "Infrastructure Issues & Outages",
+  "description": "Focuses on production outages, degradation reports, and urgent infrastructure failures.",
+  "enabled": false,
+  "threshold": 0.48,
+  "positive_weight": 1.0,
+  "negative_weight": 0.1,
+  "positive_samples": [
+    "Production database is experiencing high latency and timeouts",
+    "Service degradation detected on the API gateway",
+    "Complete outage of the authentication service",
+    "Critical infrastructure failure requiring immediate rollback",
+    "Performance degradation affecting all users in EU region",
+    "Emergency maintenance required due to disk space issues",
+    "Multiple servers are unresponsive and need investigation"
+  ],
+  "negative_samples": [
+    "Scheduled maintenance completed",
+    "Regular backup process running",
+    "Monitoring metrics look healthy",
+    "System uptime at 99.9%",
+    "All health checks passing"
+  ],
+  "channels": [],
+  "users": [],
+  "vip_senders": [],
+  "webhooks": [],
+  "excluded_users": [],
+  "reaction_threshold": 5,
+  "reply_threshold": 3,
+  "tags": ["devops", "sre", "infrastructure", "incidents"],
+  "digest": {
+    "schedules": [
+      {
+        "schedule": "hourly",
+        "top_n": 10,
+        "min_score": 0.48,
+        "mode": "dm"
+      }
+    ]
+  }
+}

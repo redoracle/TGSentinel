@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Profiles · TG Sentinel{% endblock %}
+
+{% block content %}
+<!-- Two-Tab Navigation -->
+<section class="card mb-4">
+    <div class="card-header">
+        <h1 class="card-title mb-0">Profile Management</h1>
+        <small class="text-muted">Configure keyword-based and semantic interest profiles</small>
+    </div>
+    <div class="card-body p-0">
+        <ul class="nav nav-tabs nav-fill border-bottom-0" id="profileTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="alert-profiles-tab" data-bs-toggle="tab" data-bs-target="#alert-profiles" type="button" role="tab" aria-controls="alert-profiles" aria-selected="true">
+                    <svg width="16" height="16" fill="currentColor" class="bi bi-bell me-2" viewBox="0 0 16 16">
+                        <path d="M8 16a2 2 0 0 0 2-2H6a2 2 0 0 0 2 2zM8 1.918l-.797.161A4.002 4.002 0 0 0 4 6c0 .628-.134 2.197-.459 3.742-.16.767-.376 1.566-.663 2.258h10.244c-.287-.692-.502-1.49-.663-2.258C12.134 8.197 12 6.628 12 6a4.002 4.002 0 0 0-3.203-3.92L8 1.917zM14.22 12c.223.447.481.801.78 1H1c.299-.199.557-.553.78-1C2.68 10.2 3 6.88 3 6c0-2.42 1.72-4.44 4.005-4.901a1 1 0 1 1 1.99 0A5.002 5.002 0 0 1 13 6c0 .88.32 4.2 1.22 6z"/>
+                    </svg>
+                    Alert Profiles
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="interest-profiles-tab" data-bs-toggle="tab" data-bs-target="#interest-profiles" type="button" role="tab" aria-controls="interest-profiles" aria-selected="false">
+                    <svg width="16" height="16" fill="currentColor" class="bi bi-brain me-2" viewBox="0 0 16 16">
+                        <path d="M5.5 2a.5.5 0 0 0-1 0v11a.5.5 0 0 0 1 0v-11zm5 0a.5.5 0 0 0-1 0v11a.5.5 0 0 0 1 0v-11zm-4 1.5a.5.5 0 0 1 .5.5v8a.5.5 0 0 1-1 0V4a.5.5 0 0 1 .5-.5zm3 0a.5.5 0 0 1 .5.5v8a.5.5 0 0 1-1 0V4a.5.5 0 0 1 .5-.5z"/>
+                    </svg>
+                    Interest Profiles
+                </button>
+            </li>
+        </ul>
+    </div>
+</section>
+
+<div class="tab-content" id="profileTabsContent">
+    <!-- Alert Profiles Tab -->
+    <div class="tab-pane fade show active" id="alert-profiles" role="tabpanel" aria-labelledby="alert-profiles-tab">
+        {% include 'profiles/alert_profiles.html' %}
+    </div>
+
+    <!-- Interest Profiles Tab -->
+    <div class="tab-pane fade" id="interest-profiles" role="tabpanel" aria-labelledby="interest-profiles-tab">
+        {% include 'profiles/interest_profiles.html' %}
+    </div>
+</div>
+
+<!-- Shared Modals -->
+{% include 'profiles/_shared_modals.html' %}
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- Load JavaScript modules in dependency order -->
+<script src="{{ url_for('static', filename='js/profiles/shared_utils.js') }}?v=20251123-5"></script>
+<script src="{{ url_for('static', filename='js/components/digest_editor.js') }}?v=20251123-5"></script>
+<script src="{{ url_for('static', filename='js/profiles/entity_selector.js') }}?v=20251123-5"></script>
+<script src="{{ url_for('static', filename='js/profiles/alert_profiles.js') }}?v=20251123-5"></script>
+<script src="{{ url_for('static', filename='js/profiles/interest_profiles.js') }}?v=20251123-5"></script>
+<script src="{{ url_for('static', filename='js/profiles/init.js') }}?v=20251123-5"></script>
+
+<script>
+    // Inject API endpoints from Flask - using actual route names from profiles.py
+    const alertProfileEndpoints = {
+        list: "/api/profiles/alert/list",
+        get: "/api/profiles/alert/get",
+        upsert: "/api/profiles/alert/upsert",
+        delete: "/api/profiles/alert/delete",
+        toggle: "/api/profiles/alert/toggle",
+        backtest: "/api/profiles/alert/backtest"
+    };
+
+    const interestProfileEndpoints = {
+        list: "/api/profiles/interest/list",
+        get: "/api/profiles/interest",
+        upsert: "/api/profiles/interest/upsert",
+        delete: "/api/profiles/interest",
+        toggle: "/api/profiles/interest",
+        backtest: "/api/profiles/interest/backtest",
+        test: "/api/profiles/test",
+        train: "/api/profiles/train",
+        export: "/api/profiles/export"
+    };
+
+    // Initialize modules with endpoints
+    if (window.AlertProfiles) {
+        window.AlertProfiles.init(alertProfileEndpoints);
+    }
+
+    if (window.InterestProfiles) {
+        window.InterestProfiles.init(interestProfileEndpoints);
+    }
+</script>
+{% endblock %}

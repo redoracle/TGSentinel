@@ -1,0 +1,931 @@
+{% extends "base.html" %}
+{% block title %}Analytics · TG Sentinel{% endblock %}
+
+{% block content %}
+<section class="row g-4 mb-4">
+    <div class="col-12 col-md-4">
+        <article class="stat-card h-100" aria-labelledby="metric-mpm">
+            <div class="card-body">
+                <p class="card-text text-uppercase">Messages per minute</p>
+                <h3 class="card-title mb-1" id="metric-mpm">0</h3>
+                <small>Rolling 60 minute window</small>
+            </div>
+        </article>
+    </div>
+    <div class="col-12 col-md-4">
+        <article class="stat-card h-100" aria-labelledby="metric-latency">
+            <div class="card-body">
+                <p class="card-text text-uppercase">Semantic latency</p>
+                <h3 class="card-title mb-1" id="metric-latency">0.000s</h3>
+                <small>Median inference time</small>
+            </div>
+        </article>
+    </div>
+    <div class="col-12 col-md-4">
+        <article class="stat-card h-100" aria-labelledby="metric-accuracy">
+            <div class="card-body">
+                <p class="card-text text-uppercase">Feedback accuracy</p>
+                <h3 class="card-title mb-1" id="metric-accuracy">{{ summary.feedback_accuracy | default(0.0) }}%</h3>
+                <small>👍 vs 👎 over 24h</small>
+            </div>
+        </article>
+    </div>
+</section>
+
+<!-- TG Sentinel Health (modular component) -->
+{% include 'analytics_containers.html' %}
+
+<!-- API Endpoints Status -->
+{% include 'analytics_endpoints.html' %}
+
+<!-- Live Metrics (Prometheus) -->
+{% include 'analytics_metrics.html' %}
+
+<section class="row g-4 mb-4">
+    <div class="col-12">
+        <article class="card h-100" aria-labelledby="performance-chart-heading">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#performance-chart-body" aria-expanded="true" aria-controls="performance-chart-body">
+                    <i class="bi bi-chevron-right collapse-icon"></i>
+                    <div>
+                        <h2 class="card-title mb-0" id="performance-chart-heading">Performance Metrics</h2>
+                        <small class="text-muted">Recent system performance (last 24 hours)</small>
+                    </div>
+                </button>
+                <div class="d-flex gap-2">
+                    <a href="/docs#performance-metrics" class="btn btn-outline-primary btn-sm" title="View performance metrics documentation" target="_blank" rel="noopener">
+                        <i class="bi bi-info-circle"></i>
+                    </a>
+                    <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-performance">Refresh</button>
+                </div>
+            </div>
+            <div class="collapse show card-body" id="performance-chart-body">
+                <div class="chart-container chart-container-lg">
+                    <canvas id="performance-chart" aria-label="Performance chart" role="img"></canvas>
+                </div>
+            </div>
+        </article>
+    </div>
+</section>
+
+<section class="row g-4 mb-4">
+    <div class="col-12 col-xl-6">
+        <article class="card h-100" aria-labelledby="keyword-heatmap-heading">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#keyword-heatmap-body" aria-expanded="true" aria-controls="keyword-heatmap-body">
+                    <i class="bi bi-chevron-right collapse-icon"></i>
+                    <div>
+                        <h2 class="card-title mb-0" id="keyword-heatmap-heading">Keyword Heatmap</h2>
+                        <small class="text-muted">Frequency of detected keywords</small>
+                    </div>
+                </button>
+                <div class="d-flex gap-2">
+                    <a href="/docs#keyword-heatmap" class="btn btn-outline-primary btn-sm" title="View keyword heatmap documentation" target="_blank" rel="noopener">
+                        <i class="bi bi-info-circle"></i>
+                    </a>
+                    <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-keywords">Refresh</button>
+                </div>
+            </div>
+            <div class="collapse show card-body" id="keyword-heatmap-body">
+                <div class="chart-container chart-container-md">
+                    <canvas id="keywords-chart" aria-label="Keyword heatmap" role="img"></canvas>
+                </div>
+            </div>
+        </article>
+    </div>
+    <div class="col-12 col-xl-6">
+        <article class="card h-100" aria-labelledby="channel-impact-heading">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#channel-impact-body" aria-expanded="true" aria-controls="channel-impact-body">
+                    <i class="bi bi-chevron-right collapse-icon"></i>
+                    <div>
+                        <h2 class="card-title mb-0" id="channel-impact-heading">Channel Impact</h2>
+                        <small class="text-muted">Alert distribution by channel</small>
+                    </div>
+                </button>
+                <a href="/docs#channel-impact" class="btn btn-outline-primary btn-sm" title="View API documentation" target="_blank">
+                    <i class="bi bi-info-circle"></i>
+                </a>
+            </div>
+            <div class="collapse show card-body" id="channel-impact-body">
+                <div class="chart-container compact">
+                    <canvas id="channel-chart" class="shadow-soft" aria-label="Channel impact" role="img"></canvas>
+                </div>
+            </div>
+        </article>
+    </div>
+</section>
+
+<section class="card" aria-labelledby="anomaly-monitor-heading">
+    <div class="card-header">
+        <h2 class="card-title mb-0" id="anomaly-monitor-heading">Anomaly Monitor</h2>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table align-middle mb-0" id="anomaly-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Channel</th>
+                        <th scope="col">Signal</th>
+                        <th scope="col">Severity</th>
+                        <th scope="col">Detected</th>
+                        <th scope="col">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td colspan="5" class="text-center text-muted">No anomalies flagged.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    const metricsEndpoint = "{{ url_for('dashboard.analytics_metrics') }}";
+    const keywordsEndpoint = "{{ url_for('dashboard.analytics_keywords') }}";
+    const channelsEndpoint = "{{ url_for('dashboard.analytics_channels') }}";
+    const anomaliesEndpoint = "{{ url_for('analytics.api_analytics_anomalies') }}";
+
+    // Utility function to escape HTML and prevent XSS
+    function escapeHtml(text) {
+        if (text == null || text === undefined) return '';
+        const map = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        };
+        return String(text).replace(/[&<>"']/g, m => map[m]);
+    }
+
+    let performanceChart;
+    let keywordChart;
+    let channelChart;
+
+    function ensureChart(ctx, config) {
+        if (!ctx) {
+            return null;
+        }
+        if (ctx._chartRef) {
+            ctx._chartRef.destroy();
+        }
+        ctx._chartRef = new Chart(ctx, config);
+        return ctx._chartRef;
+    }
+
+    async function refreshPerformance() {
+        try {
+            // Fetch time-series metrics from Sentinel (last 24 hours)
+            const response = await fetch(`${metricsEndpoint}?hours=24&interval_minutes=60`);
+            if (!response.ok) {
+                throw new Error("metrics fetch failed");
+            }
+            const payload = await response.json();
+            
+            // Extract time-series data
+            const metrics = payload.metrics ?? [];
+            
+            if (metrics.length === 0) {
+                console.warn("No metrics data available");
+                document.getElementById("metric-mpm").textContent = "0";
+                document.getElementById("metric-latency").textContent = "0.000s";
+                return;
+            }
+            
+            // Calculate current (latest) values for KPI display
+            const latest = metrics[metrics.length - 1];
+            const messagesPerMin = (latest.alert_count / 60).toFixed(2);
+            const avgScore = latest.avg_score ?? 0;
+            
+            // Update KPI displays
+            document.getElementById("metric-mpm").textContent = messagesPerMin;
+            document.getElementById("metric-latency").textContent = `${avgScore.toFixed(2)}`;
+
+            // Prepare data for chart (use all time buckets)
+            const timestamps = metrics.map(m => {
+                const dt = new Date(m.timestamp);
+                return dt.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            });
+            const alertCounts = metrics.map(m => m.alert_count);
+            const avgScores = metrics.map(m => m.avg_score ?? 0);
+
+            // Render chart with time-series data
+            const ctx = document.getElementById("performance-chart");
+            performanceChart = ensureChart(ctx, {
+                type: "line",
+                data: {
+                    labels: timestamps,
+                    datasets: [
+                        {
+                            label: "Alerts",
+                            data: alertCounts,
+                            borderColor: "#7d8bff",
+                            backgroundColor: "rgba(125, 139, 255, 0.1)",
+                            fill: true,
+                            tension: 0.4,
+                        },
+                        {
+                            label: "Avg Score",
+                            data: avgScores,
+                            borderColor: "#f5576c",
+                            backgroundColor: "rgba(245, 87, 108, 0.1)",
+                            fill: true,
+                            tension: 0.4,
+                        },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true },
+                    },
+                    scales: {
+                        y: { 
+                            beginAtZero: true, 
+                            ticks: { color: "#cfd6ff" }, 
+                            grid: { color: "rgba(255,255,255,0.08)" } 
+                        },
+                        x: { 
+                            ticks: { 
+                                color: "#b7c0ff",
+                                maxRotation: 45,
+                                minRotation: 0,
+                                autoSkip: true,
+                                maxTicksLimit: 10
+                            }, 
+                            grid: { color: "rgba(255,255,255,0.06)" } 
+                        }
+                    },
+                    layout: { padding: { top: 8, bottom: 6 } }
+                },
+            });
+        } catch (error) {
+            console.error(error);
+            showToast("Analytics metrics unavailable", "error");
+        }
+    }
+
+    async function refreshKeywords() {
+        try {
+            const response = await fetch(keywordsEndpoint);
+            if (!response.ok) {
+                throw new Error("keywords fetch failed");
+            }
+            const payload = await response.json();
+            const keywords = payload.keywords || [];
+            
+            // Show empty state if no keywords
+            if (keywords.length === 0) {
+                const emptyMsg = '<div class="text-center text-muted p-4"><p>No keywords configured</p><small>Add keywords to channel configurations to see data here</small></div>';
+                document.getElementById('keyword-heatmap-body').innerHTML = emptyMsg;
+                return;
+            }
+            const labels = keywords.map((item) => item.keyword);
+            const values = keywords.map((item) => item.count);
+
+            // Generate colors dynamically to match the number of keywords
+            const basePalette = ["#667eea", "#764ba2", "#00f2fe", "#f5576c", "#feca57"];
+            const backgroundColor = values.map((_, index) => {
+                if (index < basePalette.length) {
+                    return basePalette[index];
+                }
+                // Generate additional colors using HSL
+                const hue = (index * 137.5) % 360; // Golden angle for better distribution
+                return `hsla(${hue}, 65%, 60%, 0.8)`;
+            });
+
+            const keywordsCtx = document.getElementById("keywords-chart");
+            keywordChart = ensureChart(keywordsCtx, {
+                type: "bar",
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: "Matches",
+                            data: values,
+                            backgroundColor: backgroundColor,
+                            borderColor: "rgba(255,255,255,0.08)",
+                            borderWidth: 1,
+                        },
+                    ],
+                },
+                options: {
+                    indexAxis: "y",
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { 
+                            ticks: { color: "#d8ddff" }, 
+                            grid: { color: "rgba(255,255,255,0.05)" } 
+                        },
+                        x: { 
+                            beginAtZero: true,
+                            ticks: { 
+                                color: "#c7cfff",
+                                maxTicksLimit: 8
+                            }, 
+                            grid: { color: "rgba(255,255,255,0.08)" } 
+                        }
+                    },
+                    layout: { padding: { top: 4, bottom: 4 } },
+                    categoryPercentage: 0.7,
+                    barPercentage: 0.8,
+                    maxBarThickness: 22,
+                },
+            });
+        } catch (error) {
+            console.error(error);
+            showToast("Keyword analytics unavailable", "error");
+        }
+    }
+
+    async function refreshChannels() {
+        try {
+            const response = await fetch(channelsEndpoint);
+            if (!response.ok) {
+                throw new Error("channels fetch failed");
+            }
+            const payload = await response.json();
+            const channels = payload.channels || [];
+            
+            // Show empty state if no channels
+            if (channels.length === 0) {
+                const emptyMsg = '<div class="text-center text-muted p-4"><p>No channel data</p><small>No alerts triggered in the last 24 hours</small></div>';
+                document.getElementById('channel-impact-body').innerHTML = emptyMsg;
+                return;
+            }
+            
+            const labels = channels.map((item) => item.channel);
+            const values = channels.map((item) => item.count);
+
+            // Generate colors dynamically
+            const basePalette = ["#667eea", "#764ba2", "#00f2fe", "#f5576c", "#feca57"];
+            const backgroundColor = values.map((_, index) => {
+                if (index < basePalette.length) {
+                    return basePalette[index];
+                }
+                const hue = (index * 137.5) % 360;
+                return `hsla(${hue}, 65%, 60%, 0.8)`;
+            });
+
+            const channelCtx = document.getElementById("channel-chart");
+            channelChart = ensureChart(channelCtx, {
+                type: "doughnut",
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: "Alerts",
+                            data: values,
+                            backgroundColor: backgroundColor,
+                            borderColor: "rgba(255,255,255,0.2)",
+                            borderWidth: 1,
+                        },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: {
+                        padding: {
+                            top: 6,
+                            bottom: 6,
+                            left: 10,
+                            right: 10
+                        }
+                    },
+                    plugins: { 
+                        legend: { 
+                            position: "right",
+                            align: "center",
+                            labels: {
+                                boxWidth: 12,
+                                boxHeight: 12,
+                                padding: 12,
+                                color: '#ffffff',
+                                font: {
+                                    size: 12,
+                                    weight: '400'
+                                },
+                                generateLabels: function(chart) {
+                                    const data = chart.data;
+                                    if (data.labels.length && data.datasets.length) {
+                                        return data.labels.map((label, i) => {
+                                            const dataset = data.datasets[0];
+                                            const value = dataset.data[i];
+                                            const total = dataset.data.reduce((a, b) => a + b, 0);
+                                            const percentage = ((value / total) * 100).toFixed(1);
+                                            return {
+                                                text: `${label} (${percentage}%)`,
+                                                fillStyle: dataset.backgroundColor[i],
+                                                color: '#ffffff',
+                                                fontColor: '#ffffff',
+                                                hidden: false,
+                                                index: i
+                                            };
+                                        });
+                                    }
+                                    return [];
+                                }
+                            }
+                        }
+                    },
+                },
+            });
+        } catch (error) {
+            console.error(error);
+            showToast("Channel analytics unavailable", "error");
+        }
+    }
+
+    async function refreshAnomalies() {
+        try {
+            const response = await fetch(anomaliesEndpoint);
+            if (!response.ok) {
+                throw new Error("anomalies fetch failed");
+            }
+            const payload = await response.json();
+            const anomalies = payload.anomalies || [];
+
+            const tbody = document.querySelector('#anomaly-table tbody');
+            if (!tbody) return;
+            if (!anomalies.length) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No anomalies flagged.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = anomalies.map(a => {
+                const sev = String(a.severity || 'info').toLowerCase();
+                const sevBadge = sev === 'warning' ? 'bg-warning' : (sev === 'error' ? 'bg-danger' : 'bg-info');
+                const when = a.detected ? new Date(a.detected).toLocaleString() : '';
+                return `
+                    <tr>
+                        <td>${escapeHtml(a.channel || '')}</td>
+                        <td>${escapeHtml(a.signal || '')}</td>
+                        <td><span class="badge ${sevBadge} badge-raised">${escapeHtml(sev)}</span></td>
+                        <td>${escapeHtml(when)}</td>
+                        <td><button type="button" class="btn btn-sm btn-outline-primary" disabled title="Review coming soon">Review</button></td>
+                    </tr>`;
+            }).join('');
+        } catch (error) {
+            console.error(error);
+            const tbody = document.querySelector('#anomaly-table tbody');
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Anomalies unavailable</td></tr>';
+            }
+        }
+    }
+
+    // Interval management to prevent memory leaks
+    let performanceIntervalId = null;
+    let keywordsIntervalId = null;
+    let anomaliesIntervalId = null;
+    let containersIntervalId = null;
+    let systemHealthIntervalId = null;
+    let endpointsIntervalId = null;
+    let metricsIntervalId = null;
+
+    async function refreshContainers() {
+        try {
+            const response = await fetch('/api/analytics/containers');
+            if (!response.ok) {
+                throw new Error('Container health fetch failed');
+            }
+            const data = await response.json();
+            
+            if (data.status !== 'ok' || !data.containers) {
+                throw new Error(data.message || 'Invalid response');
+            }
+            
+            const grid = document.getElementById('container-grid');
+            if (!grid) return;
+            
+            if (data.containers.length === 0) {
+                grid.innerHTML = '<div class="text-center text-muted py-4">No containers found</div>';
+                return;
+            }
+            
+            // Build container cards
+            grid.innerHTML = data.containers.map(container => {
+                const statusClass = container.running ? 'online' : 'offline';
+                const statusText = container.status === 'running' ? 'Running' : container.status;
+                const cpuPercent = container.cpu_percent || 0;
+                const memPercent = container.memory_percent || 0;
+                const memMb = container.memory_mb || 0;
+                
+                // Color coding based on thresholds
+                const cpuColor = cpuPercent > 85 ? 'danger' : cpuPercent > 70 ? 'warning' : 'success';
+                const memColor = memPercent > 90 ? 'danger' : memPercent > 80 ? 'warning' : 'success';
+                
+                return `
+                    <div class="container-card">
+                        <div class="status-indicator ${statusClass}"></div>
+                        <h4 class="container-name">${escapeHtml(container.short_name || container.name)}</h4>
+                        <div class="container-metrics">
+                            <div class="metric-row">
+                                <span class="metric-label">Status:</span>
+                                <span class="metric-value status-${statusClass}">${escapeHtml(statusText)}</span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-label">Uptime:</span>
+                                <span class="metric-value">${escapeHtml(container.uptime_display || 'N/A')}</span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-label">Restarts:</span>
+                                <span class="metric-value">${container.restarts || 0}</span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-label">CPU:</span>
+                                <span class="metric-value text-${cpuColor}">${cpuPercent.toFixed(1)}%</span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-label">Memory:</span>
+                                <span class="metric-value text-${memColor}">${memMb.toFixed(0)} MB (${memPercent.toFixed(1)}%)</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+        } catch (error) {
+            console.error('Container health refresh error:', error);
+            const grid = document.getElementById('container-grid');
+            if (grid) {
+                grid.innerHTML = `
+                    <div class="alert alert-warning mb-0" role="alert">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        Container health monitoring unavailable. ${escapeHtml(error.message)}
+                    </div>
+                `;
+            }
+        }
+    }
+
+    // Refresh system health score
+    async function refreshSystemHealth() {
+        try {
+            const response = await fetch('/api/analytics/system-health');
+            if (!response.ok) {
+                throw new Error('System health fetch failed');
+            }
+            const data = await response.json();
+            
+            if (data.status !== 'ok') {
+                throw new Error(data.message || 'Invalid response');
+            }
+            
+            // Update health score
+            const healthScore = data.health_score || 0;
+            document.getElementById('health-score-value').textContent = healthScore;
+            document.getElementById('health-indicator-fill').style.width = `${healthScore}%`;
+            
+            // Calculate aggregate stats from components
+            const components = data.components || {};
+            
+            // Containers: X/Y Running
+            const containerDetails = components.containers?.details || {};
+            const containersText = containerDetails.running !== undefined && containerDetails.total !== undefined
+                ? `${containerDetails.running}/${containerDetails.total} Running`
+                : '--';
+            document.getElementById('health-containers').textContent = containersText;
+            
+            // APIs: X/Y Online
+            const apiDetails = components.api_endpoints?.details || {};
+            const apisText = apiDetails.online !== undefined && apiDetails.total !== undefined
+                ? `${apiDetails.online}/${apiDetails.total} Online`
+                : '--';
+            document.getElementById('health-apis').textContent = apisText;
+            
+            // CPU Usage
+            const resourceDetails = components.resources?.details || {};
+            const cpuText = resourceDetails.avg_cpu_percent !== undefined
+                ? `${resourceDetails.avg_cpu_percent.toFixed(1)}% Avg`
+                : '--';
+            document.getElementById('health-cpu').textContent = cpuText;
+            
+            // Memory
+            const memText = resourceDetails.avg_memory_percent !== undefined
+                ? `${resourceDetails.avg_memory_percent.toFixed(1)}% Avg`
+                : '--';
+            document.getElementById('health-memory').textContent = memText;
+            
+        } catch (error) {
+            console.error('System health refresh error:', error);
+            document.getElementById('health-score-value').textContent = '--';
+        }
+    }
+
+    // Refresh API endpoints status
+    async function refreshEndpoints() {
+        try {
+            const response = await fetch('/api/analytics/endpoints');
+            if (!response.ok) {
+                throw new Error('Endpoints fetch failed');
+            }
+            const data = await response.json();
+            
+            if (data.status !== 'ok') {
+                throw new Error(data.message || 'Invalid response');
+            }
+            
+            const groups = data.groups || [];
+            const list = document.getElementById('endpoints-list');
+            if (!list) return;
+            
+            if (groups.length === 0) {
+                list.innerHTML = '<li class="endpoint-item"><div class="text-center text-muted py-4 w-100">No endpoints found</div></li>';
+                return;
+            }
+            
+            // Build endpoint list from groups
+            list.innerHTML = groups.map(group => {
+                const groupName = group.group || 'Unknown';
+                const allOnline = group.online || false;
+                const avgLatency = group.avg_latency_ms || 0;
+                const endpoints = group.endpoints || [];
+                
+                const endpointTree = endpoints.map(ep => {
+                    const statusDot = ep.online ? 'online' : 'offline';
+                    const path = ep.path || 'unknown';
+                    const latency = ep.latency_ms !== undefined ? ep.latency_ms.toFixed(0) + 'ms' : 'N/A';
+                    return `
+                        <div class="endpoint-name">
+                            <span class="status-dot ${statusDot}"></span>${escapeHtml(path)}
+                            <span class="latency-badge ms-2">${latency}</span>
+                        </div>
+                    `;
+                }).join('');
+                
+                return `
+                    <li class="endpoint-item">
+                        <div>
+                            <div class="endpoint-path">${escapeHtml(groupName)} (${group.port || 'N/A'})</div>
+                            <div class="endpoint-tree mt-2">
+                                <div class="endpoint-group">
+                                    ${endpointTree}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="endpoint-status">
+                            <span class="status-badge ${allOnline ? 'online' : 'offline'}">
+                                <i class="bi bi-${allOnline ? 'check-circle-fill' : 'x-circle-fill'}"></i>
+                                ${allOnline ? 'Online' : 'Issues'}
+                            </span>
+                            <span class="latency-badge">Avg: ${avgLatency.toFixed(1)}ms</span>
+                        </div>
+                    </li>
+                `;
+            }).join('');
+            
+        } catch (error) {
+            console.error('Endpoints refresh error:', error);
+            const list = document.getElementById('endpoints-list');
+            if (list) {
+                list.innerHTML = `
+                    <li class="endpoint-item">
+                        <div class="alert alert-warning mb-0 w-100" role="alert">
+                            <i class="bi bi-exclamation-triangle me-2"></i>
+                            API endpoints monitoring unavailable. ${escapeHtml(error.message)}
+                        </div>
+                    </li>
+                `;
+            }
+        }
+    }
+
+    // Refresh live metrics (Prometheus)
+    async function refreshLiveMetrics() {
+        try {
+            const response = await fetch('/api/analytics/prometheus');
+            if (!response.ok) {
+                throw new Error('Prometheus metrics fetch failed');
+            }
+            const data = await response.json();
+            
+            if (data.status !== 'ok') {
+                throw new Error(data.message || 'Invalid response');
+            }
+            
+            const metrics = data.metrics || {};
+            const grid = document.getElementById('metrics-grid');
+            if (!grid) return;
+            
+            const metricEntries = Object.entries(metrics);
+            if (metricEntries.length === 0) {
+                grid.innerHTML = `
+                    <div class="alert alert-info mb-0 w-100" role="alert">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <strong>No Prometheus metrics available.</strong><br>
+                        <small>The Sentinel service may not be exposing metrics yet. Check that the /metrics endpoint is enabled.</small>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Human-readable number formatter
+            function formatMetricValue(value, metricName) {
+                if (typeof value !== 'number') return value;
+                
+                // Bytes
+                if (metricName.includes('bytes') || metricName.includes('memory')) {
+                    if (value >= 1e9) return (value / 1e9).toFixed(2) + ' GB';
+                    if (value >= 1e6) return (value / 1e6).toFixed(2) + ' MB';
+                    if (value >= 1e3) return (value / 1e3).toFixed(2) + ' KB';
+                    return value.toFixed(0) + ' B';
+                }
+                
+                // Seconds/timestamps
+                if (metricName.includes('seconds') && value > 1e9) {
+                    const date = new Date(value * 1000);
+                    return date.toLocaleString();
+                }
+                
+                // Seconds/latency (small values)
+                if (metricName.includes('seconds') || metricName.includes('latency')) {
+                    if (value < 1) return (value * 1000).toFixed(2) + ' ms';
+                    return value.toFixed(3) + ' s';
+                }
+                
+                // File descriptors
+                if (metricName.includes('fds')) {
+                    if (value >= 1e6) return (value / 1e6).toFixed(2) + 'M';
+                    if (value >= 1e3) return (value / 1e3).toFixed(2) + 'K';
+                    return value.toFixed(0);
+                }
+                
+                // Large counters
+                if (value >= 1e6) return (value / 1e6).toFixed(2) + 'M';
+                if (value >= 1e3) return (value / 1e3).toFixed(2) + 'K';
+                
+                // Small numbers
+                if (value < 10) return value.toFixed(3);
+                return value.toFixed(0);
+            }
+            
+            // Define metric display configurations
+            const metricConfigs = {
+                'worker_authorized': { label: 'Worker Status', icon: 'bi-person-check-fill', iconClass: 'success', valueClass: 'text-success' },
+                'worker_connected': { label: 'Worker Connected', icon: 'bi-check-circle-fill', iconClass: 'success' },
+                'redis_stream_depth': { label: 'Redis Queue Depth', icon: 'bi-inbox-fill', iconClass: 'info' },
+                'messages_processed_total': { label: 'Messages Processed', icon: 'bi-speedometer2', iconClass: 'success' },
+                'api_requests_total': { label: 'API Requests', icon: 'bi-graph-up', iconClass: 'info' },
+                'db_messages_current': { label: 'DB Message Count', icon: 'bi-database-fill', iconClass: 'warning' },
+                'semantic_scoring_latency_seconds': { label: 'Semantic Latency', icon: 'bi-clock-fill', iconClass: 'success' }
+            };
+            
+            // Build metric cards
+            grid.innerHTML = metricEntries.map(([metricName, metricData]) => {
+                const config = metricConfigs[metricName] || { 
+                    label: metricName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), 
+                    icon: 'bi-graph-up', 
+                    iconClass: 'info' 
+                };
+                
+                const value = metricData.value !== undefined ? metricData.value : '--';
+                const displayValue = formatMetricValue(value, metricName);
+                
+                // Calculate gauge percentage and color for numeric values
+                let gaugePercent = 0;
+                let gaugeClass = '';
+                if (typeof value === 'number') {
+                    // Normalize different metric types
+                    if (metricName.includes('authorized') || metricName.includes('connected')) {
+                        gaugePercent = value * 100; // 0-1 range
+                        gaugeClass = value >= 1 ? '' : 'warning';
+                    } else if (metricName.includes('cpu') || metricName.includes('memory')) {
+                        gaugePercent = Math.min(100, value); // 0-100 range
+                        gaugeClass = value > 80 ? 'danger' : (value > 60 ? 'warning' : '');
+                    } else if (metricName.includes('latency') || metricName.includes('seconds')) {
+                        // For latency, lower is better - scale to 0-100%
+                        gaugePercent = Math.min(100, (value / 10) * 100);
+                        gaugeClass = value > 5 ? 'danger' : (value > 2 ? 'warning' : '');
+                    } else {
+                        // For counters, show relative fill
+                        gaugePercent = Math.min(100, (value / 100) * 100);
+                    }
+                }
+                
+                return `
+                    <div class="metric-card">
+                        <div class="metric-icon ${config.iconClass}">
+                            <i class="bi ${config.icon}"></i>
+                        </div>
+                        <div class="metric-label">${escapeHtml(config.label)}</div>
+                        <div class="metric-value-large ${config.valueClass || ''}">${escapeHtml(String(displayValue))}</div>
+                        ${typeof value === 'number' ? `
+                            <div class="metric-gauge">
+                                <div class="metric-gauge-fill ${gaugeClass}" style="width: ${gaugePercent}%"></div>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('');
+            
+        } catch (error) {
+            console.error('Live metrics refresh error:', error);
+            const grid = document.getElementById('metrics-grid');
+            if (grid) {
+                grid.innerHTML = `
+                    <div class="alert alert-warning mb-0" role="alert">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        Live metrics unavailable. ${escapeHtml(error.message)}
+                    </div>
+                `;
+            }
+        }
+    }
+
+    function startIntervals() {
+        // Clear any existing intervals before starting new ones
+        stopIntervals();
+        systemHealthIntervalId = setInterval(refreshSystemHealth, 30000);  // 30 seconds
+        containersIntervalId = setInterval(refreshContainers, 10000);  // 10 seconds
+        endpointsIntervalId = setInterval(refreshEndpoints, 60000);  // 60 seconds
+        metricsIntervalId = setInterval(refreshLiveMetrics, 30000);  // 30 seconds
+        performanceIntervalId = setInterval(refreshPerformance, 120000);
+        keywordsIntervalId = setInterval(refreshKeywords, 300000);
+        anomaliesIntervalId = setInterval(refreshAnomalies, 300000);
+    }
+
+    function stopIntervals() {
+        if (systemHealthIntervalId !== null) {
+            clearInterval(systemHealthIntervalId);
+            systemHealthIntervalId = null;
+        }
+        if (containersIntervalId !== null) {
+            clearInterval(containersIntervalId);
+            containersIntervalId = null;
+        }
+        if (endpointsIntervalId !== null) {
+            clearInterval(endpointsIntervalId);
+            endpointsIntervalId = null;
+        }
+        if (metricsIntervalId !== null) {
+            clearInterval(metricsIntervalId);
+            metricsIntervalId = null;
+        }
+        if (performanceIntervalId !== null) {
+            clearInterval(performanceIntervalId);
+            performanceIntervalId = null;
+        }
+        if (keywordsIntervalId !== null) {
+            clearInterval(keywordsIntervalId);
+            keywordsIntervalId = null;
+        }
+        if (anomaliesIntervalId !== null) {
+            clearInterval(anomaliesIntervalId);
+            anomaliesIntervalId = null;
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        document.getElementById("btn-refresh-performance")?.addEventListener("click", refreshPerformance);
+        document.getElementById("btn-refresh-keywords")?.addEventListener("click", () => { refreshKeywords(); refreshChannels(); refreshAnomalies(); });
+        document.getElementById("btn-refresh-containers")?.addEventListener("click", () => { refreshSystemHealth(); refreshContainers(); });
+        document.getElementById("btn-refresh-endpoints")?.addEventListener("click", refreshEndpoints);
+        document.getElementById("btn-refresh-metrics")?.addEventListener("click", refreshLiveMetrics);
+        
+        refreshSystemHealth();
+        refreshContainers();
+        refreshEndpoints();
+        refreshLiveMetrics();
+        refreshPerformance();
+        refreshKeywords();
+        refreshChannels();
+        refreshAnomalies();
+        startIntervals();
+    });
+
+    // Clean up intervals on page unload
+    window.addEventListener("beforeunload", stopIntervals);
+
+    // Pause intervals when page is hidden, resume when visible
+    document.addEventListener("visibilitychange", () => {
+        if (document.hidden) {
+            stopIntervals();
+        } else {
+            startIntervals();
+        }
+    });
+
+    // Collapse icon rotation
+    document.addEventListener("DOMContentLoaded", () => {
+        document.querySelectorAll(".collapse").forEach((collapseEl) => {
+            const trigger = document.querySelector(`[data-bs-target="#${collapseEl.id}"] .collapse-icon`);
+            if (!trigger) return;
+            const update = () => {
+                trigger.style.transform = collapseEl.classList.contains("show") ? "rotate(90deg)" : "";
+            };
+            collapseEl.addEventListener("shown.bs.collapse", update);
+            collapseEl.addEventListener("hidden.bs.collapse", update);
+            update();
+        });
+    });
+</script>
+{% endblock %}

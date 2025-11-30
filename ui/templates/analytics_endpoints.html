@@ -1,0 +1,47 @@
+<!-- API Endpoints Status -->
+<section class="row g-4 mb-4">
+    <div class="col-12">
+        <article class="card" aria-labelledby="api-endpoints-heading">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" 
+                        type="button" 
+                        data-bs-toggle="collapse" 
+                        data-bs-target="#api-endpoints-body" 
+                        aria-expanded="false" 
+                        aria-controls="api-endpoints-body">
+                    <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
+                    <div>
+                        <h2 class="card-title mb-0" id="api-endpoints-heading">API Endpoints Status</h2>
+                        <small class="text-muted">Health checks and latency monitoring</small>
+                    </div>
+                </button>
+                <div class="d-flex gap-2">
+                    <a href="/docs#api-endpoints-status" 
+                       class="btn btn-outline-primary btn-sm" 
+                       title="View API endpoints documentation" 
+                       target="_blank" 
+                       rel="noopener">
+                        <i class="bi bi-info-circle"></i>
+                    </a>
+                    <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-endpoints">
+                        <i class="bi bi-arrow-clockwise"></i>
+                        Refresh
+                    </button>
+                </div>
+            </div>
+            <div class="collapse card-body p-0" id="api-endpoints-body">
+                <ul class="endpoints-list" id="endpoints-list">
+                    <!-- Endpoints will be dynamically inserted here -->
+                    <li class="endpoint-item">
+                        <div class="text-center text-muted py-4 w-100">
+                            <div class="spinner-border spinner-border-sm me-2" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            Loading API endpoints status...
+                        </div>
+                    </li>
+                </ul>
+            </div>
+        </article>
+    </div>
+</section>
