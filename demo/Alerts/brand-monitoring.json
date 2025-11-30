@@ -1,0 +1,60 @@
+{
+  "name": "Brand & Reputation Monitor",
+  "description": "Monitors customer sentiment and brand references to surface emerging reputation risks.",
+  "enabled": false,
+  "min_score": 3.5,
+  "keywords": [
+    "[YOUR_BRAND]",
+    "[YOUR_PRODUCT]",
+    "[CEO_NAME]",
+    "feedback",
+    "review",
+    "opinion",
+    "experience",
+    "support"
+  ],
+  "action_keywords": [],
+  "decision_keywords": [],
+  "urgency_keywords": ["crisis", "issue", "problem", "complaint"],
+  "importance_keywords": [],
+  "release_keywords": ["announcement", "launch", "release", "update"],
+  "security_keywords": [],
+  "risk_keywords": [],
+  "opportunity_keywords": [],
+  "detect_codes": false,
+  "detect_documents": false,
+  "detect_links": false,
+  "require_forwarded": false,
+  "prioritize_pinned": true,
+  "prioritize_admin": false,
+  "prioritize_private": false,
+  "detect_polls": true,
+  "detect_mentions": false,
+  "detect_questions": true,
+  "scoring_weights": {
+    "urgency": 1.8,
+    "importance": 1.2,
+    "release": 1.0,
+    "keywords": 1.0
+  },
+  "vip_senders": [],
+  "webhooks": [],
+  "excluded_users": [],
+  "reaction_threshold": 10,
+  "reply_threshold": 5,
+  "positive_weight": 1.0,
+  "negative_weight": 0.15,
+  "channels": [],
+  "users": [],
+  "tags": ["marketing", "brand", "reputation", "social-listening"],
+  "digest": {
+    "schedules": [
+      {
+        "schedule": "every_6h",
+        "top_n": 15,
+        "min_score": 3.5,
+        "mode": "digest"
+      }
+    ]
+  }
+}

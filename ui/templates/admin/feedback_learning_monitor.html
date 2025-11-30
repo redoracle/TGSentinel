@@ -1,0 +1,898 @@
+{% extends "base.html" %}
+
+{% block title %}Feedback Learning Monitor{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <h2>
+        <i class="bi bi-gear-fill me-2"></i>
+        Feedback Learning System Monitor
+    </h2>
+    <p class="text-muted">Real-time monitoring of processing and feedback decay</p>
+
+    <!-- System Status Cards -->
+    <div class="row mt-4">
+        <div class="col-md-3">
+            <div class="card bg-dark border-secondary">
+                <div class="card-body text-center">
+                    <h5 class="text-muted">Batch Queue</h5>
+                    <div class="fs-2 fw-bold" id="queue-count">-</div>
+                    <small class="text-muted">profiles pending</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-dark border-secondary">
+                <div class="card-body text-center">
+                    <h5 class="text-muted">Last Batch</h5>
+                    <div class="fs-2 fw-bold" id="last-batch">-</div>
+                    <small class="text-muted">ago</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-dark border-secondary">
+                <div class="card-body text-center">
+                    <h5 class="text-muted">Profiles w/ Feedback</h5>
+                    <div class="fs-2 fw-bold text-info" id="profiles-with-feedback">-</div>
+                    <small class="text-muted">total</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-dark border-warning">
+                <div class="card-body text-center">
+                    <h5 class="text-warning">Near Drift Cap</h5>
+                    <div class="fs-2 fw-bold text-warning" id="profiles-near-cap">-</div>
+                    <small class="text-muted">profiles</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Health Status -->
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card bg-dark border-secondary">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="bi bi-activity me-2"></i>
+                        Background Tasks
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span>Batch Processor:</span>
+                        <span id="batch-processor-status" class="badge bg-secondary">Unknown</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>Decay Task:</span>
+                        <span id="decay-task-status" class="badge bg-secondary">Unknown</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card bg-dark border-secondary">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="bi bi-info-circle me-2"></i>
+                        Last Decay
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>Last Run:</span>
+                        <span id="last-decay" class="text-muted">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Batch Queue Details -->
+    <div class="card bg-dark border-secondary mt-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="bi bi-clock-history me-2"></i>
+                Batch Processing
+            </h5>
+            <button class="btn btn-sm btn-primary" onclick="triggerBatch()" id="trigger-batch-btn">
+                <i class="bi bi-lightning-fill me-1"></i>
+                Trigger Batch Now
+            </button>
+        </div>
+        <div class="card-body">
+            <!-- Tab Navigation -->
+            <ul class="nav nav-tabs nav-fill mb-3" id="batchTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="current-queue-tab" data-bs-toggle="tab" data-bs-target="#current-queue" type="button" role="tab">
+                        <i class="bi bi-hourglass-split me-1"></i>
+                        Current Queue
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="batch-history-tab" data-bs-toggle="tab" data-bs-target="#batch-history" type="button" role="tab" onclick="loadBatchHistory()">
+                        <i class="bi bi-clock-history me-1"></i>
+                        Batch History
+                    </button>
+                </li>
+            </ul>
+
+            <!-- Tab Content -->
+            <div class="tab-content" id="batchTabsContent">
+                <!-- Current Queue Tab -->
+                <div class="tab-pane fade show active" id="current-queue" role="tabpanel">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-dark">
+                            <thead>
+                                <tr>
+                                    <th>Profile ID</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="queue-table">
+                                <tr>
+                                    <td colspan="2" class="text-center text-muted">
+                                        No profiles in queue
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Batch History Tab -->
+                <div class="tab-pane fade" id="batch-history" role="tabpanel">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-dark">
+                            <thead>
+                                <tr>
+                                    <th>Started</th>
+                                    <th>Duration</th>
+                                    <th>Profiles</th>
+                                    <th>Trigger</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="history-table">
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted">
+                                        Loading history...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Profile Breakdown by Type -->
+    <div class="card bg-dark border-secondary mt-4">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="bi bi-pie-chart me-2"></i>
+                Profile Breakdown
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card bg-secondary border-primary">
+                        <div class="card-header">
+                            <h6 class="mb-0">
+                                <i class="bi bi-search me-1"></i>
+                                Alert Profiles (Keyword-based)
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row text-center">
+                                <div class="col-6">
+                                    <div class="border rounded p-2 mb-2">
+                                        <small class="text-muted d-block">Total with Feedback</small>
+                                        <div class="fs-4 fw-bold text-primary" id="alert-profiles-count">-</div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="border rounded p-2 mb-2">
+                                        <small class="text-muted d-block">Avg Negative Rate</small>
+                                        <div class="fs-4 fw-bold" id="alert-avg-negative-rate">-</div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="border rounded p-2">
+                                        <small class="text-muted d-block">Adjusted</small>
+                                        <div class="fs-5 fw-bold text-info" id="alert-adjusted-count">-</div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="border rounded p-2">
+                                        <small class="text-muted d-block">Near Cap</small>
+                                        <div class="fs-5 fw-bold text-warning" id="alert-near-cap">-</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card bg-secondary border-success">
+                        <div class="card-header">
+                            <h6 class="mb-0">
+                                <i class="bi bi-stars me-1"></i>
+                                Interest Profiles (Semantic)
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row text-center">
+                                <div class="col-6">
+                                    <div class="border rounded p-2 mb-2">
+                                        <small class="text-muted d-block">Total with Feedback</small>
+                                        <div class="fs-4 fw-bold text-success" id="interest-profiles-count">-</div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="border rounded p-2 mb-2">
+                                        <small class="text-muted d-block">Pending Samples</small>
+                                        <div class="fs-4 fw-bold" id="interest-pending-samples">-</div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="border rounded p-2">
+                                        <small class="text-muted d-block">Adjusted</small>
+                                        <div class="fs-5 fw-bold text-info" id="interest-adjusted-count">-</div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="border rounded p-2">
+                                        <small class="text-muted d-block">Near Cap</small>
+                                        <div class="fs-5 fw-bold text-warning" id="interest-near-cap">-</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-3">
+                <small class="text-muted">
+                    <i class="bi bi-info-circle me-1"></i>
+                    <strong>Adjusted:</strong> Profiles with threshold/min_score drift from original values. 
+                    <strong>Near Cap:</strong> Profiles approaching maximum drift limits (±0.25 for interest, +0.50 for alert).
+                </small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuration -->
+    <div class="card bg-dark border-secondary mt-4 mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="bi bi-sliders me-2"></i>
+                Configuration
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6 class="text-info">Batch Processing</h6>
+                    <ul class="list-unstyled">
+                        <li>
+                            <strong>Interval:</strong> <span id="batch-interval">-</span> seconds
+                        </li>
+                        <li>
+                            <strong>Size Threshold:</strong> <span id="batch-threshold">-</span> profiles
+                        </li>
+                    </ul>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="text-info">Feedback Decay</h6>
+                    <ul class="list-unstyled">
+                        <li>
+                            <strong>Window:</strong> <span id="decay-window">-</span> days
+                        </li>
+                        <li>
+                            <strong>Check Interval:</strong> <span id="decay-interval">-</span> hours
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Auto-refresh every 10 seconds
+    let refreshInterval;
+    let highlightProfileId = null;
+    let profileName = null;
+    
+    // Get profile_id from URL query parameter
+    function getProfileIdFromUrl() {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get('profile_id');
+    }
+    
+    // Fetch profile name
+    async function fetchProfileName(profileId) {
+        try {
+            const isAlert = parseInt(profileId) >= 1000 && parseInt(profileId) < 3000;
+            const endpoint = isAlert 
+                ? `/api/profiles/alert/${profileId}`
+                : `/api/profiles/interest/${profileId}`;
+            
+            const response = await fetch(endpoint);
+            if (response.ok) {
+                const result = await response.json();
+                return result.data?.name || `Profile ${profileId}`;
+            }
+        } catch (error) {
+            console.error('[FeedbackMonitor] Failed to fetch profile name:', error);
+        }
+        return `Profile ${profileId}`;
+    }
+    
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', async () => {
+        highlightProfileId = getProfileIdFromUrl();
+        if (highlightProfileId) {
+            console.log('[FeedbackMonitor] Highlighting profile:', highlightProfileId);
+            
+            // Fetch profile name
+            profileName = await fetchProfileName(highlightProfileId);
+            
+            // Show info banner about filtered profile
+            const banner = document.createElement('div');
+            banner.className = 'alert alert-info mb-3';
+            const strong = document.createElement('strong');
+            const icon = document.createElement('i');
+            icon.className = 'bi bi-funnel me-2';
+            strong.appendChild(icon);
+            strong.appendChild(document.createTextNode(`Viewing Profile: ${highlightProfileId} - ${profileName}`));
+            
+            const link = document.createElement('a');
+            link.href = '/feedback-learning-monitor';
+            link.className = 'btn btn-sm btn-outline-primary ms-3';
+            link.textContent = 'View All Profiles';
+            
+            banner.appendChild(strong);
+            banner.appendChild(link);
+            document.querySelector('.container-fluid h2').after(banner);
+            
+            // Hide the profile breakdown section that doesn't match
+            const isAlert = parseInt(highlightProfileId) >= 1000 && parseInt(highlightProfileId) < 3000;
+            const alertCard = document.querySelector('.col-md-6:has(.border-primary)');
+            const interestCard = document.querySelector('.col-md-6:has(.border-success)');
+            
+            if (isAlert && interestCard) {
+                interestCard.style.display = 'none';
+                if (alertCard) {
+                    alertCard.classList.remove('col-md-6');
+                    alertCard.classList.add('col-md-12');
+                }
+            } else if (!isAlert && alertCard) {
+                alertCard.style.display = 'none';
+                if (interestCard) {
+                    interestCard.classList.remove('col-md-6');
+                    interestCard.classList.add('col-md-12');
+                }
+            }
+        }
+        // When no profile specified, show both cards (default behavior)
+        
+        // Initial load
+        loadStatus();
+        
+        // Auto-refresh every 10 seconds
+        refreshInterval = setInterval(loadStatus, 10000);
+    });
+
+    async function loadStatus() {
+        try {
+            const response = await fetch('/api/feedback-learning/status');
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const result = await response.json();
+
+            if (result.status === 'ok') {
+                const data = result.data;
+
+                // Update counts
+                document.getElementById('queue-count').textContent = data.batch_processor?.pending_count ?? '-';
+                document.getElementById('profiles-with-feedback').textContent = data.aggregator?.stats_summary?.profiles_with_feedback ?? '-';
+                document.getElementById('profiles-near-cap').textContent = data.aggregator?.stats_summary?.profiles_near_drift_cap ?? '-';
+
+                // Update last batch time with validation
+                let rawSeconds = data.batch_processor?.seconds_since_last_batch ?? 0;
+                
+                // Validate: check for null/undefined/NaN and negative values
+                if (typeof rawSeconds !== 'number' || isNaN(rawSeconds)) {
+                    console.warn('[FEEDBACK-MONITOR] Invalid seconds_since_last_batch value:', rawSeconds, '- defaulting to 0');
+                    rawSeconds = 0;
+                } else if (rawSeconds < 0) {
+                    console.warn('[FEEDBACK-MONITOR] Negative seconds_since_last_batch value:', rawSeconds, '- clamping to 0');
+                    rawSeconds = 0;
+                }
+                
+                // Use validated value for calculations
+                const seconds = rawSeconds;
+                const minutes = Math.floor(seconds / 60);
+                const hours = Math.floor(minutes / 60);
+                
+                let timeText;
+                if (hours > 0) {
+                    timeText = `${hours}h ${minutes % 60}m`;
+                } else if (minutes > 0) {
+                    timeText = `${minutes} min`;
+                } else {
+                    timeText = `${Math.floor(seconds)} sec`;
+                }
+                document.getElementById('last-batch').textContent = timeText;
+
+                // Update background task status
+                const batchStatus = document.getElementById('batch-processor-status');
+                if (data.batch_processor.running) {
+                    batchStatus.textContent = 'Running';
+                    batchStatus.className = 'badge bg-success';
+                } else {
+                    batchStatus.textContent = 'Stopped';
+                    batchStatus.className = 'badge bg-danger';
+                }
+
+                const decayStatus = document.getElementById('decay-task-status');
+                if (data.aggregator.decay_running) {
+                    decayStatus.textContent = 'Running';
+                    decayStatus.className = 'badge bg-success';
+                } else {
+                    decayStatus.textContent = 'Stopped';
+                    decayStatus.className = 'badge bg-danger';
+                }
+
+                // Update last decay time
+                const lastDecay = new Date(data.aggregator.last_decay);
+                document.getElementById('last-decay').textContent = lastDecay.toLocaleString();
+
+                // Update queue table
+                const queueTable = document.getElementById('queue-table');
+                // Clear existing rows
+                queueTable.innerHTML = '';
+                
+                if (data.batch_processor.pending_count > 0) {
+                    // Build rows safely using DOM methods to prevent XSS
+                    const fragment = document.createDocumentFragment();
+                    
+                    for (const pid of data.batch_processor.pending_profiles) {
+                        const tr = document.createElement('tr');
+                        
+                        // Profile ID column
+                        const td1 = document.createElement('td');
+                        const code = document.createElement('code');
+                        code.textContent = pid; // Safe: textContent escapes HTML
+                        td1.appendChild(code);
+                        
+                        // Status column
+                        const td2 = document.createElement('td');
+                        const badge = document.createElement('span');
+                        badge.className = 'badge bg-warning';
+                        badge.textContent = 'Pending';
+                        td2.appendChild(badge);
+                        
+                        tr.appendChild(td1);
+                        tr.appendChild(td2);
+                        fragment.appendChild(tr);
+                    }
+                    
+                    queueTable.appendChild(fragment);
+                } else {
+                    // No profiles in queue
+                    const tr = document.createElement('tr');
+                    const td = document.createElement('td');
+                    td.colSpan = 2;
+                    td.className = 'text-center text-muted';
+                    td.textContent = 'No profiles in queue';
+                    tr.appendChild(td);
+                    queueTable.appendChild(tr);
+                }
+
+                // Update config
+                document.getElementById('batch-interval').textContent = data.config.batch_interval_seconds;
+                document.getElementById('batch-threshold').textContent = data.config.batch_size_threshold;
+                document.getElementById('decay-window').textContent = data.config.feedback_window_days;
+                document.getElementById('decay-interval').textContent = data.config.decay_interval_hours;
+                
+                // Update profile breakdown (if available in the API response)
+                if (data.aggregator.breakdown) {
+                    // Alert profiles
+                    document.getElementById('alert-profiles-count').textContent = 
+                        data.aggregator.breakdown.alert_profiles_count || 0;
+                    document.getElementById('alert-avg-negative-rate').textContent = 
+                        data.aggregator.breakdown.alert_avg_negative_rate 
+                            ? `${(data.aggregator.breakdown.alert_avg_negative_rate * 100).toFixed(1)}%` 
+                            : '-';
+                    document.getElementById('alert-adjusted-count').textContent = 
+                        data.aggregator.breakdown.alert_adjusted_count || 0;
+                    document.getElementById('alert-near-cap').textContent = 
+                        data.aggregator.breakdown.alert_near_cap || 0;
+                    
+                    // Interest profiles
+                    document.getElementById('interest-profiles-count').textContent = 
+                        data.aggregator.breakdown.interest_profiles_count || 0;
+                    document.getElementById('interest-pending-samples').textContent = 
+                        data.aggregator.breakdown.interest_pending_samples || 0;
+                    document.getElementById('interest-adjusted-count').textContent = 
+                        data.aggregator.breakdown.interest_adjusted_count || 0;
+                    document.getElementById('interest-near-cap').textContent = 
+                        data.aggregator.breakdown.interest_near_cap || 0;
+                }
+                
+                // If a specific profile is being viewed, load its detailed stats
+                if (highlightProfileId) {
+                    loadProfileStats(highlightProfileId);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load status:', error);
+            if (window.SharedUtils) {
+                window.SharedUtils.showToast('Failed to load feedback learning status', 'error');
+            }
+        }
+    }
+
+    async function triggerBatch() {
+        const btn = document.getElementById('trigger-batch-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Processing...';
+
+        try {
+            const response = await fetch('/api/feedback-learning/trigger-batch', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (response.ok) {
+                if (window.SharedUtils) {
+                    window.SharedUtils.showToast('✓ Batch processing triggered', 'success');
+                } else {
+                    alert('Batch processing triggered successfully');
+                }
+                setTimeout(() => {
+                    loadStatus();
+                    // Reload history if tab is active
+                    if (document.getElementById('batch-history-tab').classList.contains('active')) {
+                        loadBatchHistory();
+                    }
+                }, 2000); // Refresh after 2 seconds
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                const errorMsg = errorData.message || `HTTP ${response.status}`;
+                throw new Error(errorMsg);
+            }
+        } catch (error) {
+            console.error('Failed to trigger batch:', error);
+            if (window.SharedUtils) {
+                window.SharedUtils.showToast('Failed to trigger batch processing: ' + error.message, 'error');
+            } else {
+                alert('Failed to trigger batch processing: ' + error.message);
+            }
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-lightning-fill me-1"></i>Trigger Batch Now';
+        }
+    }
+    
+    async function loadBatchHistory() {
+        try {
+            const response = await fetch('/api/feedback-learning/batch-history?limit=50');
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const result = await response.json();
+
+            if (result.status === 'ok') {
+                const history = result.data.history;
+                const historyTable = document.getElementById('history-table');
+                
+                if (history.length === 0) {
+                    historyTable.innerHTML = `
+                        <tr>
+                            <td colspan="5" class="text-center text-muted">
+                                No batch history found
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+
+                // Build rows safely using DOM methods
+                const fragment = document.createDocumentFragment();
+                
+                for (const batch of history) {
+                    const tr = document.createElement('tr');
+                    
+                    // Started time
+                    const td1 = document.createElement('td');
+                    const startedDate = new Date(batch.started_at);
+                    const small1 = document.createElement('small');
+                    small1.textContent = startedDate.toLocaleDateString();
+                    const br = document.createElement('br');
+                    const small2 = document.createElement('small');
+                    small2.className = 'text-muted';
+                    small2.textContent = startedDate.toLocaleTimeString();
+                    td1.appendChild(small1);
+                    td1.appendChild(br);
+                    td1.appendChild(small2);
+                    
+                    // Duration
+                    const td2 = document.createElement('td');
+                    td2.textContent = `${safeFormatDecimal(batch.elapsed_seconds, 2)}s`;
+                    
+                    // Profiles processed
+                    const td3 = document.createElement('td');
+                    const badge = document.createElement('span');
+                    badge.className = 'badge bg-info';
+                    badge.textContent = String(safeFormatNumber(batch.profiles_processed));
+                    td3.appendChild(badge);
+                    
+                    if (batch.profiles_processed > 0 && Array.isArray(batch.profile_ids) && batch.profile_ids.length > 0) {
+                        td3.appendChild(document.createElement('br'));
+                        const small = document.createElement('small');
+                        small.className = 'text-muted';
+                        const displayIds = batch.profile_ids.slice(0, 3).map(id => String(id)).join(', ');
+                        small.textContent = displayIds + (batch.profile_ids.length > 3 ? '...' : '');
+                        td3.appendChild(small);
+                    }
+                    
+                    // Trigger type
+                    const td4 = document.createElement('td');
+                    const triggerBadge = document.createElement('span');
+                    triggerBadge.className = batch.trigger_type === 'manual' ? 'badge bg-warning' : 'badge bg-secondary';
+                    triggerBadge.textContent = batch.trigger_type;
+                    td4.appendChild(triggerBadge);
+                    
+                    // Status
+                    const td5 = document.createElement('td');
+                    const statusBadge = document.createElement('span');
+                    statusBadge.className = batch.status === 'completed' ? 'badge bg-success' : 'badge bg-danger';
+                    statusBadge.textContent = batch.status;
+                    td5.appendChild(statusBadge);
+                    
+                    tr.appendChild(td1);
+                    tr.appendChild(td2);
+                    tr.appendChild(td3);
+                    tr.appendChild(td4);
+                    tr.appendChild(td5);
+                    fragment.appendChild(tr);
+                }
+                
+                historyTable.innerHTML = '';
+                historyTable.appendChild(fragment);
+            }
+        } catch (error) {
+            console.error('Failed to load batch history:', error);
+            const historyTable = document.getElementById('history-table');
+            
+            if (historyTable) {
+                // Clear existing content
+                historyTable.innerHTML = '';
+                
+                // Create error row safely
+                const tr = document.createElement('tr');
+                const td = document.createElement('td');
+                td.colSpan = 5;
+                td.className = 'text-center text-danger';
+                td.textContent = error && error.message ? String(error.message) : 'Failed to load history';
+                
+                tr.appendChild(td);
+                historyTable.appendChild(tr);
+            }
+        }
+    }
+    
+    async function loadProfileStats(profileId) {
+        try {
+            // Determine if it's an alert or interest profile based on ID range
+            const isAlert = parseInt(profileId) >= 1000 && parseInt(profileId) < 3000;
+            const endpoint = isAlert 
+                ? `/api/profiles/alert/${profileId}/feedback-stats`
+                : `/api/profiles/interest/${profileId}/feedback-stats`;
+            
+            console.log('[FeedbackMonitor] Loading profile stats from:', endpoint);
+            
+            const response = await fetch(endpoint);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const result = await response.json();
+            console.log('[FeedbackMonitor] Profile stats loaded:', result);
+            
+            // Display profile-specific stats in a dedicated section
+            displayProfileStats(profileId, result, isAlert);
+            
+        } catch (error) {
+            console.error('[FeedbackMonitor] Failed to load profile stats:', error);
+            const profileSection = document.getElementById('profile-specific-stats');
+            if (profileSection) {
+                profileSection.innerHTML = '';
+                const alert = document.createElement('div');
+                alert.className = 'alert alert-warning';
+                
+                const strong = document.createElement('strong');
+                const icon = document.createElement('i');
+                icon.className = 'bi bi-exclamation-triangle me-2';
+                strong.appendChild(icon);
+                strong.appendChild(document.createTextNode('Unable to load profile stats'));
+                alert.appendChild(strong);
+                
+                const p = document.createElement('p');
+                p.className = 'mb-0 small';
+                p.textContent = 'Error: ' + error.message;
+                alert.appendChild(p);
+                
+                profileSection.appendChild(alert);
+            }
+        }
+    }
+    
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = String(text);
+        return div.innerHTML;
+    }
+
+    function safeFormatNumber(value, defaultValue = 0) {
+        const num = Number(value);
+        return isNaN(num) ? defaultValue : num;
+    }
+
+    function safeFormatPercent(value) {
+        const num = Number(value);
+        return isNaN(num) ? '-' : num.toFixed(1) + '%';
+    }
+
+    function safeFormatDecimal(value, decimals = 3) {
+        const num = Number(value);
+        return isNaN(num) ? '0.' + '0'.repeat(decimals) : num.toFixed(decimals);
+    }
+
+    function createStatCard(label, value, className = '') {
+        const col = document.createElement('div');
+        col.className = 'col-md-3';
+        
+        const strong = document.createElement('strong');
+        strong.className = 'text-muted';
+        strong.textContent = label;
+        
+        const valueDiv = document.createElement('div');
+        valueDiv.className = 'fs-4' + (className ? ' ' + className : '');
+        valueDiv.textContent = String(value);
+        
+        col.appendChild(strong);
+        col.appendChild(valueDiv);
+        return col;
+    }
+
+    function displayProfileStats(profileId, data, isAlert) {
+        // Find or create a section to display profile-specific stats
+        let profileSection = document.getElementById('profile-specific-stats');
+        if (!profileSection) {
+            // Create the section after the system status cards
+            profileSection = document.createElement('div');
+            profileSection.id = 'profile-specific-stats';
+            profileSection.className = 'row mt-4';
+            const firstRow = document.querySelector('.container-fluid .row.mt-4');
+            if (!firstRow) {
+                console.warn('[Feedback Monitor] Unable to find container row for profile stats insertion');
+                return;
+            }
+            firstRow.after(profileSection);
+        }
+        
+        // Clear previous content
+        profileSection.innerHTML = '';
+        
+        if (isAlert && data.data && data.data.db_stats) {
+            const stats = data.data.db_stats;
+            const displayName = String(profileName || `Profile ${safeFormatNumber(profileId)}`);
+            
+            // Create main container
+            const colDiv = document.createElement('div');
+            colDiv.className = 'col-12';
+            
+            const card = document.createElement('div');
+            card.className = 'card bg-dark border-primary';
+            
+            // Create header
+            const cardHeader = document.createElement('div');
+            cardHeader.className = 'card-header';
+            
+            const h5 = document.createElement('h5');
+            h5.className = 'mb-0';
+            
+            const icon = document.createElement('i');
+            icon.className = 'bi bi-file-earmark-text me-2';
+            h5.appendChild(icon);
+            h5.appendChild(document.createTextNode(`Alert Profile ${safeFormatNumber(profileId)} - ${displayName}`));
+            
+            cardHeader.appendChild(h5);
+            card.appendChild(cardHeader);
+            
+            // Create body
+            const cardBody = document.createElement('div');
+            cardBody.className = 'card-body';
+            
+            const row = document.createElement('div');
+            row.className = 'row g-3';
+            
+            // Add stat cards
+            row.appendChild(createStatCard('Positive Feedback:', safeFormatNumber(stats.positive_feedback), 'text-success'));
+            row.appendChild(createStatCard('Negative Feedback:', safeFormatNumber(stats.negative_feedback), 'text-danger'));
+            row.appendChild(createStatCard('Approval Rate:', safeFormatPercent(stats.approval_rate), 'text-info'));
+            row.appendChild(createStatCard('Current Min Score:', stats.current_min_score || '-', ''));
+            
+            cardBody.appendChild(row);
+            card.appendChild(cardBody);
+            colDiv.appendChild(card);
+            profileSection.appendChild(colDiv);
+            
+        } else if (!isAlert && data.stats) {
+            const stats = data.stats;
+            const displayName = String(profileName || `Profile ${safeFormatNumber(profileId)}`);
+            
+            // Create main container
+            const colDiv = document.createElement('div');
+            colDiv.className = 'col-12';
+            
+            const card = document.createElement('div');
+            card.className = 'card bg-dark border-primary';
+            
+            // Create header
+            const cardHeader = document.createElement('div');
+            cardHeader.className = 'card-header';
+            
+            const h5 = document.createElement('h5');
+            h5.className = 'mb-0';
+            
+            const icon = document.createElement('i');
+            icon.className = 'bi bi-graph-up me-2';
+            h5.appendChild(icon);
+            h5.appendChild(document.createTextNode(`Interest Profile ${safeFormatNumber(profileId)} - ${displayName}`));
+            
+            cardHeader.appendChild(h5);
+            card.appendChild(cardHeader);
+            
+            // Create body
+            const cardBody = document.createElement('div');
+            cardBody.className = 'card-body';
+            
+            const row = document.createElement('div');
+            row.className = 'row g-3';
+            
+            // Add stat cards
+            row.appendChild(createStatCard('Borderline FPs:', safeFormatNumber(stats.borderline_fp), 'text-warning'));
+            row.appendChild(createStatCard('Severe FPs:', safeFormatNumber(stats.severe_fp), 'text-danger'));
+            row.appendChild(createStatCard('Strong TPs:', safeFormatNumber(stats.strong_tp), 'text-success'));
+            row.appendChild(createStatCard('Threshold Drift:', safeFormatDecimal(stats.cumulative_threshold_delta), ''));
+            
+            cardBody.appendChild(row);
+            card.appendChild(cardBody);
+            colDiv.appendChild(card);
+            profileSection.appendChild(colDiv);
+        }
+    }
+
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', () => {
+        if (refreshInterval) {
+            clearInterval(refreshInterval);
+        }
+    });
+</script>
+{% endblock %}

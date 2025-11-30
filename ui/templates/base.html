@@ -1,0 +1,1740 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>{% block title %}TG Sentinel{% endblock %}</title>
+	<meta name="description" content="Intelligent Telegram Activity Sentinel">
+
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+	<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
+	<!-- Load Socket.IO immediately while safeguarding AMD define -->
+	<script>
+		(function () {
+			if (window.__socketIoLoading) {
+				return;
+			}
+			window.__socketIoLoading = true;
+			const originalDefine = window.define;
+			const restoreDefine = () => {
+				if (originalDefine) {
+					window.define = originalDefine;
+				} else {
+					delete window.define;
+				}
+			};
+			try {
+				if (window.define && window.define.amd) {
+					delete window.define;
+				}
+			} catch (err) {
+				window.define = undefined;
+			}
+			const socketScript = document.createElement('script');
+			socketScript.src = 'https://cdn.socket.io/4.5.4/socket.io.min.js';
+			socketScript.integrity = 'sha384-/KNQL8Nu5gCHLqwqfQjA689Hhoqgi2S84SNUxC3roTe4EhJ9AfLkp8QiQcU8AMzI';
+			socketScript.crossOrigin = 'anonymous';
+			socketScript.async = true;
+			socketScript.onload = restoreDefine;
+			socketScript.onerror = (err) => {
+				restoreDefine();
+				console.warn('[TG Sentinel] Socket.IO script failed to load', err);
+			};
+			document.head.appendChild(socketScript);
+		})();
+	</script>
+
+	<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+	{% block extra_head %}{% endblock %}
+</head>
+<body{% block body_attrs %}{% endblock %}>
+		<nav class="navbar navbar-expand-lg sticky-top" aria-label="Primary navigation">
+			<div class="container-fluid">
+				<!-- Row 1: Brand & Auth Actions -->
+				<div class="ts-header-top">
+					<div class="ts-brand">
+						<a class="navbar-brand" href="{{ url_for('views.dashboard') }}">
+							<img src="{{ url_for('static', filename='images/logo.png') }}" alt="TG Sentinel" class="navbar-logo" height="56" width="56">
+							<div>
+								<div class="navbar-brand-text">TG Sentinel</div>
+								<div class="navbar-brand-subtitle">Intelligent Telegram Activity Sentinel</div>
+							</div>
+						</a>
+					</div>
+
+					<div class="ts-auth-actions">
+						<a class="btn btn-outline-primary btn-sm" href="/logout" id="btn-logout" aria-label="Logout">Logout</a>
+						<button class="btn btn-outline-primary btn-sm btn-lock me-5" type="button" id="btn-ui-lock" title="Lock UI" aria-label="Lock UI">
+							<i class="bi bi-lock-fill icon-lg"></i>
+						</button>
+						<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#primaryNav" aria-controls="primaryNav" aria-expanded="false" aria-label="Toggle navigation">
+							<span class="navbar-toggler-icon"></span>
+						</button>
+					</div>
+				</div>
+
+				<!-- Row 2: User Block & Navigation Menu -->
+				<div class="collapse navbar-collapse" id="primaryNav">
+					<div class="ts-header-bottom">
+						<div class="ts-user-block ms-30 me-5">
+							<img id="user-avatar" src="{{ url_for('static', filename='images/logo.png') }}" data-default-src="{{ url_for('static', filename='images/logo.png') }}" loading="lazy" alt="User avatar" class="rounded-circle ts-avatar" role="img" aria-label="User avatar">
+							<div class="ts-user-text">
+								<div class="ts-username-row">
+									<span id="username-label" class="ts-username">loading...</span>
+									<span id="status-indicator" class="badge status-offline ts-status-badge" role="status" aria-live="polite" title="System status">Offline</span>
+									{% if auth_bypass %}
+									<span class="badge bg-warning text-dark ts-auth-badge" title="UI auth bypass is enabled via UI_SKIP_AUTH">Auth Bypass</span>
+									{% endif %}
+								</div>
+								<div id="phone-mask" class="ts-phone">pending</div>
+							</div>
+						</div>
+
+						<ul class="navbar-nav ts-main-menu me-5">
+							<li class="nav-item">
+								<a class="nav-link {% if request.endpoint == 'views.dashboard' %}active{% endif %}" href="{{ url_for('views.dashboard') }}">Dashboard</a>
+							</li>
+							<li class="nav-item">
+								<a class="nav-link {% if request.endpoint in ['views.feeds', 'views.alerts'] %}active{% endif %}" href="{{ url_for('views.feeds') }}">Feeds</a>
+							</li>
+							<li class="nav-item dropdown">
+								<a class="nav-link dropdown-toggle {% if request.endpoint in ['views.config', 'views.profiles'] %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+									Configuration
+								</a>
+								<ul class="dropdown-menu">
+									<li><a class="dropdown-item {% if request.endpoint == 'views.config' %}active{% endif %}" href="{{ url_for('views.config') }}">Settings</a></li>
+									<li><a class="dropdown-item {% if request.endpoint == 'views.profiles' %}active{% endif %}" href="{{ url_for('views.profiles') }}">Profiles</a></li>
+								</ul>
+							</li>
+							<li class="nav-item">
+								<a class="nav-link {% if request.endpoint == 'views.analytics' %}active{% endif %}" href="{{ url_for('views.analytics') }}">Analytics</a>
+							</li>
+							<li class="nav-item dropdown">
+								<a class="nav-link dropdown-toggle {% if request.endpoint in ['views.developer', 'views.docs', 'views.console', 'views.message_formats'] %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+									Developer
+								</a>
+								<ul class="dropdown-menu">
+									<li><a class="dropdown-item {% if request.endpoint == 'views.developer' %}active{% endif %}" href="{{ url_for('views.developer') }}">Overview</a></li>
+									<li><a class="dropdown-item {% if request.endpoint == 'views.docs' %}active{% endif %}" href="{{ url_for('views.docs') }}">API Docs</a></li>
+									<li><a class="dropdown-item {% if request.endpoint == 'views.console' %}active{% endif %}" href="{{ url_for('views.console') }}">Console</a></li>
+									<li><hr class="dropdown-divider"></li>
+									<li><a class="dropdown-item {% if request.endpoint == 'views.message_formats' %}active{% endif %}" href="{{ url_for('views.message_formats') }}">Message Formats</a></li>
+								</ul>
+							</li>
+						</ul>
+
+						<!-- Mobile Auth Actions -->
+						<div class="ts-mobile-auth-actions">
+							<a class="btn btn-outline-primary btn-sm w-100 mb-2" href="/logout" id="btn-logout-mobile" aria-label="Logout">
+								<i class="bi bi-box-arrow-right me-2"></i>Logout
+							</a>
+							<button class="btn btn-outline-primary btn-sm w-100 btn-lock" type="button" id="btn-ui-lock-mobile" title="Lock UI" aria-label="Lock UI">
+								<i class="bi bi-lock-fill me-2"></i>Lock UI
+							</button>
+						</div>
+					</div>
+				</div>
+			</div>
+	</nav>
+
+	<main class="container-fluid py-4">
+		{% block content %}{% endblock %}
+	</main>
+
+	<div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3" aria-live="polite" aria-atomic="true"></div>
+
+	<!-- Participant Info Modal -->
+	<div class="modal fade" id="participantModal" tabindex="-1" aria-labelledby="participantModalLabel" aria-hidden="true">
+		<div class="modal-dialog modal-dialog-centered">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title" id="participantModalLabel">Participant Information</h5>
+					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+				</div>
+				<div class="modal-body" id="participantModalBody">
+					<div class="text-center py-4">
+						<div class="spinner-border" role="status">
+							<span class="visually-hidden">Loading...</span>
+						</div>
+						<p class="mt-2">Loading participant information...</p>
+					</div>
+			</div>
+			<div class="modal-footer">
+				<div id="participantModalActions" class="me-auto">
+					<!-- Action buttons will be injected here dynamically -->
+				</div>
+				<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+			</div>
+		</div>
+	</div>
+</div>	<!-- Login / Re-authentication Modal -->
+	<div class="modal fade" id="loginModal" tabindex="-1" aria-labelledby="loginModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+		<div class="modal-dialog modal-dialog-centered">
+			<div class="modal-content">
+				<div class="modal-header">
+					<img src="{{ url_for('static', filename='images/logo.png') }}" alt="TG Sentinel" class="modal-logo me-3">
+					<h5 class="modal-title" id="loginModalLabel">Authenticate Telegram Session</h5>
+				</div>
+				<div class="modal-body">
+					<!-- Login Method Toggle -->
+					<div class="mb-4">
+						<div class="btn-group w-100" role="group" aria-label="Login method selection">
+							<input type="radio" class="btn-check" name="loginMethod" id="methodPhone" autocomplete="off" checked>
+							<label class="btn btn-outline-primary" for="methodPhone">
+								<i class="bi bi-phone"></i> Phone Number
+							</label>
+							
+							<input type="radio" class="btn-check" name="loginMethod" id="methodUpload" autocomplete="off">
+							<label class="btn btn-outline-primary" for="methodUpload">
+								<i class="bi bi-upload"></i> Upload Session
+							</label>
+						</div>
+					</div>
+
+					<!-- Phone Login Form -->
+					<form id="loginForm" onsubmit="return false;">
+						<div class="mb-3">
+							<label for="loginPhone" class="form-label">Phone Number</label>
+                    <input type="tel" class="form-control" id="loginPhone" placeholder="+41 2600 0000" required autocomplete="tel" inputmode="tel">
+							<div class="form-text">Enter your Telegram account phone in international format.</div>
+						</div>
+						<div class="mb-3 d-none" id="codeRow">
+							<label for="loginCode" class="form-label">Code</label>
+                    <input type="text" class="form-control" id="loginCode" placeholder="12345" autocomplete="one-time-code" inputmode="numeric">
+							<div class="form-text">Enter the code you received in Telegram.</div>
+						</div>
+						<div class="mb-3 d-none" id="passwordRow">
+							<label for="loginPassword" class="form-label">Password</label>
+                    <input type="password" class="form-control" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
+							<div class="form-text">If two-factor authentication is enabled.</div>
+						</div>
+					</form>
+
+					<!-- Upload Session Form -->
+					<form id="uploadForm" class="d-none" enctype="multipart/form-data" onsubmit="return false;">
+						<div class="mb-3">
+							<label for="sessionFile" class="form-label">Session File</label>
+							<input type="file" class="form-control" id="sessionFile" accept=".session">
+							<div class="form-text">Upload a valid Telethon .session file. Files are portable across installations.</div>
+						</div>
+						<div class="alert alert-info small" role="alert">
+							<i class="bi bi-info-circle"></i> Session files contain your authorization key and can be used to restore access without SMS codes.
+						</div>
+					</form>
+
+					<div id="loginAlert" class="alert d-none" role="alert"></div>
+				</div>
+                <div class="modal-footer align-items-center">
+                    <button type="button" id="btnSendCode" class="btn btn-outline-primary">Send Code</button>
+                    <button type="button" id="btnVerifyCode" class="btn btn-primary d-none">Verify</button>
+                    <button type="button" id="btnResendCode" class="btn btn-link d-none">Resend code</button>
+                    <button type="button" id="btnUploadSession" class="btn btn-primary d-none">Upload & Restore</button>
+                    <span id="resendCountdown" class="text-muted small d-none" aria-live="polite"></span>
+                </div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Logout Confirmation Modal -->
+	<div class="modal fade" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true">
+		<div class="modal-dialog modal-dialog-centered">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title" id="logoutModalLabel">Logout Confirmation</h5>
+					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+				</div>
+				<div class="modal-body">
+					<p>Are you sure you want to logout? This will:</p>
+					<ul>
+						<li>Disconnect your Telegram session</li>
+						<li>Clear authentication state</li>
+						<li>Return you to the login screen</li>
+					</ul>
+					<p class="mb-0"><small class="text-muted">Your configuration and data will be preserved. You can log back in anytime.</small></p>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+					<button type="button" id="btnConfirmLogout" class="btn btn-primary">Logout</button>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+	<script src="{{ url_for('static', filename='js/progress-modal.js') }}"></script>
+	<script>
+		// Global function to enhance modals with glass backdrop effect
+		function applyGlassBackdrop(modalElement) {
+			if (!modalElement) return;
+			
+			const addGlassClass = () => {
+				// Small delay to ensure backdrop is rendered
+				setTimeout(() => {
+					const backdrop = document.querySelector('.modal-backdrop');
+					if (backdrop && !backdrop.classList.contains('glass-backdrop')) {
+						backdrop.classList.add('glass-backdrop');
+					}
+				}, 50);
+			};
+			
+			modalElement.addEventListener('shown.bs.modal', addGlassClass);
+			modalElement.addEventListener('show.bs.modal', addGlassClass);
+		}
+		
+		// Apply glass effect to all modals on page load
+		document.addEventListener('DOMContentLoaded', () => {
+			document.querySelectorAll('.modal').forEach(modal => {
+				applyGlassBackdrop(modal);
+			});
+		});
+	</script>
+	<script>
+		// UI Lock config from server (values injected via Jinja; wrap in strings for linting)
+		window.UI_LOCK_TIMEOUT = Number('{{ ui_lock_timeout|default(0, true)|int }}');
+		window.UI_LOCK_ENABLED = JSON.parse('{{ ui_lock_enabled|default(false, true)|tojson }}');
+	</script>
+	<script>
+		const toastContainer = document.getElementById("toast-container");
+
+		function showToast(message, variant = "info", options = {}) {
+			if (!toastContainer) {
+				return;
+			}
+			const id = `toast-${Date.now()}`;
+			const classes = {
+				success: "bg-success",
+				error: "bg-danger",
+				warning: "bg-warning text-dark",
+				info: "bg-info",
+			};
+			const cls = classes[variant] || classes.info;
+			const spinnerHtml = options.spinner ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>' : '';
+			const template = `
+				<div id="${id}" class="toast ${cls} text-white" role="alert" aria-live="assertive" aria-atomic="true">
+					<div class="toast-header ${cls} text-white">
+						<strong class="me-auto">TG Sentinel</strong>
+						<button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+					</div>
+					<div class="toast-body">${spinnerHtml}</div>
+				</div>`;
+			toastContainer.insertAdjacentHTML("beforeend", template);
+			const toastEl = document.getElementById(id);
+			if (!toastEl) {
+				return;
+			}
+			const body = toastEl.querySelector(".toast-body");
+			if (body) {
+				// Append message after spinner if spinner exists
+				const messageSpan = document.createElement('span');
+				messageSpan.textContent = String(message ?? "");
+				body.appendChild(messageSpan);
+			}
+			const toastOptions = { autohide: !options.persistent };
+			if (!options.persistent) {
+				toastOptions.delay = 4500;
+			}
+			const toast = new bootstrap.Toast(toastEl, toastOptions);
+			toast.show();
+			toastEl.addEventListener("hidden.bs.toast", () => toastEl.remove());
+			return id;
+		}
+
+		window.showToast = showToast;
+
+        async function refreshWorkerStatus(){
+            const badge = document.getElementById('status-indicator');
+            if (!badge) return;
+            try{
+                const resp = await fetch('/api/worker/status');
+                const data = await resp.json();
+                const auth = data && Object.prototype.hasOwnProperty.call(data,'authorized') ? data.authorized : null;
+                badge.classList.remove('status-online','status-offline');
+                if (auth === true){
+                    badge.classList.add('status-online');
+                    badge.textContent = 'Online';
+                    badge.setAttribute('aria-label','System online');
+                    badge.setAttribute('title','System online');
+                } else if (auth === false){
+                    badge.classList.add('status-offline');
+                    badge.textContent = 'Offline';
+                    badge.setAttribute('aria-label','System offline');
+                    badge.setAttribute('title','System offline - Worker not authorized');
+                } else {
+                    badge.classList.add('status-offline');
+                    badge.textContent = 'Offline';
+                    badge.setAttribute('aria-label','System offline');
+                    badge.setAttribute('title','System offline - Worker status unknown');
+                }
+            }catch(e){
+                badge.classList.remove('status-online');
+                badge.classList.add('status-offline');
+                badge.textContent = 'Offline';
+                badge.setAttribute('title','System offline - Connection error');
+            }
+        }
+
+	async function _fetchAvatarToElement(url, imgEl) {
+		// Fetch avatar as blob, validate content-type, then set src to blob URL.
+		// Returns true if avatar set, false otherwise.
+		if (!url || !imgEl) return false;
+		try {
+			// Use no-cache to avoid stale images served by proxies during rapid switches
+			const resp = await fetch(url, { cache: 'no-store', credentials: 'same-origin' });
+			if (!resp.ok) return false;
+			const ct = resp.headers.get('content-type') || '';
+			if (!ct.startsWith('image/')) return false;
+			const blob = await resp.blob();
+			const objectUrl = URL.createObjectURL(blob);
+			// Revoke previous object URL if present
+			const prev = imgEl.getAttribute('data-object-url');
+			if (prev) {
+				try { URL.revokeObjectURL(prev); } catch (e) {}
+			}
+			imgEl.setAttribute('data-object-url', objectUrl);
+			imgEl.src = objectUrl;
+			return true;
+		} catch (e) {
+			console.debug('Avatar fetch failed', e);
+			return false;
+		}
+	}
+
+	function _setDefaultAvatar(imgEl) {
+		if (!imgEl) return;
+		const def = imgEl.getAttribute('data-default-src') || "{{ url_for('static', filename='images/logo.png') }}";
+		// Clean up any previous object URL
+		const prev = imgEl.getAttribute('data-object-url');
+		if (prev) {
+			try { URL.revokeObjectURL(prev); } catch (e) {}
+			imgEl.removeAttribute('data-object-url');
+		}
+		imgEl.src = def;
+	}
+
+	async function populateSessionInfo(data) {
+		const avatarEl = document.getElementById("user-avatar");
+		const usernameEl = document.getElementById("username-label");
+		const phoneEl = document.getElementById("phone-mask");
+
+		// Handle authorized vs logged out state
+		if (data.authorized === false) {
+			// User is logged out - show login prompt state
+			if (usernameEl) usernameEl.textContent = "Not logged in";
+			if (phoneEl) phoneEl.textContent = "Login required";
+			if (avatarEl) _setDefaultAvatar(avatarEl);
+			return;
+		}
+
+		// User is authorized - populate with actual data
+		if (usernameEl && data.username) usernameEl.textContent = data.username;
+		if (phoneEl && data.phone_masked) phoneEl.textContent = data.phone_masked;
+
+		// Attempt to load avatar via fetch to validate image data and avoid browser caching issues
+		if (avatarEl && data.avatar) {
+			const cacheBuster = (data.avatar.indexOf('?') === -1) ? ('?t=' + Date.now()) : ('&t=' + Date.now());
+			const avatarUrl = data.avatar + cacheBuster;
+			const ok = await _fetchAvatarToElement(avatarUrl, avatarEl);
+			if (!ok) {
+				// Fallback to default static image
+				_setDefaultAvatar(avatarEl);
+			}
+		} else if (avatarEl) {
+			_setDefaultAvatar(avatarEl);
+		}
+
+		// Update status based on connection state
+		if (data.connected) refreshWorkerStatus();
+	}
+	async function refreshSessionInfo() {
+			try {
+				const response = await fetch("/api/session/info");
+				if (!response.ok) {
+					throw new Error(`HTTP ${response.status}`);
+				}
+				const payload = await response.json();
+				populateSessionInfo(payload);
+			} catch (error) {
+				console.error("Session info fetch failed", error);
+				showToast("Unable to refresh session information", "error");
+			}
+		}
+
+        document.addEventListener("DOMContentLoaded", () => {
+            refreshSessionInfo();
+            refreshWorkerStatus();
+            // Status updates are handled via Socket.IO events (socket.on("status"))
+            // No polling needed - reduces unnecessary network traffic
+
+		// Logout button shows confirmation modal with glass effect
+		const logoutBtn = document.getElementById("btn-logout");
+		const logoutBtnMobile = document.getElementById("btn-logout-mobile");
+		
+		const handleLogout = (ev) => {
+			ev.preventDefault();
+			try {
+				const modalEl = document.getElementById('logoutModal');
+				if (modalEl) {
+					const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+					modal.show();
+				}
+			} catch (e) {
+				console.error("Failed to show logout modal", e);
+			}
+		};
+		
+		if (logoutBtn) {
+			logoutBtn.addEventListener("click", handleLogout);
+		}
+		if (logoutBtnMobile) {
+			logoutBtnMobile.addEventListener("click", handleLogout);
+		}
+
+		// Confirm logout button performs simple session logout
+		const btnConfirmLogout = document.getElementById("btnConfirmLogout");
+		if (btnConfirmLogout) {
+			btnConfirmLogout.addEventListener("click", async () => {
+				// Hide the confirmation modal first
+				try {
+					const logoutModalEl = document.getElementById('logoutModal');
+					if (logoutModalEl) {
+						const logoutModal = bootstrap.Modal.getInstance(logoutModalEl);
+						if (logoutModal) logoutModal.hide();
+					}
+				} catch (e) {
+					console.error("Failed to hide logout modal", e);
+				}
+				
+				// Show progress modal
+				const progress = window.ProgressModal ? new window.ProgressModal() : null;
+				
+				if (progress) {
+					progress.show('logout', 'Logging Out');
+					progress.addLog('Initiating logout sequence...', 'info');
+				}
+				
+				// Disable to prevent double clicks
+				btnConfirmLogout.setAttribute('aria-busy', 'true');
+				btnConfirmLogout.classList.add('disabled');
+				
+				// Call logout API
+				try {
+					if (progress) {
+						progress.addLog('Sending logout request to sentinel...', 'info');
+						progress.nextStage();
+					}
+					
+					const response = await fetch('/api/session/logout', { method: 'POST' });
+					const data = await response.json();
+					console.log("Logout response:", data);
+					
+					if (progress) {
+						progress.addLog('Logout request sent to sentinel', 'success');
+						progress.nextStage();
+						
+						// Poll for logout progress from sentinel
+						const pollProgress = async () => {
+							const maxAttempts = 60; // 30 seconds max (500ms interval)
+							let attempts = 0;
+							let lastStage = null;
+							let lastMessage = null;
+							
+							let progressPollActive = true;
+							
+							const checkProgress = async () => {
+								if (!progressPollActive) return;
+								
+								attempts++;
+								
+								try {
+									const progressResp = await fetch('/api/worker/logout-progress');
+									
+									// If 401 or 403, logout is complete - stop polling
+									if (progressResp.status === 401 || progressResp.status === 403) {
+										progressPollActive = false;
+										progress.updateProgress(100, 'Logout complete');
+										progress.addLog('Logout completed - session cleared', 'success');
+										
+										try { sessionStorage.clear(); } catch (_) {}
+										try { localStorage.setItem('tgsentinel:logout', String(Date.now())); } catch (_) {}
+										
+										setTimeout(() => {
+											if (progress) progress.hide();
+											window.location.href = '/logout';
+										}, 2000);
+										return;
+									}
+									
+									if (progressResp.ok) {
+										const progressData = await progressResp.json();
+										console.log('[LOGOUT] Progress data:', progressData);
+										
+										if (progressData.stage && progressData.stage !== 'unknown') {
+											const percent = progressData.percent || 0;
+											const message = progressData.message || 'Processing...';
+											
+											// Always update progress bar
+											progress.updateProgress(percent, message);
+											
+											// Only add log if stage or message changed (prevent duplicates)
+											if (progressData.stage !== lastStage || message !== lastMessage) {
+												progress.addLog(message, 'info');
+												console.log(`[LOGOUT] Stage: ${progressData.stage}, Percent: ${percent}, Message: ${message}`);
+												lastStage = progressData.stage;
+												lastMessage = message;
+											}
+											
+											if (progressData.stage === 'completed' || percent >= 100) {
+												progressPollActive = false;
+												progress.addLog('Logout completed successfully!', 'success');
+												
+												// Clear local state
+												try { sessionStorage.clear(); } catch (_) {}
+												try { localStorage.setItem('tgsentinel:logout', String(Date.now())); } catch (_) {}
+												
+												// Wait for users to see completion
+												setTimeout(() => {
+													if (progress) progress.hide();
+													window.location.href = '/logout';
+												}, 2000);
+												return;
+											}
+										}
+									}
+								} catch (pollErr) {
+									console.debug('Progress poll error:', pollErr);
+									// On network error, assume logout succeeded after a few attempts
+									if (attempts > 3) {
+										progressPollActive = false;
+										progress.addLog('Logout complete (connection closed)', 'success');
+										try { sessionStorage.clear(); } catch (_) {}
+										try { localStorage.setItem('tgsentinel:logout', String(Date.now())); } catch (_) {}
+										setTimeout(() => {
+											if (progress) progress.hide();
+											window.location.href = '/logout';
+										}, 1500);
+										return;
+									}
+								}
+								
+								// Continue polling if still active and under max attempts
+								if (progressPollActive && attempts < maxAttempts) {
+									setTimeout(checkProgress, 500);
+								} else if (attempts >= maxAttempts) {
+									// Timeout - assume logout succeeded
+									progressPollActive = false;
+									progress.addLog('Logout timeout - assuming complete', 'warning');
+									try { sessionStorage.clear(); } catch (_) {}
+									try { localStorage.setItem('tgsentinel:logout', String(Date.now())); } catch (_) {}
+									setTimeout(() => {
+										if (progress) progress.hide();
+										window.location.href = '/logout';
+									}, 1000);
+								}
+							};
+							
+							// Start polling after a short delay
+							setTimeout(checkProgress, 500);
+						};
+						
+						pollProgress();
+					}
+				} catch (err) {
+					console.error("Logout request failed:", err);
+					if (progress) {
+						progress.addLog(`Logout error: ${err.message}`, 'error');
+					}
+					
+					// On error, force reload after delay
+					setTimeout(() => {
+						if (progress) progress.hide();
+						try { sessionStorage.clear(); } catch (_) {}
+						try { localStorage.setItem('tgsentinel:logout', String(Date.now())); } catch (_) {}
+						window.location.reload(true);
+					}, 2000);
+				}
+			});
+		}
+
+		// Cross-tab logout listener
+		window.addEventListener('storage', (e) => {
+			try {
+				if (e && e.key === 'tgsentinel:logout') {
+					window.location.assign('/logout');
+				}
+			} catch (_) {}
+		});
+
+		const refreshBtn = document.getElementById("btn-refresh-session");
+		if (refreshBtn) {
+			refreshBtn.addEventListener("click", refreshSessionInfo);
+		}
+
+		// Participant Information Modal
+		document.addEventListener("tgsentinel:show-participant-info", async (event) => {
+			const { chatId, userId, chatName, senderName, infoType } = event.detail;
+			const modal = new bootstrap.Modal(document.getElementById("participantModal"));
+			const modalLabel = document.getElementById("participantModalLabel");
+			const modalBody = document.getElementById("participantModalBody");
+			const modalActions = document.getElementById("participantModalActions");
+			
+			// Set title based on type
+			if (infoType === 'user') {
+				modalLabel.textContent = `User Info: ${senderName || "Unknown"}`;
+			} else if (infoType === 'chat') {
+				modalLabel.textContent = `Chat Info: ${chatName || "Unknown"}`;
+			} else {
+				modalLabel.textContent = `Info: ${senderName || chatName || "Participant"}`;
+			}
+			
+			modalBody.innerHTML = `
+				<div class="text-center py-4">
+					<div class="spinner-border text-primary" role="status">
+						<span class="visually-hidden">Loading...</span>
+					</div>
+					<p class="mt-2 text-muted">Fetching information...</p>
+				</div>
+			`;
+			modalActions.innerHTML = ''; // Clear actions while loading
+			modal.show();
+			
+			// Fetch monitored lists from Sentinel API
+			let monitoredChannels = [];
+			let monitoredUsers = [];
+			try {
+				const configResponse = await fetch('/api/config/current');
+				if (configResponse.ok) {
+					const config = await configResponse.json();
+					monitoredChannels = config.channels || [];
+					monitoredUsers = config.monitored_users || [];
+				}
+			} catch (err) {
+				console.warn("Failed to fetch monitored lists:", err);
+			}
+			
+			// Fetch participant info
+			try {
+				const params = new URLSearchParams({ chat_id: chatId, pending: '1' });
+				if (userId) {
+					params.append("user_id", userId);
+				}
+				
+				const response = await fetch(`/api/participant/info?${params}`);
+				// Handle non-OK responses explicitly to avoid silent fallbacks
+				if (!response.ok && response.status !== 202) {
+					let message = `Request failed (${response.status})`;
+					try {
+						const err = await response.json();
+						if (err && err.error) message = err.error;
+					} catch (e) {}
+					modalBody.innerHTML = `
+						<div class="alert alert-danger">
+							<i class="bi bi-exclamation-triangle me-2"></i>
+							${escapeHtml(message)}
+						</div>
+					`;
+					return;
+				}
+
+				const result = await response.json();
+				
+				if (response.status === 202) {
+					// Still processing; display minimal info if provided, then show a loading hint
+					try {
+						displayParticipantInfo(result, modalBody, infoType);
+					} catch (e) {
+						// Fall back to a generic spinner if minimal info isn't available
+						modalBody.innerHTML = '';
+					}
+					const loader = document.createElement('div');
+					loader.className = 'text-center py-3';
+					loader.innerHTML = `
+						<div class="spinner-border text-warning" role="status">
+							<span class="visually-hidden">Processing...</span>
+						</div>
+						<p class="mt-2 text-muted">Fetching data from Telegram...</p>
+					`;
+					modalBody.appendChild(loader);
+					
+					// Retry once after a slightly longer delay to match worker scan interval
+					await new Promise(resolve => setTimeout(resolve, 2000));
+					const retryResponse = await fetch(`/api/participant/info?${params}`);
+					if (!retryResponse.ok && retryResponse.status !== 202) {
+						let message = `Request failed (${retryResponse.status})`;
+						try {
+							const err = await retryResponse.json();
+							if (err && err.error) message = err.error;
+						} catch (e) {}
+						modalBody.innerHTML = `
+							<div class="alert alert-danger">
+								<i class="bi bi-exclamation-triangle me-2"></i>
+								${escapeHtml(message)}
+							</div>
+						`;
+						return;
+					}
+						const retryResult = await retryResponse.json();
+						if (retryResponse.status === 202) {
+						try { modalBody.innerHTML = ''; } catch (e) {}
+						displayParticipantInfo(retryResult, modalBody, infoType);
+						const warning = document.createElement('div');
+						warning.className = 'alert alert-warning mt-2';
+						warning.innerHTML = '<i class="bi bi-clock-history me-2"></i>Still fetching data. Please try again in a moment.';
+						modalBody.appendChild(warning);
+						return;
+					}
+					
+					displayParticipantInfo(retryResult, modalBody, infoType);
+					renderModalActions(retryResult, modalActions, monitoredChannels, monitoredUsers, infoType);
+				} else {
+					displayParticipantInfo(result, modalBody, infoType);
+					renderModalActions(result, modalActions, monitoredChannels, monitoredUsers, infoType);
+				}
+			} catch (error) {
+				console.error("Failed to fetch participant info:", error);
+				modalBody.innerHTML = `
+					<div class="alert alert-danger">
+						<i class="bi bi-exclamation-triangle me-2"></i>
+						Failed to load information.
+					</div>
+				`;
+			}
+		});
+		
+		}); // End DOMContentLoaded
+
+		function renderModalActions(data, container, monitoredChannels, monitoredUsers, infoType) {
+			container.innerHTML = '';
+			
+			// Add channel button (if chat data available)
+			if (data.chat && data.chat.id && (infoType === 'chat' || !infoType)) {
+				const chatId = data.chat.id;
+				const chatName = data.chat.title || data.chat.username || `Chat ${chatId}`;
+				const isMonitored = monitoredChannels.some(ch => ch.id === chatId);
+				
+				const channelBtn = document.createElement('button');
+				channelBtn.className = `btn btn-sm ${isMonitored ? 'btn-success' : 'btn-outline-primary'} me-2`;
+				channelBtn.innerHTML = isMonitored 
+					? '<i class="bi bi-check-circle-fill me-1"></i>Monitored Channel'
+					: '<i class="bi bi-plus-circle me-1"></i>Add to Monitored Channels';
+				channelBtn.disabled = isMonitored;
+				
+				if (!isMonitored) {
+					channelBtn.onclick = async () => {
+						channelBtn.disabled = true;
+						channelBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Adding...';
+						
+						try {
+							const response = await fetch('/api/config/channels/add', {
+								method: 'POST',
+								headers: { 'Content-Type': 'application/json' },
+								body: JSON.stringify({
+									channels: [{ id: chatId, name: chatName }]
+								})
+							});
+							
+							if (response.ok) {
+								channelBtn.className = 'btn btn-sm btn-success me-2';
+								channelBtn.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i>Monitored Channel';
+							} else {
+								channelBtn.disabled = false;
+								channelBtn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Failed';
+								setTimeout(() => {
+									channelBtn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Add to Monitored Channels';
+								}, 2000);
+							}
+						} catch (err) {
+							console.error("Failed to add channel:", err);
+							channelBtn.disabled = false;
+							channelBtn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Add to Monitored Channels';
+						}
+					};
+				}
+				
+				container.appendChild(channelBtn);
+			}
+			
+			// Add user button (if user data available)
+			if (data.user && data.user.id && (infoType === 'user' || !infoType)) {
+				const userId = data.user.id;
+				const userName = data.user.name || data.user.first_name || data.user.username || `User ${userId}`;
+				const userUsername = data.user.username || '';
+				const isMonitored = monitoredUsers.some(u => u.id === userId);
+				
+				const userBtn = document.createElement('button');
+				userBtn.className = `btn btn-sm ${isMonitored ? 'btn-success' : 'btn-outline-primary'}`;
+				userBtn.innerHTML = isMonitored 
+					? '<i class="bi bi-check-circle-fill me-1"></i>Monitored User'
+					: '<i class="bi bi-person-plus me-1"></i>Add to Monitored Users';
+				userBtn.disabled = isMonitored;
+				
+				if (!isMonitored) {
+					userBtn.onclick = async () => {
+						userBtn.disabled = true;
+						userBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Adding...';
+						
+						try {
+							const response = await fetch('/api/config/save', {
+								method: 'POST',
+								headers: { 'Content-Type': 'application/json' },
+								body: JSON.stringify({
+									monitored_users: [...monitoredUsers, {
+										id: userId,
+										name: userName,
+										username: userUsername,
+										enabled: true
+									}]
+								})
+							});
+							
+							if (response.ok) {
+								userBtn.className = 'btn btn-sm btn-success';
+								userBtn.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i>Monitored User';
+							} else {
+								userBtn.disabled = false;
+								userBtn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Failed';
+								setTimeout(() => {
+									userBtn.innerHTML = '<i class="bi bi-person-plus me-1"></i>Add to Monitored Users';
+								}, 2000);
+							}
+						} catch (err) {
+							console.error("Failed to add user:", err);
+							userBtn.disabled = false;
+							userBtn.innerHTML = '<i class="bi bi-person-plus me-1"></i>Add to Monitored Users';
+						}
+					};
+				}
+				
+				container.appendChild(userBtn);
+			}
+		}
+		
+		function displayParticipantInfo(data, container, infoType) {
+			// Handle explicit error payloads from API
+			if (data && data.error) {
+				container.innerHTML = `
+					<div class="alert alert-danger">
+						<i class="bi bi-exclamation-triangle me-2"></i>
+						${escapeHtml(String(data.error))}
+					</div>
+				`;
+				return;
+			}
+			let html = "";
+			
+			// Chat Information - show when requested, or as fallback if user info missing
+			if (data.chat && (!infoType || infoType === 'chat' || (infoType === 'user' && !data.user))) {
+				html += `<div class="mb-4">
+					<h6 class="text-muted mb-3"><i class="bi bi-chat-dots me-2"></i>Chat Information</h6>`;
+				
+				// Add chat avatar if available
+				if (data.chat.avatar_url) {
+					html += `<div class="text-center mb-3">
+						<img src="${escapeHtml(data.chat.avatar_url)}" alt="Chat avatar" class="rounded-circle avatar-lg" onerror="this.style.display='none';">
+					</div>`;
+				}
+				
+				html += `<dl class="row mb-0">`;
+				
+				if (data.chat.title) {
+					html += `
+						<dt class="col-sm-4">Title</dt>
+						<dd class="col-sm-8"><strong>${escapeHtml(data.chat.title)}</strong></dd>`;
+				}
+				
+				if (data.chat.type) {
+					let typeClass = "bg-info";
+					if (data.chat.type === "supergroup") typeClass = "bg-primary";
+					else if (data.chat.type === "channel") typeClass = "bg-success";
+					else if (data.chat.type === "group") typeClass = "bg-secondary";
+					html += `
+						<dt class="col-sm-4">Type</dt>
+						<dd class="col-sm-8"><span class="badge ${typeClass}">${escapeHtml(data.chat.type.toUpperCase())}</span>`;
+					if (data.chat.broadcast) html += ` <span class="badge bg-warning text-dark">BROADCAST</span>`;
+					if (data.chat.megagroup) html += ` <span class="badge bg-info">MEGAGROUP</span>`;
+					if (data.chat.gigagroup) html += ` <span class="badge bg-danger">GIGAGROUP</span>`;
+					if (data.chat.forum) html += ` <span class="badge bg-purple">FORUM</span>`;
+					html += `</dd>`;
+				}
+				
+				if (data.chat.username) {
+					html += `
+						<dt class="col-sm-4">Username</dt>
+						<dd class="col-sm-8">@${escapeHtml(data.chat.username)} <span class="badge bg-success">PUBLIC</span></dd>`;
+				}
+				
+				if (data.chat.id) {
+					html += `
+						<dt class="col-sm-4">Chat ID</dt>
+						<dd class="col-sm-8"><code class="user-select-all">${escapeHtml(String(data.chat.id))}</code></dd>`;
+				}
+				
+				if (data.chat.access_hash) {
+					html += `
+						<dt class="col-sm-4">Access Hash</dt>
+						<dd class="col-sm-8"><code class="user-select-all small">${escapeHtml(String(data.chat.access_hash))}</code></dd>`;
+				}
+				
+				if (data.chat.participants_count !== undefined) {
+					html += `
+						<dt class="col-sm-4">Members</dt>
+						<dd class="col-sm-8"><i class="bi bi-people-fill me-1"></i>${escapeHtml(String(data.chat.participants_count))}</dd>`;
+				}
+				
+				if (data.chat.created_date) {
+					const createdDate = new Date(data.chat.created_date * 1000);
+					html += `
+						<dt class="col-sm-4">Created</dt>
+						<dd class="col-sm-8">${createdDate.toLocaleString()}</dd>`;
+				}
+				
+				if (data.chat.description) {
+					html += `
+						<dt class="col-sm-4">Description</dt>
+						<dd class="col-sm-8"><em>${escapeHtml(data.chat.description)}</em></dd>`;
+				}
+				
+				if (data.chat.invite_link) {
+					html += `
+						<dt class="col-sm-4">Invite Link</dt>
+						<dd class="col-sm-8"><a href="${escapeHtml(data.chat.invite_link)}" target="_blank" class="text-decoration-none"><i class="bi bi-link-45deg"></i> View Link</a></dd>`;
+				}
+				
+				if (data.chat.pinned_msg_id) {
+					html += `
+						<dt class="col-sm-4">Pinned Message</dt>
+						<dd class="col-sm-8"><code>#${escapeHtml(String(data.chat.pinned_msg_id))}</code></dd>`;
+				}
+				
+				// Permissions and Flags
+				if (data.chat.noforwards) {
+					html += `
+						<dt class="col-sm-4">Restrictions</dt>
+						<dd class="col-sm-8"><span class="badge bg-warning text-dark"><i class="bi bi-shield-lock me-1"></i>Forwarding Disabled</span></dd>`;
+				}
+				
+				if (data.chat.verified) {
+					html += `
+						<dt class="col-sm-4">Verified</dt>
+						<dd class="col-sm-8"><span class="badge bg-primary"><i class="bi bi-patch-check-fill me-1"></i>VERIFIED</span></dd>`;
+				}
+				
+				if (data.chat.scam) {
+					html += `
+						<dt class="col-sm-4">Warning</dt>
+						<dd class="col-sm-8"><span class="badge bg-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>SCAM</span></dd>`;
+				}
+				
+				if (data.chat.fake) {
+					html += `
+						<dt class="col-sm-4">Warning</dt>
+						<dd class="col-sm-8"><span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle-fill me-1"></i>FAKE</span></dd>`;
+				}
+				
+				// Admin Rights (if current user has any)
+				if (data.chat.admin_rights) {
+					html += `
+						<dt class="col-sm-4">Your Admin Rights</dt>
+						<dd class="col-sm-8"><small>`;
+					const rights = [];
+					if (data.chat.admin_rights.change_info) rights.push("Change Info");
+					if (data.chat.admin_rights.post_messages) rights.push("Post Messages");
+					if (data.chat.admin_rights.edit_messages) rights.push("Edit Messages");
+					if (data.chat.admin_rights.delete_messages) rights.push("Delete Messages");
+					if (data.chat.admin_rights.ban_users) rights.push("Ban Users");
+					if (data.chat.admin_rights.invite_users) rights.push("Invite Users");
+					if (data.chat.admin_rights.pin_messages) rights.push("Pin Messages");
+					if (data.chat.admin_rights.add_admins) rights.push("Add Admins");
+					if (data.chat.admin_rights.manage_call) rights.push("Manage Calls");
+					if (data.chat.admin_rights.anonymous) rights.push("Anonymous");
+					if (rights.length > 0) {
+						html += rights.map(r => `<span class="badge bg-success me-1">${r}</span>`).join('');
+					} else {
+						html += `<span class="text-muted">No admin rights</span>`;
+					}
+					html += `</small></dd>`;
+				}
+				
+				// Default Banned Rights (default permissions for members)
+				if (data.chat.default_banned_rights) {
+					html += `
+						<dt class="col-sm-4">Default Permissions</dt>
+						<dd class="col-sm-8"><small>`;
+					const perms = [];
+					if (!data.chat.default_banned_rights.send_messages) perms.push("Send Messages");
+					if (!data.chat.default_banned_rights.send_media) perms.push("Send Media");
+					if (!data.chat.default_banned_rights.send_stickers) perms.push("Send Stickers");
+					if (!data.chat.default_banned_rights.send_gifs) perms.push("Send GIFs");
+					if (!data.chat.default_banned_rights.send_games) perms.push("Send Games");
+					if (!data.chat.default_banned_rights.send_inline) perms.push("Use Inline Bots");
+					if (!data.chat.default_banned_rights.embed_links) perms.push("Embed Links");
+					if (!data.chat.default_banned_rights.send_polls) perms.push("Send Polls");
+					if (!data.chat.default_banned_rights.change_info) perms.push("Change Info");
+					if (!data.chat.default_banned_rights.invite_users) perms.push("Invite Users");
+					if (!data.chat.default_banned_rights.pin_messages) perms.push("Pin Messages");
+					if (perms.length > 0) {
+						html += perms.map(p => `<span class="badge bg-light text-dark me-1 mb-1">${p}</span>`).join('');
+					} else {
+						html += `<span class="text-muted">All restricted</span>`;
+					}
+					html += `</small></dd>`;
+				}
+				
+				html += `</dl></div>`;
+			}
+			
+			// User Information - show when requested, or as fallback if chat info missing
+			if (data.user && (!infoType || infoType === 'user' || (infoType === 'chat' && !data.chat))) {
+				html += `<div class="mb-4">
+					<h6 class="text-muted mb-3"><i class="bi bi-person-circle me-2"></i>User Information</h6>`;
+				
+				// Add user avatar if available
+				if (data.user.avatar_url) {
+					html += `<div class="text-center mb-3">
+						<img src="${escapeHtml(data.user.avatar_url)}" alt="User avatar" class="rounded-circle avatar-lg" onerror="this.style.display='none';">
+					</div>`;
+				}
+				
+				html += `<dl class="row mb-0">`;
+				
+				// Show display name (only if it's not just "User {id}")
+				if (data.user.name && !data.user.name.match(/^User \d+$/)) {
+					html += `
+						<dt class="col-sm-4">Display Name</dt>
+						<dd class="col-sm-8"><strong>${escapeHtml(data.user.name)}</strong>`;
+					if (data.user.bot) {
+						html += ` <span class="badge bg-secondary"><i class="bi bi-robot me-1"></i>BOT</span>`;
+					}
+					if (data.user.verified) {
+						html += ` <span class="badge bg-primary"><i class="bi bi-patch-check-fill me-1"></i>VERIFIED</span>`;
+					}
+					if (data.user.premium) {
+						html += ` <span class="badge bg-warning text-dark"><i class="bi bi-star-fill me-1"></i>PREMIUM</span>`;
+					}
+					if (data.user.scam) {
+						html += ` <span class="badge bg-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>SCAM</span>`;
+					}
+					if (data.user.fake) {
+						html += ` <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle-fill me-1"></i>FAKE</span>`;
+					}
+					html += `</dd>`;
+				}
+				
+				if (data.user.first_name || data.user.last_name) {
+					html += `
+						<dt class="col-sm-4">Full Name</dt>
+						<dd class="col-sm-8">${escapeHtml((data.user.first_name || '') + ' ' + (data.user.last_name || '')).trim()}</dd>`;
+				}
+				
+				if (data.user.username) {
+					html += `
+						<dt class="col-sm-4">Username</dt>
+						<dd class="col-sm-8">@${escapeHtml(data.user.username)}</dd>`;
+				}
+				
+				if (data.user.usernames && data.user.usernames.length > 0) {
+					html += `
+						<dt class="col-sm-4">Alt Usernames</dt>
+						<dd class="col-sm-8">`;
+					data.user.usernames.forEach(username => {
+						html += `<span class="badge bg-light text-dark me-1">@${escapeHtml(username)}</span>`;
+					});
+					html += `</dd>`;
+				}
+				
+				if (data.user.id) {
+					html += `
+						<dt class="col-sm-4">User ID</dt>
+						<dd class="col-sm-8">
+							<code class="user-select-all">${escapeHtml(String(data.user.id))}</code>`;
+					// Add badges at the User ID level if name wasn't shown
+					if (!data.user.name || data.user.name.match(/^User \d+$/)) {
+						if (data.user.bot) {
+							html += ` <span class="badge bg-secondary"><i class="bi bi-robot me-1"></i>BOT</span>`;
+						}
+						if (data.user.verified) {
+							html += ` <span class="badge bg-primary"><i class="bi bi-patch-check-fill me-1"></i>VERIFIED</span>`;
+						}
+						if (data.user.premium) {
+							html += ` <span class="badge bg-warning text-dark"><i class="bi bi-star-fill me-1"></i>PREMIUM</span>`;
+						}
+						if (data.user.scam) {
+							html += ` <span class="badge bg-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>SCAM</span>`;
+						}
+						if (data.user.fake) {
+							html += ` <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle-fill me-1"></i>FAKE</span>`;
+						}
+					}
+					html += `</dd>`;
+				}
+				
+				if (data.user.access_hash) {
+					html += `
+						<dt class="col-sm-4">Access Hash</dt>
+						<dd class="col-sm-8"><code class="user-select-all small">${escapeHtml(String(data.user.access_hash))}</code></dd>`;
+				}
+				
+				// Relationship flags
+				if (data.user.is_self) {
+					html += `
+						<dt class="col-sm-4">Account</dt>
+						<dd class="col-sm-8"><span class="badge bg-primary"><i class="bi bi-person-fill me-1"></i>This is YOU</span></dd>`;
+				}
+				
+				// Contact/mutual info
+				if (data.user.mutual_contact) {
+					html += `
+						<dt class="col-sm-4">Contact</dt>
+						<dd class="col-sm-8"><span class="badge bg-success"><i class="bi bi-person-check-fill me-1"></i>Mutual Contact</span></dd>`;
+				} else if (data.user.contact) {
+					html += `
+						<dt class="col-sm-4">Contact</dt>
+						<dd class="col-sm-8"><span class="badge bg-info"><i class="bi bi-person-plus-fill me-1"></i>In Contacts</span></dd>`;
+				}
+				
+				// Status information (with was_online timestamp)
+				if (data.user.status_type) {
+					html += `
+						<dt class="col-sm-4">Status</dt>
+						<dd class="col-sm-8">`;
+					if (data.user.status_type === 'online') {
+						html += `<span class="badge bg-success"><i class="bi bi-circle-fill me-1"></i>Online</span>`;
+						if (data.user.status_expires) {
+							const expires = new Date(data.user.status_expires);
+							html += ` <small class="text-muted">(until ${expires.toLocaleTimeString()})</small>`;
+						}
+					} else if (data.user.status_type === 'offline') {
+						html += `<span class="badge bg-secondary"><i class="bi bi-circle me-1"></i>Offline</span>`;
+						if (data.user.was_online) {
+							const wasOnline = new Date(data.user.was_online);
+							html += ` <small class="text-muted">(last seen: ${wasOnline.toLocaleString()})</small>`;
+						}
+					} else if (data.user.status_type === 'recently') {
+						html += `<span class="badge bg-info">Recently Active</span>`;
+					} else if (data.user.status_type === 'last_week') {
+						html += `<span class="badge bg-light text-dark">Last Week</span>`;
+					} else if (data.user.status_type === 'last_month') {
+						html += `<span class="badge bg-light text-dark">Last Month</span>`;
+					} else {
+						html += `<span class="badge bg-light text-dark">${escapeHtml(data.user.status_type)}</span>`;
+					}
+					html += `</dd>`;
+				}
+				
+				// Photo metadata (if available)
+				if (data.user.photo_id) {
+					html += `
+						<dt class="col-sm-4">Profile Photo</dt>
+						<dd class="col-sm-8">
+							<span class="badge bg-success">Available</span>
+							<small class="text-muted ms-2">ID: <code>${escapeHtml(String(data.user.photo_id))}</code></small>`;
+					if (data.user.photo_dc_id) {
+						html += ` <small class="text-muted">DC: <code>${escapeHtml(String(data.user.photo_dc_id))}</code></small>`;
+					}
+					html += `</dd>`;
+				}
+				
+				if (data.user.phone) {
+					html += `
+						<dt class="col-sm-4">Phone</dt>
+						<dd class="col-sm-8"><i class="bi bi-telephone me-1"></i>${escapeHtml(data.user.phone)}</dd>`;
+				}
+				
+				// Support flag
+				if (data.user.support !== undefined && data.user.support) {
+					html += `
+						<dt class="col-sm-4">Account Type</dt>
+						<dd class="col-sm-8"><span class="badge bg-info"><i class="bi bi-life-preserver me-1"></i>SUPPORT</span></dd>`;
+				}
+				
+				// Min/Max fields (for privacy indicators)
+				if (data.user.min !== undefined && data.user.min) {
+					html += `
+						<dt class="col-sm-4">Privacy</dt>
+						<dd class="col-sm-8"><span class="badge bg-light text-dark"><i class="bi bi-shield-lock me-1"></i>Limited Info</span></dd>`;
+				}
+				
+				// Stories fields
+				if (data.user.stories_max_id !== undefined && data.user.stories_max_id > 0) {
+					html += `
+						<dt class="col-sm-4">Stories</dt>
+						<dd class="col-sm-8"><span class="badge bg-primary"><i class="bi bi-camera-reels me-1"></i>Has Stories</span></dd>`;
+				}
+				
+				if (data.user.stories_unavailable !== undefined && data.user.stories_unavailable) {
+					html += `
+						<dt class="col-sm-4">Stories</dt>
+						<dd class="col-sm-8"><span class="badge bg-secondary">Stories Hidden</span></dd>`;
+				}
+				
+				// Emoji status
+				if (data.user.emoji_status !== undefined && data.user.emoji_status) {
+					html += `
+						<dt class="col-sm-4">Emoji Status</dt>
+						<dd class="col-sm-8">${escapeHtml(data.user.emoji_status)}</dd>`;
+				}
+				
+				// Apply min photo
+				if (data.user.apply_min_photo !== undefined && data.user.apply_min_photo) {
+					html += `
+						<dt class="col-sm-4">Photo Privacy</dt>
+						<dd class="col-sm-8"><span class="badge bg-light text-dark">Restricted</span></dd>`;
+				}
+				
+				if (data.user.about) {
+					html += `
+						<dt class="col-sm-4">Bio</dt>
+						<dd class="col-sm-8"><em>${escapeHtml(data.user.about)}</em></dd>`;
+				}
+				
+				if (data.user.lang_code) {
+					html += `
+						<dt class="col-sm-4">Language</dt>
+						<dd class="col-sm-8"><span class="badge bg-light text-dark">${escapeHtml(data.user.lang_code.toUpperCase())}</span></dd>`;
+				}
+				
+				// Restrictions
+				if (data.user.restricted) {
+					html += `
+						<dt class="col-sm-4">Restrictions</dt>
+						<dd class="col-sm-8"><span class="badge bg-warning text-dark"><i class="bi bi-shield-exclamation me-1"></i>Restricted</span>`;
+					if (data.user.restriction_reason) {
+						html += `<br><small class="text-muted">${escapeHtml(data.user.restriction_reason)}</small>`;
+					}
+					html += `</dd>`;
+				}
+				
+				// Show groups list if available
+				if (data.user.common_chats && data.user.common_chats.length > 0) {
+					html += `
+						<dt class="col-sm-4">Common Groups</dt>
+						<dd class="col-sm-8">
+							<ul class="list-unstyled mb-0">`;
+					data.user.common_chats.forEach(chat => {
+						html += `<li class="mb-1"><i class="bi bi-chat-dots me-1 text-primary"></i><small>${escapeHtml(chat)}</small></li>`;
+					});
+					html += `</ul>
+						</dd>`;
+				}
+				
+				if (data.user.common_chats_count) {
+					html += `
+						<dt class="col-sm-4">Common Groups Count</dt>
+						<dd class="col-sm-8"><span class="badge bg-primary">${escapeHtml(String(data.user.common_chats_count))}</span></dd>`;
+				}
+				
+				html += `</dl></div>`;
+			}
+			
+			// Participant Information - only show if infoType is 'user' or undefined (both)
+			if (data.participant && (!infoType || infoType === 'user')) {
+				html += `<div class="mb-3">
+					<h6 class="text-muted mb-3"><i class="bi bi-person-badge me-2"></i>Participant Details (in this chat)</h6>
+					<dl class="row mb-0">`;
+				
+				if (data.participant.role) {
+					let badgeClass = "bg-secondary";
+					let icon = "person";
+					if (data.participant.role === "creator") {
+						badgeClass = "bg-danger";
+						icon = "star-fill";
+					} else if (data.participant.role === "admin") {
+						badgeClass = "bg-warning text-dark";
+						icon = "shield-fill";
+					} else if (data.participant.role === "member") {
+						badgeClass = "bg-success";
+						icon = "person-check";
+					} else if (data.participant.role === "banned" || data.participant.role === "kicked") {
+						badgeClass = "bg-danger";
+						icon = "person-x";
+					} else if (data.participant.role === "left") {
+						badgeClass = "bg-secondary";
+						icon = "person-dash";
+					}
+					
+					html += `
+						<dt class="col-sm-4">Role</dt>
+						<dd class="col-sm-8"><span class="badge ${badgeClass}"><i class="bi bi-${icon} me-1"></i>${escapeHtml(data.participant.role.toUpperCase())}</span></dd>`;
+				}
+				
+				if (data.participant.rank || data.participant.custom_title) {
+					html += `
+						<dt class="col-sm-4">Custom Title</dt>
+						<dd class="col-sm-8"><span class="badge bg-info">${escapeHtml(data.participant.rank || data.participant.custom_title)}</span></dd>`;
+				}
+				
+				if (data.participant.join_date || data.participant.date) {
+					const date = new Date((data.participant.join_date || data.participant.date) * 1000);
+					html += `
+						<dt class="col-sm-4">Joined</dt>
+						<dd class="col-sm-8"><i class="bi bi-calendar-check me-1"></i>${date.toLocaleString()}</dd>`;
+				}
+				
+				if (data.participant.promoted_by) {
+					html += `
+						<dt class="col-sm-4">Promoted By</dt>
+						<dd class="col-sm-8">User ID: <code>${escapeHtml(String(data.participant.promoted_by))}</code></dd>`;
+				}
+				
+				if (data.participant.inviter_id || data.participant.invited_by) {
+					html += `
+						<dt class="col-sm-4">Invited By</dt>
+						<dd class="col-sm-8">User ID: <code>${escapeHtml(String(data.participant.inviter_id || data.participant.invited_by))}</code></dd>`;
+				}
+				
+				// Detailed Admin Rights for this participant
+				if (data.participant.admin_rights) {
+					html += `
+						<dt class="col-sm-4">Admin Permissions</dt>
+						<dd class="col-sm-8"><small>`;
+					const adminRights = [];
+					if (data.participant.admin_rights.change_info) adminRights.push("Change Info");
+					if (data.participant.admin_rights.post_messages) adminRights.push("Post");
+					if (data.participant.admin_rights.edit_messages) adminRights.push("Edit");
+					if (data.participant.admin_rights.delete_messages) adminRights.push("Delete");
+					if (data.participant.admin_rights.ban_users) adminRights.push("Ban");
+					if (data.participant.admin_rights.invite_users) adminRights.push("Invite");
+					if (data.participant.admin_rights.pin_messages) adminRights.push("Pin");
+					if (data.participant.admin_rights.add_admins) adminRights.push("Add Admins");
+					if (data.participant.admin_rights.manage_call) adminRights.push("Manage Calls");
+					if (data.participant.admin_rights.manage_topics) adminRights.push("Manage Topics");
+					if (data.participant.admin_rights.anonymous) adminRights.push("Anonymous Posting");
+					if (data.participant.admin_rights.other) adminRights.push("Other Rights");
+					
+					if (adminRights.length > 0) {
+						html += adminRights.map(r => `<span class="badge bg-success me-1 mb-1">${r}</span>`).join('');
+					} else {
+						html += `<span class="text-muted">Limited rights</span>`;
+					}
+					html += `</small></dd>`;
+				}
+				
+				// Banned/Restricted Rights
+				if (data.participant.banned_rights) {
+					html += `
+						<dt class="col-sm-4">Restrictions</dt>
+						<dd class="col-sm-8"><small>`;
+					const restrictions = [];
+					if (data.participant.banned_rights.view_messages) restrictions.push("Cannot View");
+					if (data.participant.banned_rights.send_messages) restrictions.push("Cannot Send Messages");
+					if (data.participant.banned_rights.send_media) restrictions.push("Cannot Send Media");
+					if (data.participant.banned_rights.send_stickers) restrictions.push("No Stickers");
+					if (data.participant.banned_rights.send_gifs) restrictions.push("No GIFs");
+					if (data.participant.banned_rights.send_games) restrictions.push("No Games");
+					if (data.participant.banned_rights.send_inline) restrictions.push("No Inline Bots");
+					if (data.participant.banned_rights.embed_links) restrictions.push("No Link Previews");
+					if (data.participant.banned_rights.send_polls) restrictions.push("No Polls");
+					if (data.participant.banned_rights.change_info) restrictions.push("Cannot Change Info");
+					if (data.participant.banned_rights.invite_users) restrictions.push("Cannot Invite");
+					if (data.participant.banned_rights.pin_messages) restrictions.push("Cannot Pin");
+					
+					if (restrictions.length > 0) {
+						html += restrictions.map(r => `<span class="badge bg-danger me-1 mb-1">${r}</span>`).join('');
+					} else {
+						html += `<span class="text-success">No restrictions</span>`;
+					}
+					
+					if (data.participant.banned_rights.until_date) {
+						const untilDate = new Date(data.participant.banned_rights.until_date * 1000);
+						if (data.participant.banned_rights.until_date > Math.floor(Date.now() / 1000)) {
+							html += `<br><span class="text-warning"><i class="bi bi-clock me-1"></i>Until: ${untilDate.toLocaleString()}</span>`;
+						} else {
+							html += `<br><span class="text-muted"><i class="bi bi-check-circle me-1"></i>Expired</span>`;
+						}
+					}
+					html += `</small></dd>`;
+				}
+				
+				if (data.participant.kicked_by) {
+					html += `
+						<dt class="col-sm-4">Kicked By</dt>
+						<dd class="col-sm-8">User ID: <code>${escapeHtml(String(data.participant.kicked_by))}</code></dd>`;
+				}
+				
+				if (data.participant.left) {
+					html += `
+						<dt class="col-sm-4">Status</dt>
+						<dd class="col-sm-8"><span class="badge bg-secondary"><i class="bi bi-box-arrow-right me-1"></i>Left Chat</span></dd>`;
+				}
+				
+				html += `</dl></div>`;
+			}
+			
+			if (!html) {
+				html = `<div class="alert alert-info">No participant information available.</div>`;
+			}
+			
+			container.innerHTML = html;
+		}
+		
+		function escapeHtml(text) {
+			if (text === null || text === undefined) return "";
+			const div = document.createElement('div');
+			div.textContent = String(text);
+			return div.innerHTML;
+		}
+
+		// Socket.IO initialization - wait for async script to load
+		let socket = null;
+		let reconnectToastShown = false;
+
+		function createNoOpSocket(reason) {
+			return {
+				on: (event, callback) => {
+					console.debug(`[TG Sentinel] Socket event '${event}' registered but no-op (${reason})`);
+				},
+				emit: (event, data) => {
+					console.debug(`[TG Sentinel] Socket emit '${event}' ignored (${reason})`);
+				},
+				connected: false
+			};
+		}
+
+		function setupSocketHandlers() {
+			socket.on("connect", () => {
+				refreshSessionInfo();
+				refreshWorkerStatus();
+				if (reconnectToastShown) {
+					showToast("Dashboard link re-established", "success");
+				}
+				reconnectToastShown = true;
+			});
+
+			socket.on("disconnect", () => {
+				const badge = document.getElementById('status-indicator');
+				if (badge) {
+					badge.classList.remove('status-online');
+					badge.classList.add('status-offline');
+					badge.textContent = 'Offline';
+					badge.setAttribute('title','System offline - Connection lost');
+				}
+				showToast("Real-time updates paused", "warning");
+			});
+
+			socket.on("status", () => {
+				refreshSessionInfo();
+				refreshWorkerStatus();
+			});
+
+			socket.on("error", (payload) => {
+				const message = payload && payload.message ? payload.message : "Unknown socket error";
+				showToast(message, "error");
+			});
+
+			socket.on("dashboard:update", () => {
+				const event = new CustomEvent("tgsentinel:dashboard-update");
+				document.dispatchEvent(event);
+				try { 
+					refreshSessionInfo();
+					refreshWorkerStatus(); 
+				} catch(e) {}
+			});
+		}
+
+		function initSocketIO() {
+			const socketFactory = window.io || null;
+			
+			if (!socketFactory) {
+				console.warn(
+					"[TG Sentinel] Socket.IO library not available. Real-time updates disabled.\n" +
+					"Possible causes:\n" +
+					"  - Socket.IO script failed to load (check network/CDN)\n" +
+					"  - flask-socketio not installed on server\n" +
+					"  - Content Security Policy blocking external scripts\n" +
+					"Dashboard will continue to function with manual refresh only."
+				);
+				socket = createNoOpSocket("Socket.IO unavailable");
+				showToast("Real-time updates unavailable. Dashboard will require manual refresh.", "warning");
+				return;
+			}
+
+			try {
+				socket = socketFactory();
+				setupSocketHandlers();
+			} catch (err) {
+				console.warn("[TG Sentinel] Socket.IO failed to initialize:", err);
+				socket = createNoOpSocket("Socket.IO init failed");
+				showToast("Real-time updates disabled by browser policy. Manual refresh only.", "warning");
+			}
+		}
+
+		// Wait for Socket.IO to load (async script in <head>), then initialize
+		(function waitForSocketIO() {
+			const maxWaitMs = 5000;
+			const checkIntervalMs = 50;
+			let elapsed = 0;
+
+			const checkSocketIO = setInterval(() => {
+				elapsed += checkIntervalMs;
+				
+				if (window.io) {
+					clearInterval(checkSocketIO);
+					initSocketIO();
+				} else if (elapsed >= maxWaitMs) {
+					clearInterval(checkSocketIO);
+					console.warn("[TG Sentinel] Socket.IO did not load within timeout. Falling back to no-op.");
+					socket = createNoOpSocket("Socket.IO load timeout");
+					showToast("Real-time updates unavailable. Dashboard will require manual refresh.", "warning");
+				}
+			}, checkIntervalMs);
+		})();
+	</script>
+	<script src="{{ url_for('static', filename='js/login.js') }}"></script>
+	<script src="{{ url_for('static', filename='js/ui-lock.js') }}"></script>
+
+    {% if login_required %}
+    <script>
+      document.addEventListener('DOMContentLoaded', ()=>{
+        try {
+          const modal = new bootstrap.Modal(document.getElementById('loginModal'), {
+            backdrop: 'static',
+            keyboard: false
+          });
+          modal.show();
+        } catch (e) {}
+        // Ensure session info still populates header for visual context
+        try { if (window.refreshSessionInfo) window.refreshSessionInfo(); } catch (e) {}
+      });
+    </script>
+    {% else %}
+    <script>
+      // Show loading toast when app opens with existing authentication (only on first load)
+      document.addEventListener('DOMContentLoaded', async () => {
+        // Check if dialogs have already been fetched (use sessionStorage to track)
+        const dialogsFetchedKey = 'tgsentinel_dialogs_fetched';
+        const alreadyFetched = sessionStorage.getItem(dialogsFetchedKey) === 'true';
+        
+        if (alreadyFetched) {
+          console.log('Dialogs already fetched this session, skipping loading toast');
+          return;
+        }
+        
+        let loadingToastId = null;
+        let appFullyLoaded = false;
+        
+        try {
+          // Check if user is authenticated by checking worker status
+          const statusResponse = await fetch('/api/worker/status');
+          if (statusResponse.ok) {
+            const statusData = await statusResponse.json();
+            
+            if (statusData.authorized) {
+              // Check if already ready (caches warmed, dialogs fetched)
+              if (statusData.status === 'ready') {
+                console.log('Worker already ready, skipping loading toast');
+                sessionStorage.setItem(dialogsFetchedKey, 'true');
+                // Don't show loading toast at all - worker is already ready
+                showToast('TG Sentinel ready', 'success', { delay: 2000 });
+                return;
+              }
+              
+              // Worker is not ready yet - show loading toast and poll
+              loadingToastId = showToast('Loading TG Sentinel...', 'info', { persistent: true, spinner: true });
+              
+              // Worker is not ready yet - poll until it becomes ready
+              const pollWorkerStatus = async () => {
+                const maxAttempts = 60; // 60 * 500ms = 30 seconds max
+                let attempts = 0;
+                
+                return new Promise((resolve) => {
+                  const pollInterval = setInterval(async () => {
+                    attempts++;
+                    
+                    try {
+                      const statusResp = await fetch('/api/worker/status');
+                      if (statusResp.ok) {
+                        const data = await statusResp.json();
+                        
+                        // Check if worker status is "ready" (dialogs fetched, caches warmed)
+                        if (data.status === 'ready') {
+                          console.log('Worker status is ready - dialogs fetched and caches warmed');
+                          clearInterval(pollInterval);
+                          sessionStorage.setItem(dialogsFetchedKey, 'true');
+                          resolve(true);
+                          return;
+                        }
+                      }
+                      
+                      // Timeout check
+                      if (attempts >= maxAttempts) {
+                        console.log('Polling timeout - assuming ready');
+                        clearInterval(pollInterval);
+                        resolve(false);
+                      }
+                    } catch (err) {
+                      console.error('Worker status poll error:', err);
+                      // Continue polling on error
+                    }
+                  }, 500);
+                });
+              };
+              
+              // Wait for worker to be ready
+              const workerReady = await pollWorkerStatus();
+              
+              appFullyLoaded = true;
+              
+              // Remove loading toast
+              if (loadingToastId) {
+                const toastEl = document.getElementById(loadingToastId);
+                if (toastEl) {
+                  const toastInstance = bootstrap.Toast.getInstance(toastEl);
+                  if (toastInstance) toastInstance.hide();
+                }
+              }
+              
+              // Show ready message
+              if (workerReady) {
+                showToast('TG Sentinel ready', 'success');
+              } else {
+                showToast('TG Sentinel loaded (may still be initializing)', 'warning');
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Loading check failed:', error);
+          if (loadingToastId && !appFullyLoaded) {
+            const toastEl = document.getElementById(loadingToastId);
+            if (toastEl) {
+              const toastInstance = bootstrap.Toast.getInstance(toastEl);
+              if (toastInstance) toastInstance.hide();
+            }
+          }
+        }
+      });
+    </script>
+    {% endif %}
+
+	<script>
+		document.addEventListener("DOMContentLoaded", () => {
+			const initializeCollapseIcon = (button) => {
+				const targetSelector = button.getAttribute("data-bs-target");
+				if (!targetSelector) {
+					return;
+				}
+
+				const collapseEl = document.querySelector(targetSelector);
+				const icon = button.querySelector(".collapse-icon");
+				if (!collapseEl || !icon) {
+					return;
+				}
+
+				const refresh = () => {
+					icon.style.transform = collapseEl.classList.contains("show") ? "rotate(90deg)" : "";
+				};
+
+				collapseEl.addEventListener("shown.bs.collapse", refresh);
+				collapseEl.addEventListener("hidden.bs.collapse", refresh);
+				refresh();
+			};
+
+			document.querySelectorAll(".collapse-button[data-bs-toggle='collapse']").forEach(initializeCollapseIcon);
+		});
+	</script>
+
+	{% block extra_scripts %}{% endblock %}
+		</body>
+	</html>

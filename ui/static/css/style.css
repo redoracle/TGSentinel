@@ -1,0 +1,47 @@
+/* Modern Futuristic UI for Ledger's Keys Extractor */
+
+/* ============================================================================
+   TG Sentinel UI Styles – Modular Aggregator
+   --------------------------------------------------------------------------
+   This file now serves as a thin orchestrator that imports the actual
+   style modules. The goal is to keep a single public stylesheet reference
+   in templates (`css/style.css`) while making the CSS itself easier to
+   navigate and maintain.
+
+   Import order preserves the original cascade:
+
+     1. core.css             – Theme variables, globals, body, typography
+     2. navbar.css           – Main navigation & header layout
+     3. layout-forms.css     – Cards, layout helpers, buttons & forms
+     4. data-activity.css    – Blockchain grid, tables, charts, activity, utilities
+     5. alerts-profiles.css  – Alerts, profiles, bulk actions, live activity
+     6. overlays-errors.css  – Overlays, notifications, error views, dark-mode hooks
+     7. history-filters.css  – History/extraction containers, filters, tables
+     8. extraction-flows.css – Extraction validation, select-all, progress, RTL/print
+    9. console-docs.css     – Logs/JSON viewers, extraction console, API docs
+    10. docs.css             – Docs layout, navigation, tab shells
+
+   Z-Index Scale Guidelines (unchanged):
+
+     1-99:     Base content, subtle layering
+     100-999:  Dropdowns, tooltips, popovers
+     1000-1199: Sticky headers, navigation
+     1200-1499: Modals, overlays, loading screens
+     1500-1999: Toast notifications, alerts
+     2000+:    Reserved for extreme edge cases only
+   ========================================================================= */
+
+@import url("core.css");
+@import url("navbar.css");
+@import url("layout-forms.css");
+@import url("data-activity.css");
+@import url("alerts-profiles.css");
+@import url("overlays-errors.css");
+@import url("history-filters.css");
+@import url("extraction-flows.css");
+@import url("console-docs.css");
+@import url("docs.css");
+@import url("analytics-health.css");
+@import url("message-formats.css");
+@import url("feedback-learning.css");
+

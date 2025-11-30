@@ -1,0 +1,136 @@
+/* Module 10 – Docs Layout & Navigation
+   ========================================================================= */
+
+body.docs-page {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+body.docs-page main.container-fluid {
+  min-height: calc(100vh - var(--navbar-height, 76px));
+  padding: 1rem 0 0 !important;
+  display: flex;
+  flex-direction: column;
+}
+
+body.docs-page .docs-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+body.docs-page .docs-tabs-shell {
+  border-bottom: 1px solid var(--border-color);
+}
+
+body.docs-page .docs-tabs-shell .nav-tabs {
+  margin-bottom: 0;
+}
+
+body.docs-page .docs-layout {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  margin: 0;
+}
+
+body.docs-page .docs-layout .row {
+  flex: 1;
+  margin: 0;
+  width: 100%;
+  --bs-gutter-x: 1rem;
+  --bs-gutter-y: 0;
+}
+
+body.docs-page .docs-nav-column {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  position: sticky;
+  top: 1rem;
+  align-self: flex-start;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}
+
+body.docs-page .docs-nav-column .sticky-nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+body.docs-page .docs-content {
+  padding: 1rem;
+}
+
+@media (max-width: 991.98px) {
+  body.docs-page {
+    overflow: auto;
+  }
+
+  body.docs-page main.container-fluid {
+    height: auto;
+    padding: 1.5rem 1rem !important;
+    display: block;
+    overflow: visible;
+  }
+
+  body.docs-page .docs-wrapper,
+  body.docs-page .docs-layout {
+    max-height: none;
+    overflow: visible;
+  }
+
+  body.docs-page .docs-nav-column,
+  body.docs-page .docs-content {
+    max-height: none;
+    overflow: visible;
+    padding: 1rem 0;
+  }
+
+  body.docs-page .docs-nav-column .sticky-nav {
+    position: static;
+  }
+}
+
+.docs-tab-pane {
+  display: none;
+}
+
+.docs-tab-pane.active {
+  display: block;
+}
+
+.docs-nav-list {
+  display: none;
+}
+
+.docs-nav-list.active {
+  display: block;
+}
+
+/* Table column width styles for docs tables */
+.docs-table-core-settings th:nth-child(1) {
+  width: 25%;
+}
+
+.docs-table-core-settings th:nth-child(2) {
+  width: 45%;
+}
+
+.docs-table-core-settings th:nth-child(3) {
+  width: 30%;
+}
+
+.docs-table-keyword-categories th:nth-child(1) {
+  width: 30%;
+}
+
+.docs-table-keyword-categories th:nth-child(2) {
+  width: 15%;
+}
+
+.docs-table-keyword-categories th:nth-child(3) {
+  width: 55%;
+}

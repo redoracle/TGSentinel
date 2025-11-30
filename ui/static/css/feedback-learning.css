@@ -1,0 +1,86 @@
+/* ============================================================================
+   Feedback Learning Module
+   Styles for feedback statistics, drift indicators, and recommendations
+   Progressive Enhancement: Sections visible by default, JS manages display
+   ========================================================================= */
+
+/* JS-Managed Visibility Classes for Progressive Enhancement */
+.feedback-stats-hidden {
+  display: none;
+}
+
+.feedback-stats-visible {
+  display: block;
+}
+
+/* Conditional Detail Sections - Hidden by default, shown when data exists */
+#interest-threshold-adjustment-info,
+#interest-pending-samples-section,
+#alert-min-score-adjustment-info,
+#alert-adjustment-recommendation {
+  display: none;
+}
+
+/* When JS is available, main sections start hidden and are revealed conditionally */
+html.js-enabled #interest-feedback-stats-section,
+html.js-enabled #alert-feedback-stats-section {
+  display: none;
+}
+
+/* Override hiding when explicitly made visible */
+html.js-enabled #interest-feedback-stats-section.feedback-stats-visible,
+html.js-enabled #alert-feedback-stats-section.feedback-stats-visible {
+  display: block !important;
+}
+
+/* Loading state for sections being populated */
+.feedback-stats-loading {
+  opacity: 0.6;
+  pointer-events: none;
+  position: relative;
+}
+
+/* Loading overlay - managed via JavaScript with proper ARIA attributes */
+.feedback-stats-loading-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+  z-index: 10;
+  display: none;
+}
+
+.feedback-stats-loading .feedback-stats-loading-overlay {
+  display: block;
+}
+
+/* Progress Bar Customization for Drift Indicators */
+.feedback-drift-progress {
+  height: 8px;
+}
+
+/* Z-index for Tag Badges */
+.tag-badge-stacked {
+  z-index: 1;
+}
+
+/* Activity Filter Select */
+.activity-filter-select {
+  width: auto;
+}
+
+/* Collapse Button Styling */
+.collapse-button-unstyled {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* Progress Bar Initial State */
+.progress-bar-zero {
+  width: 0%;
+}

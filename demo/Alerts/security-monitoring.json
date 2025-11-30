@@ -1,0 +1,74 @@
+{
+  "name": "Security Advisory Monitor",
+  "description": "Monitors security disclosures and exploits so responders can act before incidents escalate.",
+  "enabled": false,
+  "min_score": 6.0,
+  "keywords": [
+    "proof-of-concept",
+    "PoC",
+    "exploit code",
+    "payload",
+    "reverse shell"
+  ],
+  "action_keywords": [],
+  "decision_keywords": [],
+  "urgency_keywords": [
+    "critical",
+    "high severity",
+    "emergency patch",
+    "actively exploited",
+    "0day",
+    "zero-day"
+  ],
+  "importance_keywords": [],
+  "release_keywords": ["patch", "security advisory"],
+  "security_keywords": [
+    "CVE-",
+    "RCE",
+    "XSS",
+    "SQL injection",
+    "privilege escalation",
+    "authentication bypass",
+    "ransomware",
+    "malware",
+    "vulnerability"
+  ],
+  "risk_keywords": ["breach", "compromised", "hacked", "exploit"],
+  "opportunity_keywords": [],
+  "detect_codes": true,
+  "detect_documents": true,
+  "detect_links": true,
+  "require_forwarded": false,
+  "prioritize_pinned": true,
+  "prioritize_admin": true,
+  "prioritize_private": false,
+  "detect_polls": false,
+  "detect_mentions": false,
+  "detect_questions": false,
+  "scoring_weights": {
+    "security": 1.5,
+    "urgency": 2.0,
+    "risk": 1.3,
+    "keywords": 0.8
+  },
+  "vip_senders": [],
+  "webhooks": [],
+  "excluded_users": [],
+  "reaction_threshold": 5,
+  "reply_threshold": 3,
+  "positive_weight": 1.0,
+  "negative_weight": 0.15,
+  "channels": [],
+  "users": [],
+  "tags": ["security", "threat-intel", "cve", "incident-response"],
+  "digest": {
+    "schedules": [
+      {
+        "schedule": "hourly",
+        "top_n": 20,
+        "min_score": 6.0,
+        "mode": "both"
+      }
+    ]
+  }
+}

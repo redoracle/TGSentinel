@@ -1,0 +1,2372 @@
+{% extends "base.html" %}
+{% block title %}Configuration · TG Sentinel{% endblock %}
+
+{% block content %}
+<form id="config-form" class="d-grid gap-4" novalidate>
+    <section class="card" aria-labelledby="telegram-config-heading">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#telegram-config-body" aria-expanded="false" aria-controls="telegram-config-body">
+                <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
+                <div>
+                    <h1 class="card-title mb-0" id="telegram-config-heading">Telegram API Account</h1>
+                    <small class="text-muted">Manage MTProto authentication</small>
+                </div>
+            </button>
+            <a href="/docs#telegram-config" class="btn btn-outline-primary btn-sm" title="View Telegram settings documentation" target="_blank" rel="noopener">
+                <i class="bi bi-info-circle"></i>
+            </a>
+        </div>
+        <div class="collapse card-body" id="telegram-config-body">
+            <div class="row g-4">
+                <div class="col-12 col-md-6">
+                    <label class="form-label" for="api-id">API ID</label>
+                    <input class="form-control" id="api-id" name="api_id" type="number" placeholder="123456">
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label" for="api-hash">API Hash</label>
+                    <input class="form-control" id="api-hash" name="api_hash" type="password" placeholder="0123abcd..." autocomplete="off">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="card" aria-labelledby="advanced-settings-heading">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#advanced-settings-body" aria-expanded="false" aria-controls="advanced-settings-body">
+                <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
+                <div>
+                    <h2 class="card-title mb-0" id="advanced-settings-heading">Advanced Settings</h2>
+                    <small class="text-muted">Global system configuration</small>
+                </div>
+            </button>
+            <div class="d-flex gap-2">
+                <a href="/docs#advanced-config" class="btn btn-outline-primary btn-sm" title="View advanced settings documentation" target="_blank" rel="noopener">
+                    <i class="bi bi-info-circle"></i>
+                </a>
+                <button class="btn btn-primary btn-sm" type="button" id="btn-save-advanced">
+                    <span aria-hidden="true">✓</span> Apply Changes
+                </button>
+            </div>
+        </div>
+        <div class="collapse card-body" id="advanced-settings-body">
+            <div class="row g-4">
+                <div class="col-12">
+                    <div class="alert alert-info" role="alert">
+                        <strong>Note:</strong> For alert delivery schedules, digest configuration, and notification settings, use the <a href="/profiles" class="alert-link">Profiles</a> page to configure Alert Profiles and Interest Profiles. Each profile has its own delivery schedule settings.
+                    </div>
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label" for="embedding-model">
+                        Embedding model
+                        <i class="bi bi-info-circle-fill ms-1 info-tooltip-icon" data-bs-toggle="tooltip" data-bs-placement="top" 
+                           data-bs-title="The AI model used to convert text into numerical vectors for semantic similarity matching. MiniLM is fast and efficient, BGE is more accurate. This is a global setting that affects all Interest Profiles."></i>
+                    </label>
+                    <select class="form-select" id="embedding-model" name="embedding_model">
+                        <option value="all-MiniLM-L6-v2">all-MiniLM-L6-v2 (Fast)</option>
+                        <option value="bge-small-en">bge-small-en (Accurate)</option>
+                        <option value="custom">Custom</option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label" for="decay-window">
+                        Decay window (hours)
+                        <i class="bi bi-info-circle-fill ms-1 info-tooltip-icon" data-bs-toggle="tooltip" data-bs-placement="top" 
+                           data-bs-title="Global time window for message importance to decay. Messages lose relevance over time to prevent alert fatigue on old topics. This applies to all messages system-wide."></i>
+                    </label>
+                    <input class="form-control" id="decay-window" name="decay_window" type="number" min="1" value="24" placeholder="24">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="card" aria-labelledby="channel-management-heading">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#channel-management-body" aria-expanded="false" aria-controls="channel-management-body">
+                <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
+                <div>
+                    <h2 class="card-title mb-0" id="channel-management-heading">Monitored Channels</h2>
+                    <small class="text-muted">Manage monitored Telegram channels and groups</small>
+                </div>
+            </button>
+            <div class="d-flex gap-2">
+                <a href="/docs#channels-api" class="btn btn-outline-primary btn-sm" title="View channels management documentation" target="_blank" rel="noopener">
+                    <i class="bi bi-info-circle"></i>
+                </a>
+                <button class="btn btn-primary btn-sm" type="button" id="btn-add-channels" data-bs-toggle="modal" data-bs-target="#addChannelsModal">
+                    <span aria-hidden="true">+</span> ADD
+                </button>
+                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-export-yaml">Export YAML</button>
+            </div>
+        </div>
+        <div class="collapse card-body table-responsive" id="channel-management-body">
+            <table class="table align-middle mb-0" id="channels-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Chat ID</th>
+                        <th scope="col">Avatar</th>
+                        <th scope="col">Name</th>
+                        <th scope="col">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {%- for channel in channels %}
+                    <tr>
+                        <td>
+                            <button type="button" class="btn btn-sm {% if channel.chat_id < 0 %}btn-info{% else %}btn-primary{% endif %} copy-chat-id" 
+                                    data-chat-id="{{ channel.chat_id }}" 
+                                    title="Copy {{ channel.chat_id }}">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-clipboard" viewBox="0 0 16 16">
+                                    <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/>
+                                    <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/>
+                                </svg>
+                            </button>
+                        </td>
+                        <td>
+                            <div class="channel-avatar" data-chat-id="{{ channel.chat_id }}" data-chat-name="{{ channel.name }}" data-type="{% if channel.chat_id < 0 %}chat{% else %}user{% endif %}">
+                                <img src="/api/avatar/{% if channel.chat_id < 0 %}chat{% else %}user{% endif %}/{{ channel.chat_id|abs }}" alt="{{ channel.name }}" onerror="this.style.display='none'; this.parentElement.textContent = '{{ channel.name[:2]|upper }}'">
+                            </div>
+                        </td>
+                        <td>{{ channel.name }}</td>
+                        <td>
+                            <button type="button" class="btn btn-sm btn-outline-danger delete-channel" 
+                                    data-chat-id="{{ channel.chat_id }}" 
+                                    data-chat-name="{{ channel.name }}"
+                                    title="Delete Channel">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
+                                    <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                                    <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+                                </svg>
+                            </button>
+                        </td>
+                    </tr>
+                    {%- else %}
+                    <tr>
+                        <td colspan="4" class="text-center text-muted">No channels configured yet.</td>
+                    </tr>
+                    {%- endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="card" aria-labelledby="users-management-heading">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#users-management-body" aria-expanded="false" aria-controls="users-management-body">
+                <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
+                <div>
+                    <h2 class="card-title mb-0" id="users-management-heading">Monitored Users</h2>
+                    <small class="text-muted">Manage monitored individual Telegram users</small>
+                </div>
+            </button>
+            <div class="d-flex gap-2">
+                <a href="/docs#users-api" class="btn btn-outline-primary btn-sm" title="View users management documentation" target="_blank" rel="noopener">
+                    <i class="bi bi-info-circle"></i>
+                </a>
+                <button class="btn btn-primary btn-sm" type="button" id="btn-add-users" data-bs-toggle="modal" data-bs-target="#addChannelsModal">
+                    <span aria-hidden="true">+</span> ADD
+                </button>
+                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-export-user-yaml">Export YAML</button>
+            </div>
+        </div>
+        <div class="collapse card-body table-responsive" id="users-management-body">
+            <table class="table align-middle mb-0" id="users-table">
+                <thead>
+                    <tr>
+                        <th scope="col">User ID</th>
+                        <th scope="col">Avatar</th>
+                        <th scope="col">Name</th>
+                        <th scope="col">Username</th>
+                        <th scope="col">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {%- if monitored_users %}
+                        {%- for user in monitored_users %}
+                        <tr>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-primary copy-user-id" 
+                                        data-user-id="{{ user.id }}" 
+                                        title="Copy {{ user.id }}">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-clipboard" viewBox="0 0 16 16">
+                                        <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/>
+                                        <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/>
+                                    </svg>
+                                </button>
+                            </td>
+                            <td>
+                                <div class="user-avatar" data-user-id="{{ user.id }}" data-user-name="{{ user.name }}">
+                                    <img src="/api/avatar/user/{{ user.id }}" alt="{{ user.name }}" onerror="this.style.display='none'; this.parentElement.textContent = '{{ user.name[:2]|upper }}'">
+                                </div>
+                            </td>
+                            <td>{{ user.name }}</td>
+                            <td>{{ user.username or '-' }}</td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-outline-danger delete-user" 
+                                        data-user-id="{{ user.id }}" 
+                                        data-user-name="{{ user.name }}"
+                                        title="Delete User">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
+                                        <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                                        <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                        {%- endfor %}
+                    {%- else %}
+                    <tr>
+                        <td colspan="5" class="text-center text-muted">No users configured yet.</td>
+                    </tr>
+                    {%- endif %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="card" aria-labelledby="system-settings-heading">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#system-settings-body" aria-expanded="false" aria-controls="system-settings-body">
+                <i class="bi bi-chevron-right collapse-icon collapse-icon-sm"></i>
+                <div>
+                    <h2 class="card-title mb-0" id="system-settings-heading">System Settings</h2>
+                    <small class="text-muted">Infrastructure and runtime options</small>
+                </div>
+            </button>
+            <a href="/docs#system-config" class="btn btn-outline-primary btn-sm" title="View system settings documentation" target="_blank" rel="noopener">
+                <i class="bi bi-info-circle"></i>
+            </a>
+        </div>
+        <div class="collapse card-body" id="system-settings-body">
+            <div class="row g-4">
+                <div class="col-12 col-md-4">
+                    <label class="form-label" for="redis-host">Redis host</label>
+                    <input class="form-control" id="redis-host" name="redis_host" type="text" placeholder="localhost">
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label" for="redis-port">Redis port</label>
+                    <input class="form-control" id="redis-port" name="redis_port" type="number" min="0" max="65535" placeholder="6379">
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label" for="database-uri">Database URI</label>
+                    <input class="form-control" id="database-uri" name="database_uri" type="text" placeholder="sqlite:///data/sentinel.db">
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label" for="retention-days">Log Retention (days)</label>
+                    <input class="form-control" id="retention-days" name="retention_days" type="number" min="1" max="365" value="30">
+                    <small class="text-muted">For log files only</small>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label" for="max-messages">Max Messages</label>
+                    <input class="form-control" id="max-messages" name="max_messages" type="number" min="1" max="10000" value="200">
+                    <small class="text-muted">Keep only last N messages</small>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label" for="db-retention-days">Message Retention (days)</label>
+                    <input class="form-control" id="db-retention-days" name="db_retention_days" type="number" min="1" max="365" value="30">
+                    <small class="text-muted">Delete messages older than N days</small>
+                </div>
+                <div class="col-12 col-md-4">
+                    <div class="form-check form-switch mt-4">
+                        <input class="form-check-input" id="cleanup-enabled" name="cleanup_enabled" type="checkbox" checked>
+                        <label class="form-check-label" for="cleanup-enabled">Auto-cleanup enabled</label>
+                    </div>
+                    <small class="text-muted d-block mt-1">Automatic message retention enforcement</small>
+                </div>
+                <div class="col-12 col-md-4">
+                    <div class="form-check form-switch mt-4">
+                        <input class="form-check-input" id="vacuum-on-cleanup" name="vacuum_on_cleanup" type="checkbox" checked>
+                        <label class="form-check-label" for="vacuum-on-cleanup">VACUUM on cleanup</label>
+                    </div>
+                    <small class="text-muted d-block mt-1">Optimize database after cleanup</small>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label" for="logging-level">Logging level</label>
+                    <select class="form-select" id="logging-level" name="logging_level">
+                        <option value="info" selected>Info</option>
+                        <option value="debug">Debug</option>
+                        <option value="warn">Warn</option>
+                        <option value="error">Error</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div class="d-flex justify-content-end gap-3 mt-4 pt-3 border-top">
+                <button class="btn btn-outline-secondary" type="reset">Reset changes</button>
+                <button class="btn btn-danger" type="button" id="btn-clean-db">
+                    <i class="bi bi-trash3"></i> Clean DB
+                </button>
+                <button class="btn btn-primary" type="submit" id="btn-save-config">Save configuration</button>
+            </div>
+        </div>
+    </section>
+</form>
+
+<!-- Add Channels & Users Modal with Tabs -->
+<div class="modal fade" id="addChannelsModal" tabindex="-1" aria-labelledby="addChannelsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addChannelsModalLabel">Add Channels & Users to Configuration</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Tabs Navigation -->
+                <ul class="nav nav-tabs mb-3" id="addConfigTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="channels-tab" data-bs-toggle="tab" data-bs-target="#channels-tab-pane" type="button" role="tab" aria-controls="channels-tab-pane" aria-selected="true">
+                            <i class="bi bi-megaphone me-1"></i>Channels
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="users-tab" data-bs-toggle="tab" data-bs-target="#users-tab-pane" type="button" role="tab" aria-controls="users-tab-pane" aria-selected="false">
+                            <i class="bi bi-person me-1"></i>Private Users
+                        </button>
+                    </li>
+                </ul>
+
+                <!-- Tabs Content -->
+                <div class="tab-content" id="addConfigTabsContent">
+                    <!-- Channels Tab -->
+                    <div class="tab-pane fade show active" id="channels-tab-pane" role="tabpanel" aria-labelledby="channels-tab" tabindex="0">
+                        <div id="channels-loading" class="text-center py-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading channels...</span>
+                            </div>
+                            <p class="mt-2 text-muted">Fetching your Telegram channels...</p>
+                        </div>
+                        <div id="channels-error" class="alert alert-danger d-none" role="alert"></div>
+                        <div id="channels-list" class="d-none">
+                            <!-- Search Filter -->
+                            <div class="mb-3">
+                                <input type="text" class="form-control" id="channels-search" placeholder="🔍 Search channels by name...">
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <p class="text-muted mb-0">Select channels to add to your configuration:</p>
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="btn-select-all-channels">
+                                    <i class="bi bi-check-square me-1"></i>Select All
+                                </button>
+                            </div>
+                            <div class="list-group scrollable-list" id="channels-checkboxes">
+                                <!-- Channels will be populated here -->
+                            </div>
+                            <p class="text-muted small mt-3">Selected channels will be added with default settings (reaction threshold: 5, reply threshold: 3).</p>
+                        </div>
+                    </div>
+
+                    <!-- Users Tab -->
+                    <div class="tab-pane fade" id="users-tab-pane" role="tabpanel" aria-labelledby="users-tab" tabindex="0">
+                        <div id="users-loading" class="text-center py-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading users...</span>
+                            </div>
+                            <p class="mt-2 text-muted">Fetching your Telegram private chats...</p>
+                        </div>
+                        <div id="users-error" class="alert alert-danger d-none" role="alert"></div>
+                        <div id="users-list" class="d-none">
+                            <!-- Search Filter -->
+                            <div class="mb-3">
+                                <input type="text" class="form-control" id="users-search" placeholder="🔍 Search users by name or username...">
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <p class="text-muted mb-0">Select users to monitor:</p>
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="btn-select-all-users">
+                                    <i class="bi bi-check-square me-1"></i>Select All
+                                </button>
+                            </div>
+                            <div class="list-group scrollable-list" id="users-checkboxes">
+                                <!-- Users will be populated here -->
+                            </div>
+                            <p class="text-muted small mt-3">Only messages from selected users will be monitored.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="btn-add-selected-channels" disabled>Apply Changes</button>
+                <button type="button" class="btn btn-primary d-none" id="btn-add-selected-users" disabled>Apply Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    const form = document.getElementById("config-form");
+    const saveEndpoint = "{{ url_for('config.api_config_save') }}";
+
+    /**
+     * Refresh the channels table by fetching the latest data from the API
+     * and re-rendering the table body. This avoids full page reloads.
+     */
+    async function refreshChannelsTable() {
+        try {
+            // Check if the channels section is currently expanded before refreshing
+            const channelsBody = document.getElementById("channel-management-body");
+            const wasExpanded = channelsBody && channelsBody.classList.contains("show");
+            
+            const response = await fetch("/api/config/channels");
+            if (!response.ok) {
+                throw new Error("Failed to fetch channels");
+            }
+            
+            const data = await response.json();
+            const channels = data.channels || [];
+            
+            // Get the table body
+            const tbody = document.querySelector("#channels-table tbody");
+            if (!tbody) {
+                console.error("Channels table body not found");
+                return;
+            }
+            
+            // Clear existing rows
+            tbody.innerHTML = "";
+            
+            // If no channels, show empty state
+            if (channels.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="text-center text-muted">No channels configured yet.</td>
+                    </tr>
+                `;
+                // Ensure section stays open if it was open
+                if (wasExpanded && channelsBody && !channelsBody.classList.contains("show")) {
+                    channelsBody.classList.add("show");
+                }
+                return;
+            }
+            
+            // Render each channel
+            channels.forEach((channel, index) => {
+                const row = document.createElement("tr");
+                
+                // Determine button class based on chat_id (negative = group/channel, positive = user)
+                const buttonClass = channel.id < 0 ? "btn-info" : "btn-primary";
+                const avatarPrefix = channel.id < 0 ? "chat" : "user";
+                const avatarType = channel.id < 0 ? "chat" : "user";
+                const initials = channel.name.substring(0, 2).toUpperCase();
+                
+                row.innerHTML = `
+                    <td>
+                        <button type="button" class="btn btn-sm ${buttonClass} copy-chat-id" 
+                                data-chat-id="${channel.id}" 
+                                title="Copy ${channel.id}">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-clipboard" viewBox="0 0 16 16">
+                                <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/>
+                                <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/>
+                            </svg>
+                        </button>
+                    </td>
+                    <td>
+                        <div class="channel-avatar" data-type="${avatarType}">
+                            <img src="/api/avatar/${avatarPrefix}/${Math.abs(channel.id)}" alt="${escapeHtml(channel.name)}" onerror="this.style.display='none'; this.parentElement.textContent = '${initials}'">
+                        </div>
+                    </td>
+                    <td>${escapeHtml(channel.name)}</td>
+                    <td>
+                        <button type="button" class="btn btn-sm btn-outline-danger delete-channel" 
+                                data-chat-id="${channel.id}" 
+                                data-chat-name="${escapeHtml(channel.name)}"
+                                title="Delete Channel">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
+                                <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                                <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+                            </svg>
+                        </button>
+                    </td>
+                `;
+                
+                tbody.appendChild(row);
+            });
+            
+            // Ensure section stays open if it was open before refresh
+            if (wasExpanded && channelsBody && !channelsBody.classList.contains("show")) {
+                channelsBody.classList.add("show");
+            }
+            
+        } catch (error) {
+            console.error("Failed to refresh channels table:", error);
+            showToast("Could not refresh channels table", "error");
+        }
+    }
+    
+    /**
+     * Escape HTML special characters to prevent XSS
+     */
+    function escapeHtml(text) {
+        const map = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        };
+        return String(text).replace(/[&<>"']/g, m => map[m]);
+    }
+
+    /**
+     * Refresh the monitored users table by fetching the latest data from the API
+     * and re-rendering the table body. This avoids full page reloads.
+     */
+    async function refreshUsersTable() {
+        try {
+            // Check if the users section is currently expanded before refreshing
+            const usersBody = document.getElementById("users-management-body");
+            const wasExpanded = usersBody && usersBody.classList.contains("show");
+            
+            const response = await fetch("/api/config/users");
+            if (!response.ok) {
+                throw new Error("Failed to fetch users");
+            }
+            
+            const data = await response.json();
+            const users = data.users || [];
+            
+            // Get the table body
+            const tbody = document.querySelector("#users-table tbody");
+            if (!tbody) {
+                console.error("Users table body not found");
+                return;
+            }
+            
+            // Clear existing rows
+            tbody.innerHTML = "";
+            
+            // If no users, show empty state
+            if (users.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="text-center text-muted">No users configured yet.</td>
+                    </tr>
+                `;
+                // Ensure section stays open if it was open
+                if (wasExpanded && usersBody && !usersBody.classList.contains("show")) {
+                    usersBody.classList.add("show");
+                }
+                return;
+            }
+            
+            // Render each user
+            users.forEach((user, index) => {
+                const row = document.createElement("tr");
+                const initials = user.name.substring(0, 2).toUpperCase();
+                
+                row.innerHTML = `
+                    <td>
+                        <button type="button" class="btn btn-sm btn-primary copy-user-id" 
+                                data-user-id="${user.id}" 
+                                title="Copy ${user.id}">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-clipboard" viewBox="0 0 16 16">
+                                <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/>
+                                <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/>
+                            </svg>
+                        </button>
+                    </td>
+                    <td>
+                        <div class="user-avatar">
+                            <img src="/api/avatar/user/${user.id}" alt="${escapeHtml(user.name)}" onerror="this.style.display='none'; this.parentElement.textContent = '${initials}'">
+                        </div>
+                    </td>
+                    <td>${escapeHtml(user.name)}</td>
+                    <td>${escapeHtml(user.username || '-')}</td>
+                    <td>
+                        <button type="button" class="btn btn-sm btn-outline-danger delete-user" 
+                                data-user-id="${user.id}" 
+                                data-user-name="${escapeHtml(user.name)}"
+                                title="Delete User">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
+                                <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                                <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+                            </svg>
+                        </button>
+                    </td>
+                `;
+                
+                tbody.appendChild(row);
+            });
+            
+            // Ensure section stays open if it was open before refresh
+            if (wasExpanded && usersBody && !usersBody.classList.contains("show")) {
+                usersBody.classList.add("show");
+            }
+            
+        } catch (error) {
+            console.error("Failed to refresh users table:", error);
+            showToast("Could not refresh users table", "error");
+        }
+    }
+
+    function collectPayload() {
+        const payload = {};
+        
+        // Collect all form inputs
+        const formData = new FormData(form);
+        const flatData = {};
+        formData.forEach((value, key) => {
+            flatData[key] = value;
+        });
+        
+        // Explicitly read all checkboxes and convert to Boolean
+        form.querySelectorAll("input[type='checkbox'][name]").forEach((checkbox) => {
+            if (checkbox instanceof HTMLInputElement) {
+                flatData[checkbox.name] = checkbox.checked;
+            }
+        });
+        
+        // Build nested structure matching YAML config format
+        
+        // Alerts section (minimal - configuration managed via backend)
+        payload.alerts = {};
+        
+        // Parse interests as array
+        const interestsInput = document.getElementById("interest-profiles");
+        if (interestsInput) {
+            payload.interests = (interestsInput.value || "")
+                .split(",")
+                .map((item) => item.trim())
+                .filter(Boolean);
+        }
+        
+        // Similarity threshold
+        const similarityInput = document.getElementById("similarity-threshold");
+        if (similarityInput) {
+            payload.similarity_threshold = Number(similarityInput.value || 0.42);
+        }
+        
+        // System Settings - NOW SAVEABLE TO YAML
+        payload.system = {};
+        
+        // Redis settings
+        if (flatData.redis_host || flatData.redis_port) {
+            payload.system.redis = {};
+            if (flatData.redis_host) {
+                payload.system.redis.host = flatData.redis_host;
+            }
+            if (flatData.redis_port) {
+                payload.system.redis.port = Number(flatData.redis_port);
+            }
+        }
+        
+        // Database settings
+        if (flatData.database_uri) {
+            payload.system.database_uri = flatData.database_uri;
+        }
+        
+        // Database retention settings
+        payload.system.database = {};
+        if (flatData.max_messages !== undefined) {
+            payload.system.database.max_messages = Number(flatData.max_messages);
+        }
+        if (flatData.db_retention_days !== undefined) {
+            payload.system.database.retention_days = Number(flatData.db_retention_days);
+        }
+        if (flatData.cleanup_enabled !== undefined) {
+            payload.system.database.cleanup_enabled = flatData.cleanup_enabled;
+        }
+        if (flatData.vacuum_on_cleanup !== undefined) {
+            payload.system.database.vacuum_on_cleanup = flatData.vacuum_on_cleanup;
+        }
+        
+        // Logging settings
+        payload.system.logging = {};
+        if (flatData.logging_level) {
+            payload.system.logging.level = flatData.logging_level;
+        }
+        if (flatData.retention_days) {
+            payload.system.logging.retention_days = Number(flatData.retention_days);
+        }
+        
+        return payload;
+    }
+
+    let isSubmitting = false;
+
+    async function submitConfig(event) {
+        event.preventDefault();
+        
+        // Guard against double submits
+        if (isSubmitting) {
+            console.warn("Configuration save already in progress, ignoring duplicate submit");
+            return;
+        }
+        
+        const submitButton = document.getElementById("btn-save-config");
+        const originalButtonText = submitButton ? submitButton.textContent : "";
+        
+        try {
+            // Mark as submitting and disable button
+            isSubmitting = true;
+            
+            if (submitButton) {
+                submitButton.disabled = true;
+                submitButton.setAttribute("aria-busy", "true");
+                submitButton.setAttribute("aria-disabled", "true");
+                submitButton.textContent = "Saving...";
+                submitButton.classList.add("loading");
+            }
+            
+            const payload = collectPayload();
+            
+            // Check if system settings have changed (requires restart)
+            const systemSettingsChanged = payload.system && Object.keys(payload.system).length > 0;
+            
+            const response = await fetch(saveEndpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+            
+            if (!response.ok) {
+                throw new Error("Persist failed");
+            }
+            
+            // Config is automatically reloaded by Sentinel via Redis pub/sub
+            showToast("Configuration saved and reloaded successfully", "success");
+            
+            // If system settings changed, restart Sentinel container
+            if (systemSettingsChanged) {
+                showToast("System settings changed - restarting Sentinel...", "info");
+                
+                try {
+                    const restartResponse = await fetch("/api/sentinel/restart", {
+                        method: "POST",
+                    });
+                    
+                    if (restartResponse.ok) {
+                        showToast("Sentinel is restarting to apply system settings", "success");
+                    } else {
+                        showToast("Configuration saved but restart failed. Please restart manually via Docker.", "warning");
+                    }
+                } catch (restartError) {
+                    console.error("Restart error:", restartError);
+                    showToast("Configuration saved but restart failed. Please restart manually via Docker.", "warning");
+                }
+            }
+            
+            // Reload config from server to update UI display
+            await loadCurrentConfig();
+        } catch (error) {
+            console.error(error);
+            showToast("Could not save configuration", "error");
+        } finally {
+            // Always restore button state
+            isSubmitting = false;
+            
+            if (submitButton) {
+                submitButton.disabled = false;
+                submitButton.removeAttribute("aria-busy");
+                submitButton.removeAttribute("aria-disabled");
+                submitButton.textContent = originalButtonText;
+                submitButton.classList.remove("loading");
+            }
+        }
+    }
+
+    // ============================================================================
+    // INITIALIZATION HELPER FUNCTIONS
+    // ============================================================================
+    
+    function initializeConfigHandlers() {
+        // Load current configuration
+        loadCurrentConfig();
+        
+        // Similarity threshold slider
+        document.getElementById("similarity-threshold")?.addEventListener("input", (event) => {
+            document.getElementById("similarity-value").textContent = Number(event.target.value).toFixed(2);
+        });
+        
+
+        // Export user YAML button
+        document.getElementById("btn-export-user-yaml")?.addEventListener("click", async () => {
+            try {
+                const url = "/api/config/export";
+                window.open(url, "_blank");
+                showToast("Exporting user configuration", "info");
+            } catch (e) {
+                console.error("Export user YAML error", e);
+                showToast("Failed to export user YAML", "error");
+            }
+        });
+
+        // EXPORT YAML: trigger file download
+        document.getElementById("btn-export-yaml")?.addEventListener("click", async () => {
+            try {
+                const url = "/api/config/export";
+                // Open in a new tab to prompt download using browser defaults
+                window.open(url, "_blank");
+                showToast("Exporting YAML", "info");
+            } catch (e) {
+                console.error("Export YAML error", e);
+                showToast("Failed to export YAML", "error");
+            }
+        });
+        form?.addEventListener("submit", submitConfig);
+        
+        // Handle Save Scoring button
+        document.getElementById("btn-save-scoring")?.addEventListener("click", async () => {
+            const button = document.getElementById("btn-save-scoring");
+            const originalText = button.innerHTML;
+            
+            try {
+                button.disabled = true;
+                button.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Applying...';
+                
+                const payload = collectPayload();
+                const response = await fetch(saveEndpoint, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
+                
+                if (!response.ok) {
+                    throw new Error("Save failed");
+                }
+                
+                // Config is automatically reloaded by Sentinel via Redis pub/sub
+                showToast("Settings saved and reloaded successfully", "success");
+                
+                // Reload config from server to update UI display
+                await loadCurrentConfig();
+                
+            } catch (error) {
+                console.error(error);
+                showToast("Failed to save settings", "error");
+            } finally {
+                button.disabled = false;
+                button.innerHTML = originalText;
+            }
+        });
+        
+        // Handle Save Advanced button
+        document.getElementById("btn-save-advanced")?.addEventListener("click", async () => {
+            const button = document.getElementById("btn-save-advanced");
+            const originalText = button.innerHTML;
+            
+            try {
+                button.disabled = true;
+                button.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Applying...';
+                
+                const payload = collectPayload();
+                const response = await fetch(saveEndpoint, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
+                
+                if (!response.ok) {
+                    throw new Error("Save failed");
+                }
+                
+                // Config is automatically reloaded by Sentinel via Redis pub/sub
+                showToast("Advanced settings saved successfully", "success");
+                
+                // Reload config from server to update UI display
+                await loadCurrentConfig();
+                
+            } catch (error) {
+                console.error(error);
+                showToast("Failed to save advanced settings", "error");
+            } finally {
+                button.disabled = false;
+                button.innerHTML = originalText;
+            }
+        });
+    }
+    
+    async function loadCurrentConfig() {
+        try {
+            const response = await fetch("{{ url_for('config.api_config_current') }}");
+            if (!response.ok) {
+                throw new Error("Failed to load configuration");
+            }
+            
+            const config = await response.json();
+            
+            // Populate Telegram Account fields
+            if (config.telegram) {
+                const apiIdInput = document.getElementById("api-id");
+                const apiHashInput = document.getElementById("api-hash");
+                
+                if (apiIdInput && config.telegram.api_id) {
+                    apiIdInput.value = config.telegram.api_id;
+                }
+                if (apiHashInput && config.telegram.api_hash) {
+                    apiHashInput.value = config.telegram.api_hash;
+                }
+            }
+            
+            // Feedback learning configuration managed at backend level (tgsentinel.yml)
+            
+            // Populate System Settings fields from new system config structure
+            if (config.system) {
+                // Redis settings
+                if (config.system.redis) {
+                    const redisHostInput = document.getElementById("redis-host");
+                    const redisPortInput = document.getElementById("redis-port");
+                    
+                    if (redisHostInput && config.system.redis.host) {
+                        redisHostInput.value = config.system.redis.host;
+                    }
+                    if (redisPortInput && config.system.redis.port) {
+                        redisPortInput.value = config.system.redis.port;
+                    }
+                }
+                
+                // Database URI
+                if (config.system.database_uri) {
+                    const databaseUriInput = document.getElementById("database-uri");
+                    if (databaseUriInput) {
+                        databaseUriInput.value = config.system.database_uri;
+                    }
+                }
+                
+                // Database retention settings
+                if (config.system.database) {
+                    const maxMessagesInput = document.getElementById("max-messages");
+                    const dbRetentionDaysInput = document.getElementById("db-retention-days");
+                    const cleanupEnabledCheckbox = document.getElementById("cleanup-enabled");
+                    const vacuumOnCleanupCheckbox = document.getElementById("vacuum-on-cleanup");
+                    
+                    if (maxMessagesInput && config.system.database.max_messages !== undefined) {
+                        maxMessagesInput.value = config.system.database.max_messages;
+                    }
+                    if (dbRetentionDaysInput && config.system.database.retention_days !== undefined) {
+                        dbRetentionDaysInput.value = config.system.database.retention_days;
+                    }
+                    if (cleanupEnabledCheckbox && config.system.database.cleanup_enabled !== undefined) {
+                        cleanupEnabledCheckbox.checked = Boolean(config.system.database.cleanup_enabled);
+                    }
+                    if (vacuumOnCleanupCheckbox && config.system.database.vacuum_on_cleanup !== undefined) {
+                        vacuumOnCleanupCheckbox.checked = Boolean(config.system.database.vacuum_on_cleanup);
+                    }
+                }
+                
+                // Logging settings
+                if (config.system.logging) {
+                    const loggingLevelSelect = document.getElementById("logging-level");
+                    const retentionDaysInput = document.getElementById("retention-days");
+                    
+                    if (loggingLevelSelect) {
+                        // Set level with default fallback to 'info'
+                        loggingLevelSelect.value = config.system.logging.level || 'info';
+                    }
+                    if (retentionDaysInput && config.system.logging.retention_days !== undefined) {
+                        retentionDaysInput.value = config.system.logging.retention_days;
+                    }
+                } else {
+                    // Ensure default value if config.system.logging doesn't exist
+                    const loggingLevelSelect = document.getElementById("logging-level");
+                    if (loggingLevelSelect) {
+                        loggingLevelSelect.value = 'info';
+                    }
+                }
+            }
+            
+            // Legacy compatibility: also check top-level redis/database_uri if system not present
+            if (!config.system && config.redis) {
+                const redisHostInput = document.getElementById("redis-host");
+                const redisPortInput = document.getElementById("redis-port");
+                
+                if (redisHostInput && config.redis.host) {
+                    redisHostInput.value = config.redis.host;
+                }
+                if (redisPortInput && config.redis.port) {
+                    redisPortInput.value = config.redis.port;
+                }
+            }
+            
+            if (!config.system && config.database_uri) {
+                const databaseUriInput = document.getElementById("database-uri");
+                if (databaseUriInput) {
+                    databaseUriInput.value = config.database_uri;
+                }
+            }
+            
+        } catch (error) {
+            console.error("Failed to load configuration:", error);
+            showToast("Could not load current configuration", "error");
+        }
+    }
+    
+    // Handle Add Channels Modal
+    let availableChats = [];
+    let existingChannelIds = new Set();
+    
+    // Handle Add Users Modal (global variables)
+    let availableUsers = [];
+    let existingUserIds = new Set();
+    let usersDataLoaded = false; // Track if users have been loaded
+    
+    // Module-scoped preview update handlers (attached once to prevent memory leaks)
+    function handleEditChannelPreviewUpdate() {
+        const profileSelect = document.getElementById("edit-channel-profiles");
+        const extraKeywordsEl = document.getElementById("edit-channel-keywords-extra");
+        const previewEl = document.getElementById("edit-channel-preview");
+        if (profileSelect && extraKeywordsEl && previewEl) {
+            updateKeywordsPreview(profileSelect, extraKeywordsEl, previewEl);
+        }
+    }
+    
+    function handleEditUserPreviewUpdate() {
+        const profileSelect = document.getElementById("edit-user-profiles");
+        const extraKeywordsEl = document.getElementById("edit-user-keywords-extra");
+        const previewEl = document.getElementById("edit-user-preview");
+        if (profileSelect && extraKeywordsEl && previewEl) {
+            updateKeywordsPreview(profileSelect, extraKeywordsEl, previewEl);
+        }
+    }
+    
+    function initializeModalHandlers() {
+        const addChannelsModal = document.getElementById("addChannelsModal");
+        
+        // Handle tab switching to show/hide appropriate "Add Selected" button
+        const channelsTab = document.getElementById("channels-tab");
+        const usersTab = document.getElementById("users-tab");
+        const btnAddSelectedChannels = document.getElementById("btn-add-selected-channels");
+        const btnAddSelectedUsers = document.getElementById("btn-add-selected-users");
+        
+        if (channelsTab && usersTab) {
+            channelsTab.addEventListener("shown.bs.tab", () => {
+                btnAddSelectedChannels.classList.remove("d-none");
+                btnAddSelectedChannels.disabled = false;
+                btnAddSelectedUsers.classList.add("d-none");
+                btnAddSelectedUsers.disabled = true;
+            });
+            
+            usersTab.addEventListener("shown.bs.tab", async () => {
+                btnAddSelectedChannels.classList.add("d-none");
+                btnAddSelectedChannels.disabled = true;
+                btnAddSelectedUsers.classList.remove("d-none");
+                btnAddSelectedUsers.disabled = false;
+                
+                // Always reset error state when showing tab
+                document.getElementById("users-error").classList.add("d-none");
+                
+                // Load users when tab is shown
+                await loadUsersData();
+            });
+        }
+        
+        if (addChannelsModal) {
+            // Apply glass backdrop effect with MutationObserver fallback
+            let backdropObserver = null;
+            
+            const applyGlassBackdrop = () => {
+                const backdrop = document.querySelector('.modal-backdrop');
+                if (backdrop && !backdrop.classList.contains('glass-backdrop')) {
+                    backdrop.classList.add('glass-backdrop');
+                    return true;
+                }
+                return false;
+            };
+            
+            const startBackdropObserver = () => {
+                if (backdropObserver) return; // Already observing
+                
+                backdropObserver = new MutationObserver((mutations) => {
+                    for (const mutation of mutations) {
+                        if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                            for (const node of mutation.addedNodes) {
+                                if (node.nodeType === 1 && node.classList && node.classList.contains('modal-backdrop')) {
+                                    node.classList.add('glass-backdrop');
+                                    // Stop observing once we've applied the class
+                                    if (backdropObserver) {
+                                        backdropObserver.disconnect();
+                                        backdropObserver = null;
+                                    }
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                });
+                
+                backdropObserver.observe(document.body, {
+                    childList: true,
+                    subtree: false
+                });
+            };
+            
+            const stopBackdropObserver = () => {
+                if (backdropObserver) {
+                    backdropObserver.disconnect();
+                    backdropObserver = null;
+                }
+            };
+            
+            addChannelsModal.addEventListener('shown.bs.modal', () => {
+                // Apply class after modal is fully rendered
+                if (!applyGlassBackdrop()) {
+                    // Fallback: if backdrop not found, start observing
+                    startBackdropObserver();
+                } else {
+                    // Successfully applied, ensure observer is stopped
+                    stopBackdropObserver();
+                }
+            });
+            
+            addChannelsModal.addEventListener('hidden.bs.modal', () => {
+                // Clean up observer to prevent leaks
+                stopBackdropObserver();
+                
+                // Remove glass class from any remaining backdrop
+                const backdrop = document.querySelector('.modal-backdrop');
+                if (backdrop) backdrop.classList.remove('glass-backdrop');
+            });
+            
+            // On hide, blur focused element inside to prevent aria-hidden focus conflicts
+            addChannelsModal.addEventListener("hide.bs.modal", () => {
+                if (document.activeElement && addChannelsModal.contains(document.activeElement)) {
+                    document.activeElement.blur();
+                }
+                // Reset users data loaded flag so it reloads next time
+                usersDataLoaded = false;
+            });
+
+            addChannelsModal.addEventListener("show.bs.modal", async () => {
+                // Reset modal state - show channels tab by default
+                btnAddSelectedChannels.classList.remove("d-none");
+                btnAddSelectedUsers.classList.add("d-none");
+                
+                document.getElementById("channels-loading").classList.remove("d-none");
+                document.getElementById("channels-error").classList.add("d-none");
+                document.getElementById("channels-list").classList.add("d-none");
+                document.getElementById("btn-add-selected-channels").disabled = true;
+                
+                // Get existing channel IDs
+                try {
+                    const configResponse = await fetch("{{ url_for('config.api_config_current') }}");
+                    if (configResponse.ok) {
+                        const configData = await configResponse.json();
+                        existingChannelIds = new Set((configData.channels || []).map(c => c.id));
+                    }
+                } catch (err) {
+                    console.error("Failed to load existing channels:", err);
+                }
+                
+                try {
+                    const response = await fetch("{{ url_for('telegram.api_telegram_chats') }}");
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}));
+                        throw new Error(errorData.message || "Failed to fetch channels");
+                    }
+                    
+                    const data = await response.json();
+                    availableChats = data.chats || [];
+                    
+                    if (availableChats.length === 0) {
+                        throw new Error("No channels found. Make sure you have joined some channels or groups.");
+                    }
+                    
+                    // Populate checkboxes
+                    renderChannelCheckboxes(availableChats, existingChannelIds);
+                    
+                    // Initialize button state based on pre-selections
+                    updateApplyButtonState();
+                    
+                    document.getElementById("channels-loading").classList.add("d-none");
+                    document.getElementById("channels-list").classList.remove("d-none");
+                    
+                } catch (error) {
+                    console.error("Failed to load channels:", error);
+                    document.getElementById("channels-loading").classList.add("d-none");
+                    const errorDiv = document.getElementById("channels-error");
+                    errorDiv.textContent = error.message || "Could not load channels from Telegram";
+                    errorDiv.classList.remove("d-none");
+                }
+            });
+        }
+        
+        // Helper function to update "Apply Changes" button state based on checkbox selections
+        function updateApplyButtonState() {
+            const checkboxes = document.querySelectorAll("#channels-checkboxes input[type='checkbox']");
+            let hasChanges = false;
+            checkboxes.forEach(cb => {
+                const isExisting = cb.dataset.existing === "true";
+                const isChecked = cb.checked;
+                // Change detected if: (existing and unchecked) OR (new and checked)
+                if ((isExisting && !isChecked) || (!isExisting && isChecked)) {
+                    hasChanges = true;
+                }
+            });
+            const btn = document.getElementById("btn-add-selected-channels");
+            if (btn) {
+                btn.disabled = !hasChanges;
+            }
+        }
+        
+        // Handle checkbox changes
+        document.getElementById("channels-checkboxes")?.addEventListener("change", () => {
+            const channelsTabActive = document.getElementById("channels-tab")?.classList.contains("active");
+            if (channelsTabActive) {
+                updateApplyButtonState();
+            }
+        });
+        
+        // Handle add/remove selected channels
+        document.getElementById("btn-add-selected-channels")?.addEventListener("click", async () => {
+            const button = document.getElementById("btn-add-selected-channels");
+            const originalText = button.innerHTML;
+            
+            const checkboxes = document.querySelectorAll("#channels-checkboxes input[type='checkbox']");
+            
+            // Collect channels to add (new ones that are checked)
+            const toAdd = [];
+            // Collect channels to remove (existing ones that are unchecked)
+            const toRemove = [];
+            
+            checkboxes.forEach(checkbox => {
+                const chatId = parseInt(checkbox.value, 10);
+                const chat = availableChats.find(c => c.id === chatId);
+                const isExisting = checkbox.dataset.existing === "true";
+                const isChecked = checkbox.checked;
+                
+                if (!isExisting && isChecked && chat) {
+                    // New channel being added
+                    toAdd.push({ id: chat.id, name: chat.name });
+                } else if (isExisting && !isChecked && chat) {
+                    // Existing channel being removed
+                    toRemove.push({ id: chat.id, name: chat.name });
+                }
+            });
+            
+            if (toAdd.length === 0 && toRemove.length === 0) {
+                showToast("No changes to apply", "warning");
+                return;
+            }
+            
+            // Disable button and show loading spinner
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Applying...';
+            
+            try {
+                let addedCount = 0;
+                let removedCount = 0;
+                
+                // Add new channels
+                if (toAdd.length > 0) {
+                    const response = await fetch("{{ url_for('channels.add_channels') }}", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ channels: toAdd }),
+                    });
+                    
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}));
+                        throw new Error(errorData.message || "Failed to add channels");
+                    }
+                    
+                    const result = await response.json();
+                    addedCount = result.added || 0;
+                }
+                
+                // Remove unchecked channels
+                if (toRemove.length > 0) {
+                    for (const channel of toRemove) {
+                        const deleteUrl = `/api/config/channels/${encodeURIComponent(channel.id)}`;
+                        const response = await fetch(deleteUrl, {
+                            method: "DELETE",
+                        });
+
+                        if (response.ok) {
+                            removedCount++;
+                        }
+                    }
+                }
+                
+                // Build success message
+                const messages = [];
+                if (addedCount > 0) messages.push(`Added ${addedCount} channel(s)`);
+                if (removedCount > 0) messages.push(`Removed ${removedCount} channel(s)`);
+                showToast(messages.join(" and "), "success");
+                
+                // Close modal
+                const modal = bootstrap.Modal.getInstance(document.getElementById("addChannelsModal"));
+                if (modal) {
+                    modal.hide();
+                }
+                
+                // Refresh the channels table immediately
+                await refreshChannelsTable();
+                
+            } catch (error) {
+                console.error("Failed to update channels:", error);
+                showToast(error.message || "Could not update channels", "error");
+            } finally {
+                // Re-enable button and restore original text
+                button.disabled = false;
+                button.innerHTML = originalText;
+            }
+        });
+        
+        // Setup one-time event listeners for edit modal preview updates
+        const editChannelProfileSelect = document.getElementById("edit-channel-profiles");
+        const editChannelKeywordsExtra = document.getElementById("edit-channel-keywords-extra");
+        if (editChannelProfileSelect && editChannelKeywordsExtra) {
+            // Guard against duplicate listener registration
+            if (!editChannelProfileSelect.__previewListenerAttached) {
+                editChannelProfileSelect.addEventListener("change", handleEditChannelPreviewUpdate);
+                editChannelProfileSelect.__previewListenerAttached = true;
+            }
+            if (!editChannelKeywordsExtra.__previewListenerAttached) {
+                editChannelKeywordsExtra.addEventListener("input", handleEditChannelPreviewUpdate);
+                editChannelKeywordsExtra.__previewListenerAttached = true;
+            }
+        }
+        
+        const editUserProfileSelect = document.getElementById("edit-user-profiles");
+        const editUserKeywordsExtra = document.getElementById("edit-user-keywords-extra");
+        if (editUserProfileSelect && editUserKeywordsExtra) {
+            // Guard against duplicate listener registration
+            if (!editUserProfileSelect.__previewListenerAttached) {
+                editUserProfileSelect.addEventListener("change", handleEditUserPreviewUpdate);
+                editUserProfileSelect.__previewListenerAttached = true;
+            }
+            if (!editUserKeywordsExtra.__previewListenerAttached) {
+                editUserKeywordsExtra.addEventListener("input", handleEditUserPreviewUpdate);
+                editUserKeywordsExtra.__previewListenerAttached = true;
+            }
+        }
+    }
+    
+    function renderChannelCheckboxes(chats, existingIds) {
+        const container = document.getElementById("channels-checkboxes");
+        if (!container) return;
+        
+        container.innerHTML = "";
+        
+        // Sort by name
+        const sortedChats = [...chats].sort((a, b) => a.name.localeCompare(b.name));
+        
+        sortedChats.forEach(chat => {
+            const div = document.createElement("div");
+            div.className = "list-group-item";
+            div.style.display = "flex";
+            div.style.justifyContent = "space-between";
+            div.style.alignItems = "center";
+            
+            const isExisting = existingIds.has(chat.id);
+            
+            // Add visual styling for already-configured items
+            if (isExisting) {
+                div.style.backgroundColor = "rgba(25, 135, 84, 0.1)";  // Light green background
+                div.style.borderLeft = "3px solid #198754";  // Green left border
+            }
+            
+            // Left side container: checkbox + avatar + name
+            const leftSide = document.createElement("div");
+            leftSide.className = "d-flex align-items-center";
+            leftSide.style.gap = "0.75rem";
+            leftSide.style.flex = "1";
+            leftSide.style.minWidth = "0"; // Allow text truncation
+            
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.className = "form-check-input";
+            checkbox.id = `chat-${chat.id}`;
+            checkbox.value = chat.id;
+            checkbox.checked = isExisting;  // Pre-select existing channels
+            checkbox.dataset.existing = isExisting ? "true" : "false";  // Track if existing
+            checkbox.style.flexShrink = "0"; // Don't shrink checkbox
+            
+            // Avatar
+            const avatar = document.createElement("div");
+            avatar.style.width = "28px";
+            avatar.style.height = "28px";
+            avatar.style.borderRadius = "50%";
+            avatar.style.flexShrink = "0";
+            avatar.style.display = "flex";
+            avatar.style.alignItems = "center";
+            avatar.style.justifyContent = "center";
+            avatar.style.fontSize = "0.75rem";
+            avatar.style.fontWeight = "600";
+            avatar.style.color = "white";
+            
+            // Try to load avatar from cache, otherwise use initials
+            const isChat = chat.id < 0;
+            const prefix = isChat ? "chat" : "user";
+            const avatarUrl = `/api/avatar/${prefix}/${Math.abs(chat.id)}`;
+            const avatarImg = document.createElement("img");
+            avatarImg.src = avatarUrl;
+            avatarImg.alt = chat.name;
+            avatarImg.style.width = "100%";
+            avatarImg.style.height = "100%";
+            avatarImg.style.borderRadius = "50%";
+            avatarImg.style.objectFit = "cover";
+            
+            // Fallback to initials if image fails to load
+            avatarImg.onerror = function() {
+                this.style.display = 'none';
+                const initials = chat.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+                avatar.textContent = initials || chat.name[0]?.toUpperCase() || '?';
+                // Color based on chat type
+                if (chat.type === 'channel') {
+                    avatar.style.backgroundColor = '#0d6efd'; // primary blue
+                } else if (chat.type === 'supergroup') {
+                    avatar.style.backgroundColor = '#0dcaf0'; // info cyan
+                } else {
+                    avatar.style.backgroundColor = '#6c757d'; // secondary gray
+                }
+            };
+            avatar.appendChild(avatarImg);
+            
+            // Name and badge wrapper
+            const nameWrapper = document.createElement("div");
+            nameWrapper.className = "d-flex align-items-center gap-2 flex-grow-1";
+            nameWrapper.style.minWidth = "0"; // Allow text truncation
+            
+            const label = document.createElement("label");
+            label.htmlFor = `chat-${chat.id}`;
+            label.style.cursor = "pointer";
+            label.style.margin = "0";
+            label.style.flex = "1";
+            label.style.minWidth = "0";
+            label.textContent = chat.name;
+            label.style.overflow = "hidden";
+            label.style.textOverflow = "ellipsis";
+            label.style.whiteSpace = "nowrap";
+            
+            nameWrapper.appendChild(label);
+            
+            if (isExisting) {
+                const checkmark = document.createElement("span");
+                checkmark.className = "badge bg-success";
+                checkmark.style.flexShrink = "0";
+                checkmark.innerHTML = '<i class="bi bi-check-circle me-1"></i>Monitored';
+                checkmark.title = "Uncheck to remove from monitoring";
+                nameWrapper.appendChild(checkmark);
+            }
+            
+            leftSide.appendChild(checkbox);
+            leftSide.appendChild(avatar);
+            leftSide.appendChild(nameWrapper);
+            
+            // Right side: type badge
+            const badgeSpan = document.createElement("span");
+            badgeSpan.className = `badge bg-${chat.type === 'channel' ? 'primary' : chat.type === 'supergroup' ? 'info' : 'secondary'}`;
+            badgeSpan.style.flexShrink = "0";
+            badgeSpan.textContent = chat.type;
+            
+            div.appendChild(leftSide);
+            div.appendChild(badgeSpan);
+            container.appendChild(div);
+        });
+    }
+    
+    function initializeChannelSearchHandler() {
+        const channelsSearch = document.getElementById("channels-search");
+        if (channelsSearch) {
+            channelsSearch.addEventListener("input", (e) => {
+                const searchTerm = e.target.value.toLowerCase();
+                const items = document.querySelectorAll("#channels-checkboxes .list-group-item");
+                
+                items.forEach(item => {
+                    const label = item.querySelector("label");
+                    const text = label ? label.textContent.toLowerCase() : "";
+                    
+                    if (text.includes(searchTerm)) {
+                        item.style.display = "";
+                    } else {
+                        item.style.display = "none";
+                    }
+                });
+            });
+        }
+    }
+    
+    function initializeCopyChannelIdHandler() {
+        document.body.addEventListener("click", (e) => {
+            const copyButton = e.target.closest(".copy-chat-id");
+            if (copyButton) {
+                const chatId = copyButton.dataset.chatId;
+                
+                // Use modern clipboard API
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(chatId)
+                        .then(() => {
+                            // Visual feedback
+                            const originalHTML = copyButton.innerHTML;
+                            copyButton.innerHTML = `
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-check" viewBox="0 0 16 16">
+                                    <path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425z"/>
+                                </svg>
+                            `;
+                            
+                            setTimeout(() => {
+                                copyButton.innerHTML = originalHTML;
+                            }, 2000);
+                            
+                            showToast(`Chat ID ${chatId} copied to clipboard`, "success");
+                        })
+                        .catch((err) => {
+                            console.error("Failed to copy:", err);
+                            showToast("Failed to copy to clipboard", "error");
+                        });
+                } else {
+                    // Fallback for older browsers
+                    const textArea = document.createElement("textarea");
+                    textArea.value = chatId;
+                    textArea.style.position = "fixed";
+                    textArea.style.left = "-999999px";
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    
+                    try {
+                        document.execCommand("copy");
+                        showToast(`Chat ID ${chatId} copied to clipboard`, "success");
+                    } catch (err) {
+                        console.error("Fallback copy failed:", err);
+                        showToast("Failed to copy to clipboard", "error");
+                    }
+                    
+                    document.body.removeChild(textArea);
+                }
+            }
+        });
+    }
+    
+    function initializeDeleteChannelHandler() {
+        document.body.addEventListener("click", (e) => {
+            const deleteButton = e.target.closest(".delete-channel");
+            if (deleteButton) {
+                const chatId = deleteButton.dataset.chatId;
+                const chatName = deleteButton.dataset.chatName;
+                
+                // Confirm deletion
+                if (confirm(`Are you sure you want to delete "${chatName}" (ID: ${chatId})?\n\nThis will remove the channel from monitoring and reload the sentinel container.`)) {
+                    // Disable button during deletion
+                    deleteButton.disabled = true;
+                    deleteButton.innerHTML = `
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    `;
+                    
+                    fetch(`/api/config/channels/${chatId}`, {
+                        method: "DELETE",
+                    })
+                        .then(response => {
+                            if (!response.ok) {
+                                return response.json().then(data => {
+                                    throw new Error(data.message || "Failed to delete channel");
+                                });
+                            }
+                            return response.json();
+                        })
+                        .then(data => {
+                            showToast(`Channel "${chatName}" deleted successfully`, "success");
+                            
+                            // Refresh the channels table immediately
+                            refreshChannelsTable();
+                        })
+                        .catch(error => {
+                            console.error("Failed to delete channel:", error);
+                            showToast(error.message || "Could not delete channel", "error");
+                            
+                            // Re-enable button
+                            deleteButton.disabled = false;
+                            deleteButton.innerHTML = `
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
+                                    <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                                    <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+                                </svg>
+                            `;
+                        });
+                }
+            }
+        });
+    }
+    
+    function initializeDeleteUserHandler() {
+        document.body.addEventListener("click", (e) => {
+            const deleteButton = e.target.closest(".delete-user");
+            if (deleteButton) {
+                const userId = deleteButton.dataset.userId;
+                const userName = deleteButton.dataset.userName;
+                
+                // Confirm deletion
+                if (confirm(`Are you sure you want to delete "${userName}" (ID: ${userId})?\n\nThis will remove the user from monitoring.`)) {
+                    // Disable button during deletion
+                    deleteButton.disabled = true;
+                    deleteButton.innerHTML = `
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    `;
+                    
+                    fetch(`/api/config/users/${userId}`, {
+                        method: "DELETE",
+                    })
+                        .then(response => {
+                            if (!response.ok) {
+                                return response.json().then(data => {
+                                    throw new Error(data.message || "Failed to delete user");
+                                });
+                            }
+                            return response.json();
+                        })
+                        .then(data => {
+                            showToast(`User "${userName}" deleted successfully`, "success");
+                            
+                            // Refresh the users table immediately
+                            refreshUsersTable();
+                        })
+                        .catch(error => {
+                            console.error("Failed to delete user:", error);
+                            showToast(error.message || "Could not delete user", "error");
+                            
+                            // Re-enable button
+                            deleteButton.disabled = false;
+                            deleteButton.innerHTML = `
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
+                                    <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                                    <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+                                </svg>
+                            `;
+                        });
+                }
+            }
+        });
+    }
+    
+    function initializeResetButtonHandler() {
+        // Override the default reset behavior to fetch from server
+        const resetButton = document.querySelector("button[type='reset']");
+        if (resetButton) {
+            resetButton.addEventListener("click", async (e) => {
+                e.preventDefault(); // Prevent default form reset
+                
+                if (!confirm("Reset all changes to current server configuration?")) {
+                    return;
+                }
+                
+                try {
+                    // Fetch current config from server
+                    const resp = await fetch("/api/config/current");
+                    if (!resp.ok) {
+                        throw new Error(`HTTP ${resp.status}`);
+                    }
+                    
+                    const config = await resp.json();
+                    
+                    // Populate form fields with server state
+                    if (config.telegram) {
+                        document.getElementById("api-id").value = config.telegram.api_id || "";
+                        document.getElementById("api-hash").value = config.telegram.api_hash || "";
+                    }
+                    
+                    if (config.semantic) {
+                        document.getElementById("similarity-threshold").value = config.semantic.similarity_threshold || 0.42;
+                        document.getElementById("similarity-value").textContent = (config.semantic.similarity_threshold || 0.42).toFixed(2);
+                    }
+                    
+                    if (config.redis) {
+                        document.getElementById("redis-host").value = config.redis.host || "redis";
+                        document.getElementById("redis-port").value = config.redis.port || 6379;
+                    }
+                    
+                    // Re-populate all fields by calling loadCurrentConfig with the fetched config
+                    loadCurrentConfig();
+                    
+                    showToast("Configuration reset to server state", "info");
+                } catch (error) {
+                    console.error("Failed to reset config:", error);
+                    showToast("Could not fetch server configuration", "error");
+                }
+            });
+        }
+    }
+    
+    function initializeSelectAllChannelsHandler() {
+        document.getElementById("btn-select-all-channels")?.addEventListener("click", () => {
+            const checkboxes = document.querySelectorAll("#channels-checkboxes input[type='checkbox']");
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            
+            checkboxes.forEach(cb => {
+                cb.checked = !allChecked;
+            });
+            
+            // Trigger change event to update button state
+            const event = new Event("change", { bubbles: true });
+            document.getElementById("channels-checkboxes").dispatchEvent(event);
+            
+            // Update button text
+            const btn = document.getElementById("btn-select-all-channels");
+            btn.innerHTML = allChecked ? 
+                '<i class="bi bi-check-square me-1"></i>Select All' : 
+                '<i class="bi bi-square me-1"></i>Deselect All';
+        });
+    }
+    
+    // Function to load users data (reusable for both modal and tab)
+    async function loadUsersData() {
+        // Skip if already loaded
+        if (usersDataLoaded) {
+            return;
+        }
+        
+        // Reset state
+        document.getElementById("users-loading").classList.remove("d-none");
+        document.getElementById("users-error").classList.add("d-none");
+        document.getElementById("users-list").classList.add("d-none");
+        document.getElementById("btn-add-selected-users").disabled = true;
+        
+        // Get existing monitored user IDs
+        try {
+            const configResponse = await fetch("{{ url_for('config.api_config_current') }}");
+            if (configResponse.ok) {
+                const configData = await configResponse.json();
+                existingUserIds = new Set((configData.monitored_users || []).map(u => u.id));
+            }
+        } catch (err) {
+            console.error("Failed to load existing users:", err);
+        }
+        
+        try {
+            const response = await fetch("{{ url_for('telegram.api_telegram_users') }}");
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                // Throw a rich error payload instead of mutating Error object
+                throw {
+                    status: response.status,
+                    message: errorData.message || "Failed to fetch users",
+                    name: "FetchError"
+                };
+            }
+            
+            const data = await response.json();
+            availableUsers = data.users || [];
+            
+            if (availableUsers.length === 0) {
+                // Show informational message instead of error
+                document.getElementById("users-loading").classList.add("d-none");
+                const errorDiv = document.getElementById("users-error");
+                errorDiv.className = "alert alert-info"; // Use info style instead of danger
+                errorDiv.innerHTML = `
+                    <i class="bi bi-info-circle me-2"></i>
+                    <strong>No private chats found.</strong><br>
+                    Start conversations with users in Telegram to monitor them here.
+                `;
+                errorDiv.classList.remove("d-none");
+                usersDataLoaded = true; // Mark as loaded to prevent reload
+                return; // Exit without throwing
+            }
+            
+            // Populate checkboxes
+            renderUserCheckboxes(availableUsers, existingUserIds);
+            
+            document.getElementById("users-loading").classList.add("d-none");
+            document.getElementById("users-list").classList.remove("d-none");
+            
+            usersDataLoaded = true; // Mark as loaded
+            
+        } catch (error) {
+            console.error("Failed to load users:", error);
+            document.getElementById("users-loading").classList.add("d-none");
+            const errorDiv = document.getElementById("users-error");
+            errorDiv.className = "alert alert-danger"; // Use danger style for actual errors
+            
+            // Read status and message from error payload
+            const status = error.status || (error.response && error.response.status);
+            const message = error.message || "Could not load users from Telegram";
+            
+            // Check if it's a timeout error (504 Gateway Timeout or AbortError)
+            if (status === 504 || error.name === "AbortError") {
+                errorDiv.innerHTML = `
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>Connection timeout.</strong><br>
+                    Please ensure the Telegram client is connected and running. Try again in a few moments.
+                `;
+            } else {
+                errorDiv.textContent = message;
+            }
+            errorDiv.classList.remove("d-none");
+            // Don't mark as loaded on error so user can retry by switching tabs
+        }
+    }
+    
+    function initializeUserHandlers() {
+        // Handle checkbox changes for users
+        document.getElementById("users-checkboxes")?.addEventListener("change", () => {
+            const usersTabActive = document.getElementById("users-tab")?.classList.contains("active");
+            if (!usersTabActive) return; // Only update if users tab is active
+            
+            // Check if any changes were made (checked non-existing or unchecked existing)
+            const checkboxes = document.querySelectorAll("#users-checkboxes input[type='checkbox']");
+            let hasChanges = false;
+            checkboxes.forEach(cb => {
+                const isExisting = cb.dataset.existing === "true";
+                const isChecked = cb.checked;
+                // Change detected if: (existing and unchecked) OR (new and checked)
+                if ((isExisting && !isChecked) || (!isExisting && isChecked)) {
+                    hasChanges = true;
+                }
+            });
+            
+            const btnAddSelectedUsers = document.getElementById("btn-add-selected-users");
+            if (btnAddSelectedUsers && !btnAddSelectedUsers.classList.contains("d-none")) {
+                btnAddSelectedUsers.disabled = !hasChanges;
+            }
+        });
+        
+        // Handle Select All Users button
+        document.getElementById("btn-select-all-users")?.addEventListener("click", () => {
+            const checkboxes = document.querySelectorAll("#users-checkboxes input[type='checkbox']");
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            
+            checkboxes.forEach(cb => {
+                cb.checked = !allChecked;
+            });
+            
+            // Trigger change event to update button state
+            const event = new Event("change", { bubbles: true });
+            document.getElementById("users-checkboxes").dispatchEvent(event);
+            
+            // Update button text
+            const btn = document.getElementById("btn-select-all-users");
+            btn.innerHTML = allChecked ? 
+                '<i class="bi bi-check-square me-1"></i>Select All' : 
+                '<i class="bi bi-square me-1"></i>Deselect All';
+        });
+        
+        // Handle add/remove selected users
+        document.getElementById("btn-add-selected-users")?.addEventListener("click", async () => {
+            const button = document.getElementById("btn-add-selected-users");
+            const originalText = button.innerHTML;
+            
+            const checkboxes = document.querySelectorAll("#users-checkboxes input[type='checkbox']");
+            
+            // Collect users to add (new ones that are checked)
+            const toAdd = [];
+            // Collect users to remove (existing ones that are unchecked)
+            const toRemove = [];
+            
+            checkboxes.forEach(checkbox => {
+                const userId = parseInt(checkbox.value, 10);
+                const user = availableUsers.find(u => u.id === userId);
+                const isExisting = checkbox.dataset.existing === "true";
+                const isChecked = checkbox.checked;
+                
+                if (!isExisting && isChecked && user) {
+                    // New user being added
+                    toAdd.push({ id: user.id, name: user.name, username: user.username || "" });
+                } else if (isExisting && !isChecked && user) {
+                    // Existing user being removed
+                    toRemove.push({ id: user.id, name: user.name });
+                }
+            });
+            
+            if (toAdd.length === 0 && toRemove.length === 0) {
+                showToast("No changes to apply", "warning");
+                return;
+            }
+            
+            // Disable button and show loading spinner
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Applying...';
+            
+            try {
+                let addedCount = 0;
+                let removedCount = 0;
+                
+                // Add new users
+                if (toAdd.length > 0) {
+                    const response = await fetch("{{ url_for('users.add_users') }}", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ users: toAdd }),
+                    });
+                    
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}));
+                        throw new Error(errorData.message || "Failed to add users");
+                    }
+                    
+                    const result = await response.json();
+                    addedCount = result.added || 0;
+                }
+                
+                // Remove unchecked users
+                if (toRemove.length > 0) {
+                    for (const user of toRemove) {
+                        const deleteUrl = `/api/config/users/${encodeURIComponent(user.id)}`;
+                        const response = await fetch(deleteUrl, {
+                            method: "DELETE",
+                        });
+                        
+                        if (response.ok) {
+                            removedCount++;
+                        }
+                    }
+                }
+                
+                // Build success message
+                const messages = [];
+                if (addedCount > 0) messages.push(`Added ${addedCount} user(s)`);
+                if (removedCount > 0) messages.push(`Removed ${removedCount} user(s)`);
+                showToast(messages.join(" and "), "success");
+                
+                // Close the main Channels/Users modal
+                const modal = bootstrap.Modal.getInstance(document.getElementById("addChannelsModal"));
+                if (modal) {
+                    // Proactively blur any focused element inside to avoid aria-hidden focus conflicts
+                    const modalEl = document.getElementById("addChannelsModal");
+                    if (document.activeElement && modalEl && modalEl.contains(document.activeElement)) {
+                        document.activeElement.blur();
+                    }
+                    modal.hide();
+                }
+                
+                // Refresh users table (not channels table - users are separate)
+                await refreshUsersTable();
+                
+            } catch (error) {
+                console.error("Failed to add users:", error);
+                showToast(error.message || "Could not add users", "error");
+            } finally {
+                // Re-enable button and restore original text
+                button.disabled = false;
+                button.innerHTML = originalText;
+            }
+        });
+    }
+    
+    function renderUserCheckboxes(users, existingIds) {
+        const container = document.getElementById("users-checkboxes");
+        if (!container) return;
+        
+        container.innerHTML = "";
+        
+        // Sort by name
+        const sortedUsers = [...users].sort((a, b) => a.name.localeCompare(b.name));
+        
+        sortedUsers.forEach(user => {
+            const div = document.createElement("div");
+            div.className = "list-group-item";
+            div.style.display = "flex";
+            div.style.justifyContent = "space-between";
+            div.style.alignItems = "center";
+            
+            const isExisting = existingIds.has(user.id);
+            
+            // Add visual styling for already-monitored users
+            if (isExisting) {
+                div.style.backgroundColor = "rgba(25, 135, 84, 0.1)";  // Light green background
+                div.style.borderLeft = "3px solid #198754";  // Green left border
+            }
+            
+            // Left side container: checkbox + avatar + name
+            const leftSide = document.createElement("div");
+            leftSide.className = "d-flex align-items-center";
+            leftSide.style.gap = "0.75rem";
+            leftSide.style.flex = "1";
+            leftSide.style.minWidth = "0"; // Allow text truncation
+            
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.className = "form-check-input";
+            checkbox.id = `user-${user.id}`;
+            checkbox.value = user.id;
+            checkbox.checked = isExisting;  // Pre-select existing users
+            checkbox.dataset.existing = isExisting ? "true" : "false";  // Track if existing
+            checkbox.style.flexShrink = "0"; // Don't shrink checkbox
+            
+            // Avatar
+            const avatar = document.createElement("div");
+            avatar.style.width = "28px";
+            avatar.style.height = "28px";
+            avatar.style.borderRadius = "50%";
+            avatar.style.flexShrink = "0";
+            avatar.style.display = "flex";
+            avatar.style.alignItems = "center";
+            avatar.style.justifyContent = "center";
+            avatar.style.fontSize = "0.75rem";
+            avatar.style.fontWeight = "600";
+            avatar.style.color = "white";
+            avatar.style.backgroundColor = "#6f42c1"; // Purple for users
+            
+            // Try to load avatar from cache via API endpoint
+            const avatarUrl = `/api/avatar/user/${user.id}`;
+            const avatarImg = document.createElement("img");
+            avatarImg.src = avatarUrl;
+            avatarImg.alt = user.name;
+            avatarImg.style.width = "100%";
+            avatarImg.style.height = "100%";
+            avatarImg.style.borderRadius = "50%";
+            avatarImg.style.objectFit = "cover";
+            
+            // Fallback to initials if image fails to load
+            avatarImg.onerror = function() {
+                this.style.display = 'none';
+                const initials = user.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+                avatar.textContent = initials || user.name[0]?.toUpperCase() || '?';
+            };
+            avatar.appendChild(avatarImg);
+            
+            // Name and badge wrapper
+            const nameWrapper = document.createElement("div");
+            nameWrapper.className = "d-flex align-items-center gap-2 flex-grow-1";
+            nameWrapper.style.minWidth = "0"; // Allow text truncation
+            
+            const label = document.createElement("label");
+            label.htmlFor = `user-${user.id}`;
+            label.style.cursor = "pointer";
+            label.style.margin = "0";
+            label.style.flex = "1";
+            label.style.minWidth = "0";
+            label.style.overflow = "hidden";
+            label.style.textOverflow = "ellipsis";
+            label.style.whiteSpace = "nowrap";
+            
+            label.textContent = user.name;
+            if (user.username) {
+                label.textContent += ` (@${user.username})`;
+            }
+            
+            nameWrapper.appendChild(label);
+            
+            if (isExisting) {
+                const checkmark = document.createElement("span");
+                checkmark.className = "badge bg-success";
+                checkmark.style.flexShrink = "0";
+                checkmark.innerHTML = '<i class="bi bi-check-circle me-1"></i>Monitored';
+                checkmark.title = "Uncheck to remove from monitoring";
+                nameWrapper.appendChild(checkmark);
+            }
+            
+            leftSide.appendChild(checkbox);
+            leftSide.appendChild(avatar);
+            leftSide.appendChild(nameWrapper);
+            
+            div.appendChild(leftSide);
+            container.appendChild(div);
+        });
+    }
+    
+    function initializeUsersSearchHandler() {
+        const usersSearch = document.getElementById("users-search");
+        if (usersSearch) {
+            usersSearch.addEventListener("input", (e) => {
+                const searchTerm = e.target.value.toLowerCase();
+                const items = document.querySelectorAll("#users-checkboxes .list-group-item");
+                
+                items.forEach(item => {
+                    const label = item.querySelector("label");
+                    const text = label ? label.textContent.toLowerCase() : "";
+                    
+                    if (text.includes(searchTerm)) {
+                        item.style.display = "";
+                    } else {
+                        item.style.display = "none";
+                    }
+                });
+            });
+        }
+    }
+    
+    function initializeCopyUserIdHandler() {
+        document.body.addEventListener("click", (e) => {
+            const copyButton = e.target.closest(".copy-user-id");
+            if (copyButton) {
+                const userId = copyButton.dataset.userId;
+                
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(userId)
+                        .then(() => {
+                            const originalHTML = copyButton.innerHTML;
+                            copyButton.innerHTML = `
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-check" viewBox="0 0 16 16">
+                                    <path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425z"/>
+                                </svg>
+                            `;
+                            
+                            setTimeout(() => {
+                                copyButton.innerHTML = originalHTML;
+                            }, 2000);
+                            
+                            showToast(`User ID ${userId} copied to clipboard`, "success");
+                        })
+                        .catch((err) => {
+                            console.error("Failed to copy:", err);
+                            showToast("Failed to copy to clipboard", "error");
+                        });
+                } else {
+                    const textArea = document.createElement("textarea");
+                    textArea.value = userId;
+                    textArea.style.position = "fixed";
+                    textArea.style.left = "-999999px";
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    
+                    try {
+                        document.execCommand("copy");
+                        showToast(`User ID ${userId} copied to clipboard`, "success");
+                    } catch (err) {
+                        console.error("Fallback copy failed:", err);
+                        showToast("Failed to copy to clipboard", "error");
+                    }
+                    
+                    document.body.removeChild(textArea);
+                }
+            }
+        });
+    }
+    
+    function initializeCleanDbHandler() {
+        document.getElementById("btn-clean-db")?.addEventListener("click", async () => {
+            // Confirm with strong warning
+            const confirmation = confirm(
+                "⚠️ WARNING: This will permanently delete ALL data!\n\n" +
+                "This includes:\n" +
+                "• All message records (database)\n" +
+                "• All alerts history\n" +
+                "• All feedback data\n" +
+                "• All analytics history\n" +
+                "• Live activity feed (Redis stream)\n" +
+                "• Cached participant info\n\n" +
+                "This action CANNOT be undone!\n\n" +
+                "Are you absolutely sure you want to continue?"
+            );
+            
+            if (!confirmation) {
+                return;
+            }
+            
+            // Double confirmation with input validation
+            const doubleConfirm = prompt(
+                "⚠️ FINAL CONFIRMATION\n\n" +
+                "Type 'DELETE ALL' (in caps) to proceed:\n\n" +
+                "This is your last chance to cancel!"
+            );
+            
+            if (doubleConfirm !== "DELETE ALL") {
+                if (doubleConfirm !== null) showToast("Confirmation cancelled", "info");
+                return;
+            }
+            
+            const button = document.getElementById("btn-clean-db");
+            const originalText = button.innerHTML;
+            
+            try {
+                button.disabled = true;
+                button.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Cleaning...';
+                
+                const response = await fetch("{{ url_for('admin.clean_database') }}", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                });
+                
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.message || "Failed to clean database");
+                }
+                
+                const result = await response.json();
+                showToast(`Environment cleaned successfully! Removed ${result.deleted || 0} DB records and ${result.redis_cleared || 0} Redis items.`, "success");
+                
+                // Reload page after short delay to show fresh state
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
+                
+            } catch (error) {
+                console.error("Clean DB error:", error);
+                showToast(error.message || "Failed to clean database", "error");
+                button.disabled = false;
+                button.innerHTML = originalText;
+            }
+        });
+    }
+    
+    // ============================================================================
+    // PROFILE BINDING HANDLERS
+    // ============================================================================
+    
+    let globalProfiles = [];
+    
+    /**
+     * Load profiles (Alert + Interest) for channel/user binding
+     * Replaces legacy "global profiles" system
+     */
+    async function loadGlobalProfiles() {
+        try {
+            // Load both Alert and Interest profiles
+            const [alertResponse, interestResponse] = await Promise.all([
+                fetch("/api/profiles/alert/list"),
+                fetch("/api/profiles/interest/list")
+            ]);
+            
+            if (!alertResponse.ok || !interestResponse.ok) {
+                throw new Error("Failed to load profiles");
+            }
+            
+            const alertData = await alertResponse.json();
+            const interestData = await interestResponse.json();
+            
+            const alertProfiles = alertData.profiles || [];
+            const interestProfiles = interestData.profiles || [];
+            
+            // Combine both types of profiles
+            globalProfiles = [...alertProfiles, ...interestProfiles];
+            return globalProfiles;
+        } catch (error) {
+            console.error("Failed to load profiles:", error);
+            // Don't show toast - this is called on page load and might fail if not logged in
+            return [];
+        }
+    }
+    
+    /**
+     * Populate profile selector dropdown
+     */
+    function populateProfileSelector(selectElement, selectedProfiles = []) {
+        // Defensive checks: return early if selectElement is falsy or not an Element
+        if (!selectElement || !(selectElement instanceof Element) || typeof selectElement.innerHTML !== 'string') {
+            console.warn("populateProfileSelector: invalid selectElement", selectElement);
+            return;
+        }
+        
+        // Ensure globalProfiles is an array, fallback to empty array
+        const profiles = Array.isArray(globalProfiles) ? globalProfiles : [];
+        
+        // Ensure selectedProfiles is an array
+        const selected = Array.isArray(selectedProfiles) ? selectedProfiles : [];
+        
+        selectElement.innerHTML = "";
+        
+        profiles.forEach(profile => {
+            // Guard against null/undefined profile
+            if (!profile) return;
+            
+            // Skip profiles with genuinely missing/invalid IDs (null, undefined, empty string)
+            // but allow falsy values like 0 which are valid IDs
+            if (profile.id === null || profile.id === undefined || profile.id === "") {
+                console.warn("populateProfileSelector: skipping profile with invalid ID", profile);
+                return;
+            }
+            
+            const option = document.createElement("option");
+            
+            // Normalize profile ID to string for consistent comparison
+            const profileId = String(profile.id);
+            const profileName = profile.name || "Unnamed Profile";
+            const totalKeywords = profile.total_keywords || 0;
+            
+            option.value = profileId;
+            option.textContent = `${profileName} (${totalKeywords} keywords)`;
+            
+            // Normalize selected IDs to strings for comparison
+            const selectedIds = selected.map(id => String(id));
+            if (selectedIds.includes(profileId)) {
+                option.selected = true;
+            }
+            
+            selectElement.appendChild(option);
+        });
+    }
+    
+    /**
+     * Get resolved keywords from selected profiles and overrides
+     */
+    function getResolvedKeywords(selectedProfileIds, extraKeywords = "") {
+        const keywords = new Set();
+        
+        // Add keywords from selected profiles
+        selectedProfileIds.forEach(profileId => {
+            const profile = globalProfiles.find(p => p.id === profileId);
+            if (profile && profile.keywords) {
+                Object.values(profile.keywords).forEach(categoryKeywords => {
+                    if (Array.isArray(categoryKeywords)) {
+                        categoryKeywords.forEach(kw => keywords.add(kw));
+                    }
+                });
+            }
+        });
+        
+        // Add extra keywords
+        if (extraKeywords) {
+            extraKeywords.split(',').forEach(kw => {
+                const trimmed = kw.trim();
+                if (trimmed) keywords.add(trimmed);
+            });
+        }
+        
+        return Array.from(keywords).sort();
+    }
+    
+    /**
+     * Update preview of resolved keywords
+     */
+    function updateKeywordsPreview(selectElement, extraKeywordsElement, previewElement) {
+        const selectedProfileIds = Array.from(selectElement.selectedOptions).map(opt => opt.value);
+        const extraKeywords = extraKeywordsElement ? extraKeywordsElement.value : "";
+        const resolved = getResolvedKeywords(selectedProfileIds, extraKeywords);
+        
+        if (resolved.length === 0) {
+            previewElement.innerHTML = '<small class="text-muted">Select profiles to see merged keywords</small>';
+        } else {
+            const badges = resolved.slice(0, 20).map(kw => 
+                `<span class="badge bg-secondary me-1 mb-1">${kw}</span>`
+            ).join('');
+            const more = resolved.length > 20 ? ` <span class="text-muted">... +${resolved.length - 20} more</span>` : '';
+            previewElement.innerHTML = `<small><strong>Total: ${resolved.length} keywords</strong></small><div class="mt-2">${badges}${more}</div>`;
+        }
+    }
+    
+    // ============================================================================
+    // CONSOLIDATED DOM INITIALIZATION
+    // ============================================================================
+    document.addEventListener("DOMContentLoaded", () => {
+        // Load profiles (Alert + Interest) for channel/user binding
+        loadGlobalProfiles().catch(err => {
+            console.error("Failed to pre-load profiles:", err);
+            // Non-critical - profiles will be loaded on-demand if this fails
+        });
+        
+        // Initialize all handlers in predictable order
+        initializeConfigHandlers();
+        initializeModalHandlers();
+        initializeChannelSearchHandler();
+        initializeCopyChannelIdHandler();
+        initializeDeleteChannelHandler();
+        initializeResetButtonHandler();
+        initializeSelectAllChannelsHandler();
+        initializeUserHandlers();
+        initializeUsersSearchHandler();
+        initializeCopyUserIdHandler();
+        initializeDeleteUserHandler();
+        initializeCleanDbHandler();
+        
+        // Handle Add Channels button - switch to channels tab when clicked
+        const btnAddChannels = document.getElementById("btn-add-channels");
+        if (btnAddChannels) {
+            btnAddChannels.addEventListener("click", () => {
+                const channelsTab = document.getElementById("channels-tab");
+                if (channelsTab) {
+                    const tab = new bootstrap.Tab(channelsTab);
+                    tab.show();
+                }
+            });
+        }
+        
+        // Handle Add Users button - switch to users tab when clicked
+        const btnAddUsers = document.getElementById("btn-add-users");
+        if (btnAddUsers) {
+            btnAddUsers.addEventListener("click", () => {
+                const usersTab = document.getElementById("users-tab");
+                if (usersTab) {
+                    const tab = new bootstrap.Tab(usersTab);
+                    tab.show();
+                }
+            });
+        }
+        
+        // Initialize Bootstrap tooltips
+        const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+        const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+        
+        // Attach form submit handler
+        form?.addEventListener("submit", submitConfig);
+    });
+</script>
+{% endblock %}

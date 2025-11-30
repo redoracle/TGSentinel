@@ -1,0 +1,31 @@
+# Code owners for TG Sentinel
+# These owners will be automatically requested for review when someone opens a pull request
+
+# Global owners - all files
+* @redoracle
+
+# Core application
+/src/tgsentinel/ @redoracle
+
+# UI components
+/ui/ @redoracle
+
+# Documentation
+/docs/ @redoracle
+*.md @redoracle
+
+# Configuration
+/config/ @redoracle
+*.yml @redoracle
+*.yaml @redoracle
+
+# Docker and deployment
+/docker/ @redoracle
+docker-compose.yml @redoracle
+Dockerfile @redoracle
+
+# Tests
+/tests/ @redoracle
+
+# CI/CD
+/.github/ @redoracle

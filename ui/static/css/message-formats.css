@@ -1,0 +1,110 @@
+/* ============================================================================
+   Module 11 – Message Formats Editor
+   --------------------------------------------------------------------------
+   Styles for the message formats page including Monaco editor containers,
+   preview panels, variable legends, and format sections.
+   ========================================================================= */
+
+/* Editor Container */
+.format-editor-container {
+    border: 1px solid var(--bs-border-color);
+    border-radius: var(--bs-border-radius);
+    overflow: hidden;
+}
+
+/* Editor Heights */
+.format-editor-height-180 {
+    height: 180px;
+}
+
+.format-editor-height-280 {
+    height: 280px;
+}
+
+.format-editor-height-400 {
+    height: 400px;
+}
+
+/* Preview Container */
+.preview-container {
+    background-color: transparent;
+    border: 1px solid var(--bs-border-color);
+    border-radius: var(--bs-border-radius);
+    padding: 1rem;
+    min-height: 120px;
+    white-space: pre-wrap;
+    font-family: inherit;
+}
+
+/* Preview Variations */
+.preview-min-height-100 {
+    min-height: 100px;
+}
+
+.preview-webhook-monospace {
+    font-family: var(--bs-font-monospace);
+    font-size: 0.85em;
+}
+
+/* Recent Messages Container */
+.recent-messages-scroll {
+    max-height: 400px;
+    overflow-y: auto;
+    background: var(--bs-tertiary-bg);
+}
+
+/* Variable Badge */
+.variable-badge {
+    font-family: var(--bs-font-monospace);
+    font-size: 0.85em;
+}
+
+/* Variable Legend */
+.variable-legend {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.variable-legend dt {
+    font-family: var(--bs-font-monospace);
+    color: var(--bs-primary);
+}
+
+/* Variables Toggle Button */
+.variables-toggle {
+    font-size: 0.875rem;
+}
+
+/* Format Section Container */
+.format-section {
+    background: transparent;
+    border: 1px solid var(--bs-border-color);
+    border-radius: var(--bs-border-radius-lg);
+    padding: 1.5rem;
+}
+
+/* Format Section Title */
+.format-section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+/* Format Section Description */
+.format-section-desc {
+    font-size: 0.875rem;
+    color: var(--bs-secondary-color);
+    margin-bottom: 1rem;
+}
+
+/* Preview Header */
+.preview-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.preview-header .btn-group {
+    gap: 0.5rem;
+}

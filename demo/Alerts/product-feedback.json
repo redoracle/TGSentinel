@@ -1,0 +1,71 @@
+{
+  "name": "Product Feedback Capture",
+  "description": "Collects bug reports and feature ideas from customers to inform product planning.",
+  "enabled": false,
+  "min_score": 3.0,
+  "keywords": [
+    "feature request",
+    "suggestion",
+    "improvement",
+    "enhancement",
+    "feedback",
+    "please add",
+    "would be nice",
+    "missing",
+    "needs",
+    "should have"
+  ],
+  "action_keywords": [],
+  "decision_keywords": [],
+  "urgency_keywords": [
+    "urgent",
+    "blocker",
+    "critical",
+    "bug",
+    "broken",
+    "doesn't work",
+    "not working",
+    "error",
+    "crash"
+  ],
+  "importance_keywords": [],
+  "release_keywords": [],
+  "security_keywords": [],
+  "risk_keywords": [],
+  "opportunity_keywords": [],
+  "detect_codes": true,
+  "detect_documents": false,
+  "detect_links": false,
+  "require_forwarded": false,
+  "prioritize_pinned": false,
+  "prioritize_admin": false,
+  "prioritize_private": false,
+  "detect_polls": true,
+  "detect_mentions": false,
+  "detect_questions": true,
+  "scoring_weights": {
+    "urgency": 1.6,
+    "keywords": 1.0
+  },
+  "vip_senders": [],
+  "webhooks": [],
+  "excluded_users": [],
+  "reaction_threshold": 5,
+  "reply_threshold": 3,
+  "positive_weight": 1.0,
+  "negative_weight": 0.15,
+  "channels": [],
+  "users": [],
+  "tags": ["product", "ux", "feedback", "research"],
+  "digest": {
+    "schedules": [
+      {
+        "schedule": "daily",
+        "daily_hour": 17,
+        "top_n": 25,
+        "min_score": 3.0,
+        "mode": "digest"
+      }
+    ]
+  }
+}

@@ -1,0 +1,396 @@
+/* Module 3 – Cards, Layout & Forms
+   ========================================================================= */
+
+/* Stat Cards */
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1rem;
+  transition: var(--transition-smooth);
+  position: relative;
+  overflow: hidden;
+  height: fit-content;
+}
+
+.stat-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  background: var(--primary-gradient);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: var(--transition-smooth);
+}
+
+.stat-card:hover {
+  transform: translateY(-8px);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  border-color: var(--primary-color);
+}
+
+.stat-card:hover::before {
+  transform: scaleX(1);
+}
+
+.stat-card .card-body {
+  background: transparent;
+  padding: 0;
+}
+
+.stat-card .card-title {
+  font-size: 2.5rem;
+  font-weight: 800;
+  background: var(--primary-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 0.5rem;
+  line-height: 1.1;
+}
+
+.stat-card .card-text {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  margin-bottom: 0.35rem;
+}
+
+.stat-card small {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  display: block;
+  line-height: 1.3;
+}
+
+/* Stats row spacing */
+.row {
+  margin-bottom: 0rem;
+}
+
+.row > [class*="col-"] {
+  margin-bottom: 1.5rem;
+}
+
+/* Add better gaps between elements */
+/* Removed duplicate .card-header padding rule; unified below with full header styling */
+
+/* Container spacing */
+main.container-fluid {
+  padding: 2.5rem 1.5rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Extraction page specific spacing */
+.row.justify-content-center {
+  margin-bottom: 2rem;
+}
+
+.row.justify-content-center .col-lg-8 {
+  padding: 0 1rem;
+}
+
+.col-md-3.mb-4,
+.col-md-6.mb-4,
+.col-md-8.mb-4,
+.col-md-4.mb-4 {
+  margin-bottom: 2rem !important;
+}
+
+/* Better row spacing */
+.row.mt-4 {
+  margin-top: 2.5rem !important;
+}
+/* Main Cards */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  transition: var(--transition-smooth);
+  margin-bottom: 2rem;
+}
+
+.card:hover {
+  border-color: var(--primary-color-04);
+  box-shadow: var(--shadow-lg);
+}
+
+.card-header {
+  background: var(--primary-color-01);
+  border-bottom: 1px solid var(--border-color);
+  padding: 1.5rem 1.75rem;
+}
+
+.card-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.card-body {
+  padding: 1.75rem;
+  background: var(--bg-card);
+}
+
+/* Buttons */
+.btn {
+  font-weight: 600;
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--radius-md);
+  border: none;
+  transition: var(--transition-smooth);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.875rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  transform: translate(-50%, -50%);
+  transition: width 0.6s, height 0.6s;
+}
+
+.btn:focus {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+.btn:hover::before {
+  width: 300px;
+  height: 300px;
+}
+
+.btn-primary {
+  background: var(--primary-gradient);
+  color: white;
+  box-shadow: 0 4px 15px var(--primary-color-04);
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px var(--primary-color-06);
+}
+
+.btn-success {
+  background: var(--success-gradient);
+  color: white;
+  box-shadow: 0 4px 15px var(--success-shadow);
+}
+
+.btn-outline-primary {
+  background: transparent;
+  border: 2px solid var(--primary-color);
+  color: var(--primary-color);
+}
+
+.btn-outline-primary:hover {
+  background: var(--primary-gradient);
+  color: white;
+  border-color: transparent;
+}
+
+.btn-reset {
+  color: var(--danger-color);
+  background-color: var(--danger-color-12);
+  border: 1px solid var(--danger-color-35);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.btn-reset:hover,
+.btn-reset:focus {
+  color: #ffffff;
+  background-color: var(--danger-color-75);
+  border-color: var(--danger-color-80);
+}
+
+/* Forms */
+.form-control,
+.form-select {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: 0.75rem 1rem;
+  transition: var(--transition-smooth);
+}
+
+.form-select option {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.form-control:focus,
+.form-select:focus {
+  background: var(--bg-elevated);
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px var(--focus-ring-color);
+  color: var(--text-primary);
+}
+
+.form-control::placeholder {
+  color: var(--text-muted);
+}
+
+.form-label {
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: 0.75rem;
+}
+
+.form-text {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+}
+
+.mb-4 {
+  margin-bottom: 2rem !important;
+}
+
+/* Form check (checkboxes and radios) */
+.form-check {
+  padding-left: 1.75rem;
+  margin-bottom: 1rem;
+}
+
+.form-check-input {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.125rem;
+  background-color: var(--bg-elevated);
+  border: 2px solid var(--border-color);
+}
+
+.form-check-input:checked {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.form-check-input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px var(--focus-ring-color);
+}
+
+.form-check-label {
+  color: var(--text-primary);
+  margin-left: 0.5rem;
+}
+
+/* ============================================================================
+   Collapse Icon Animation
+   --------------------------------------------------------------------------
+   Smooth rotation animation for chevron icons in collapsible sections.
+   Bootstrap automatically toggles the .collapsed class on toggle buttons,
+   so we use that to control the rotation state:
+   
+   - Default (expanded): chevron rotated 90deg (pointing down)
+   - Collapsed state: chevron at 0deg (pointing right)
+   
+   This provides clear visual feedback for collapsible card sections.
+   ========================================================================= */
+
+.collapse-icon {
+  display: inline-block;
+  transition: transform 0.3s ease-in-out;
+  transform: rotate(90deg);
+}
+
+button.collapsed .collapse-icon,
+button[aria-expanded="false"] .collapse-icon {
+  transform: rotate(0deg);
+}
+
+/* Collapse button styling for card headers */
+.collapse-button {
+  text-decoration: none;
+  color: inherit;
+}
+
+.collapse-button:hover,
+.collapse-button:focus {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* Small size variant for collapse icon */
+.collapse-icon-sm {
+  font-size: 0.875rem;
+}
+
+/* ============================================================================
+   Table Avatar Styling
+   --------------------------------------------------------------------------
+   Avatar components for table rows (channels and users).
+   Supports both image display and fallback initials.
+   ========================================================================= */
+
+.channel-avatar,
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: white;
+  flex-shrink: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.channel-avatar img,
+.user-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+/* Background colors based on entity type */
+.channel-avatar[data-type="chat"],
+.channel-avatar[data-chat-id^="-"] {
+  background-color: #0dcaf0; /* Info cyan for channels/groups */
+}
+
+.channel-avatar[data-type="user"] {
+  background-color: #6c757d; /* Gray for private channels */
+}
+
+.user-avatar {
+  background-color: #6f42c1; /* Purple for users */
+}
+
+/* ID column width consistency */
+#channels-table th:first-child,
+#channels-table td:first-child,
+#users-table th:first-child,
+#users-table td:first-child {
+  width: 120px;
+  min-width: 120px;
+}
+
+/* ============================================================================

@@ -1,0 +1,920 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · TG Sentinel{% endblock %}
+
+{% block extra_head %}
+{{ super() }}
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        document.querySelectorAll(".collapse-button").forEach((button) => {
+            const targetSelector = button.getAttribute("data-bs-target");
+            if (!targetSelector) return;
+
+            const collapseEl = document.querySelector(targetSelector);
+            const icon = button.querySelector(".collapse-icon");
+            if (!collapseEl || !icon) return;
+
+            const update = () => {
+                icon.style.transform = collapseEl.classList.contains("show") ? "rotate(90deg)" : "";
+            };
+
+            collapseEl.addEventListener("shown.bs.collapse", update);
+            collapseEl.addEventListener("hidden.bs.collapse", update);
+            update();
+        });
+    });
+</script>
+{% endblock %}
+
+{% block content %}
+<section class="row g-4 mb-4">
+    <div class="col-12 col-md-4">
+        <div class="stat-card h-100" aria-labelledby="metric-ingested">
+            <div class="card-body">
+                <p class="card-text text-uppercase" id="metric-ingested-label">Messages Ingested</p>
+                <h3 class="card-title mb-1" id="metric-ingested">{{ summary.messages_ingested | default(0) }}</h3>
+                <small>All messages in database</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-4">
+        <div class="stat-card h-100" aria-labelledby="metric-alerts">
+            <div class="card-body">
+                <p class="card-text text-uppercase" id="metric-alerts-label">Alerts Sent</p>
+                <h3 class="card-title mb-1" id="metric-alerts">{{ summary.alerts_sent | default(0) }}</h3>
+                <small>Last 24 hours</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-4">
+        <div class="stat-card h-100" aria-labelledby="metric-importance">
+            <div class="card-body">
+                <p class="card-text text-uppercase" id="metric-importance-label">Avg Importance</p>
+                <h3 class="card-title mb-1" id="metric-importance">{{ summary.avg_importance | default(0.0) }}</h3>
+                <small>Scoring average</small>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="row g-4 mb-4 align-items-start">
+    <div class="col-12 col-xl-6">
+        <article class="card" aria-labelledby="system-health-heading">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#system-health-body" aria-expanded="true" aria-controls="system-health-body">
+                    <i class="bi bi-chevron-right collapse-icon"></i>
+                    <div>
+                        <h1 class="card-title mb-0" id="system-health-heading">System Health</h1>
+                        <small class="text-muted">Real-time infrastructure pulse</small>
+                    </div>
+                </button>
+                <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-health" title="Refresh system metrics">Refresh</button>
+            </div>
+            <div class="collapse show" id="system-health-body">
+                <div class="card-body">
+                    <!-- Health Score - Full Width Top -->
+                    <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="text-center">
+                            <div class="health-score-subtitle mb-2">System Health Score</div>
+                            <div class="health-score-display">
+                                <span id="health-score-value" class="health-score-value">--</span>
+                                <span class="health-score-denominator">/100</span>
+                            </div>
+                            <div class="health-indicator mt-2">
+                                <div class="health-indicator-fill" id="health-indicator-fill"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Metrics Grid - Full Width Below -->
+                <div class="row g-3">
+                    <div class="col-6 col-md-4 col-lg-4">
+                        <div class="d-flex align-items-center glass-effect p-3 rounded h-100">
+                            <i class="bi bi-hdd-fill me-2 fs-3 text-primary"></i>
+                            <div>
+                                <div class="health-metric-label">Database</div>
+                                <div class="fw-bold fs-5" id="health-db-size">--</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-lg-4">
+                        <div class="d-flex align-items-center glass-effect p-3 rounded h-100">
+                            <i class="bi bi-check-circle-fill me-2 fs-3 text-success"></i>
+                            <div>
+                                <div class="health-metric-label">Containers</div>
+                                <div class="fw-bold fs-5" id="health-containers">--</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-lg-4">
+                        <div class="d-flex align-items-center glass-effect p-3 rounded h-100">
+                            <i class="bi bi-check-circle-fill me-2 fs-3 text-success"></i>
+                            <div>
+                                <div class="health-metric-label">APIs</div>
+                                <div class="fw-bold fs-5" id="health-apis">--</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-lg-4">
+                        <div class="d-flex align-items-center glass-effect p-3 rounded h-100">
+                            <i class="bi bi-cpu-fill me-2 fs-3 text-info"></i>
+                            <div>
+                                <div class="health-metric-label">CPU Usage</div>
+                                <div class="fw-bold fs-5" id="health-cpu">--</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-lg-4">
+                        <div class="d-flex align-items-center glass-effect p-3 rounded h-100">
+                            <i class="bi bi-memory me-2 fs-3 text-info"></i>
+                            <div>
+                                <div class="health-metric-label">Memory</div>
+                                <div class="fw-bold fs-5" id="health-memory">--</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-lg-4">
+                        <div class="d-flex align-items-center glass-effect p-3 rounded h-100">
+                            <i class="bi bi-stack me-2 fs-3 text-warning"></i>
+                            <div>
+                                <div class="health-metric-label">Redis Depth</div>
+                                <div class="fw-bold fs-5" id="health-redis-depth">--</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                </div>
+            </div>
+        </article>
+    </div>
+    <div class="col-12 col-xl-6">
+        <article class="card" aria-labelledby="live-activity-heading">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="collapse-button collapse-button-unstyled text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#live-activity-body" aria-expanded="true" aria-controls="live-activity-body">
+                    <i class="bi bi-chevron-right collapse-icon"></i>
+                    <div>
+                        <h1 class="card-title mb-0" id="live-activity-heading">Live Activity Feed</h1>
+                        <small class="text-muted">Most recent heuristic hits</small>
+                    </div>
+                </button>
+                <div class="d-flex align-items-center gap-3">
+                    <select class="form-select form-select-sm activity-filter-select" id="activity-filter" title="Filter activity feed">
+                        <option value="all">All chats</option>
+                        <option value="monitored-channels">Monitored channels only</option>
+                        <option value="monitored-users">Monitored users only</option>
+                    </select>
+                    <div class="live-toggle-container" data-bs-toggle="tooltip" data-bs-placement="left" title="When ON, the feed automatically refreshes every 5 seconds to show new messages in real-time">
+                        <label class="live-toggle-label" for="live-toggle-switch">
+                            <span class="live-toggle-text">Live:</span>
+                            <div class="live-toggle-switch" role="switch" aria-checked="false" tabindex="0" id="live-toggle-switch" data-live="false">
+                                <span class="live-toggle-slider"></span>
+                                <span class="live-toggle-status" id="live-toggle-status">OFF</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="collapse show" id="live-activity-body">
+                <div class="card-body">
+                    <ul class="list-unstyled mb-0" id="activity-feed" aria-live="polite">
+                    {%- for entry in activity %}
+                    <li class="activity-item mb-3">
+                        <div class="d-flex gap-3">
+                            <div class="flex-shrink-0">
+                                <div class="activity-avatar participant-link" 
+                                     data-chat-id="{{ entry.chat_id if entry.chat_id is not none else '' }}" 
+                                     data-user-id="{{ entry.sender_id if entry.sender_id is not none else '' }}"
+                                     data-sender-name="{{ entry.sender }}"
+                                     title="Click for sender information">
+                                    {% if entry.avatar_url %}
+                                    <img src="{{ entry.avatar_url }}" alt="{{ entry.sender }}" onerror="this.style.display='none';">
+                                    {% endif %}
+                                    <span class="avatar-initials">
+                                        {% if entry.sender %}
+                                            {{ entry.sender[0].upper() }}
+                                        {% else %}
+                                            ?
+                                        {% endif %}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="flex-grow-1 min-w-0">
+                                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                                    <div class="flex-grow-1 min-w-0">
+                                        <p class="mb-1">
+                                            <span class="fw-semibold participant-link link-underline-pointer" 
+                                                  data-chat-id="{{ entry.chat_id }}" 
+                                                  data-user-id="{{ entry.sender_id }}"
+                                                  data-sender-name="{{ entry.sender }}"
+                                                  title="Click for sender information">
+                                                {{ entry.sender }}
+                                            </span>
+                                            <span class="text-muted small">in</span>
+                                            <span class="participant-link link-underline-pointer" 
+                                                  data-chat-id="{{ entry.chat_id if entry.chat_id is not none else '' }}" 
+                                                  data-chat-name="{{ entry.chat_name }}"
+                                                  title="Click for chat information">
+                                                {{ entry.chat_name }}
+                                            </span>
+                                        </p>
+                                        <p class="mb-2 text-muted small">
+                                            <i class="bi bi-clock me-1"></i>{{ entry.timestamp }}
+                                        </p>
+                                    </div>
+                                    <span class="badge bg-success flex-shrink-0 badge-raised">{{ entry.importance }}</span>
+                                </div>
+                                <p class="mb-2 word-break-all">{{ entry.message }}</p>
+                                
+                                {%- if entry.replies or entry.reactions or entry.is_reply or entry.has_media or entry.is_pinned or entry.has_forward %}
+                                <div class="d-flex flex-wrap gap-2 mb-2">
+                                    {%- if entry.replies %}
+                                    <span class="badge bg-secondary" title="Replies"><i class="bi bi-chat-left-text me-1"></i>{{ entry.replies }}</span>
+                                    {%- endif %}
+                                    {%- if entry.reactions %}
+                                    <span class="badge bg-secondary" title="Reactions"><i class="bi bi-emoji-smile me-1"></i>{{ entry.reactions }}</span>
+                                    {%- endif %}
+                                    {%- if entry.is_reply %}
+                                    <span class="badge bg-secondary" title="Reply to message {{ entry.reply_to_msg_id }}"><i class="bi bi-reply"></i></span>
+                                    {%- endif %}
+                                    {%- if entry.has_media %}
+                                    <span class="badge bg-secondary" title="{{ entry.media_type or 'Media' }}"><i class="bi bi-paperclip me-1"></i>{{ entry.media_type or 'Media' }}</span>
+                                    {%- endif %}
+                                    {%- if entry.is_pinned %}
+                                    <span class="badge bg-warning" title="Pinned message"><i class="bi bi-pin-angle-fill"></i></span>
+                                    {%- endif %}
+                                    {%- if entry.has_forward %}
+                                    <span class="badge bg-secondary" title="Forwarded from {{ entry.forward_from or 'unknown' }}"><i class="bi bi-arrow-right me-1"></i>{{ entry.forward_from or 'Forwarded' }}</span>
+                                    {%- endif %}
+                                </div>
+                                {%- endif %}
+                                
+                                <div class="d-flex flex-wrap gap-2">
+                                    {% for tag in entry.tags %}
+                                    <span class="badge bg-info text-uppercase tag-badge-stacked">{{ tag }}</span>
+                                    {%- endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </li>
+                        {%- else %}
+                        <li class="text-muted">No activity yet. Waiting for incoming events.</li>
+                        {%- endfor %}
+                    </ul>
+                </div>
+            </div>
+        </article>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    const summaryUrl = "{{ url_for('dashboard.dashboard_summary') }}";
+    const healthUrl = "{{ url_for('dashboard.system_health') }}";
+    const activityUrl = "{{ url_for('dashboard.dashboard_activity') }}";
+    const alertsUrl = "{{ url_for('dashboard.recent_alerts') }}";
+
+    function formatCount(count) {
+        if (count >= 1000) {
+            return (count / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+        }
+        return count.toString();
+    }
+
+    async function updateSummary() {
+        try {
+            const response = await fetch(summaryUrl);
+            if (!response.ok) {
+                throw new Error("summary fetch failed");
+            }
+            const data = await response.json();
+            document.getElementById("metric-ingested").textContent = formatCount(data.messages_ingested ?? 0);
+            document.getElementById("metric-alerts").textContent = formatCount(data.alerts_sent ?? 0);
+            document.getElementById("metric-importance").textContent = (data.avg_importance ?? 0).toFixed(2);
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    async function updateHealth() {
+        try {
+            // Fetch basic health metrics
+            const response = await fetch(healthUrl);
+            if (!response.ok) {
+                throw new Error("health fetch failed");
+            }
+            const data = await response.json();
+            
+            // Update basic metrics (these are fast, non-Docker metrics)
+            document.getElementById("health-redis-depth").textContent = data.redis_stream_depth ?? 0;
+            document.getElementById("health-db-size").textContent = data.database_size_display ?? "0 KB";
+            document.getElementById("health-cpu").textContent = `${data.cpu_percent ?? "N/A"}${data.cpu_percent != null ? "%" : ""}`;
+            document.getElementById("health-memory").textContent = `${data.memory_mb ?? "N/A"}${data.memory_mb != null ? " MB" : ""}`;
+            
+            // Fetch comprehensive health score (includes Docker metrics)
+            try {
+                const scoreResponse = await fetch("/api/analytics/system-health");
+                if (scoreResponse.ok) {
+                    const scoreData = await scoreResponse.json();
+                    
+                    // Update health score
+                    const score = scoreData.health_score ?? 0;
+                    document.getElementById("health-score-value").textContent = score;
+                    
+                    // Update health indicator bar
+                    const indicator = document.getElementById("health-indicator-fill");
+                    if (indicator) {
+                        indicator.style.width = `${score}%`;
+                    }
+                    
+                    // Update component metrics
+                    const components = scoreData.components || {};
+                    
+                    // Containers
+                    if (components.containers) {
+                        const details = components.containers.details || {};
+                        document.getElementById("health-containers").textContent = 
+                            `${details.running ?? 0}/${details.total ?? 0}`;
+                    }
+                    
+                    // APIs
+                    if (components.api_endpoints) {
+                        const details = components.api_endpoints.details || {};
+                        document.getElementById("health-apis").textContent = 
+                            `${details.online ?? 0}/${details.total ?? 0}`;
+                    }
+                    
+                    // Update CPU/Memory from Docker stats if available
+                    if (components.resources) {
+                        const details = components.resources.details || {};
+                        if (details.avg_cpu_percent !== undefined) {
+                            document.getElementById("health-cpu").textContent = 
+                                `${details.avg_cpu_percent.toFixed(1)}%`;
+                        }
+                        if (details.avg_memory_percent !== undefined) {
+                            document.getElementById("health-memory").textContent = 
+                                `${details.avg_memory_percent.toFixed(1)}%`;
+                        }
+                    }
+                }
+            } catch (scoreError) {
+                console.debug("System health score unavailable:", scoreError);
+                // Fallback: show basic metrics only
+                document.getElementById("health-score-value").textContent = "--";
+                document.getElementById("health-containers").textContent = "--";
+                document.getElementById("health-apis").textContent = "--";
+            }
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    function renderActivity(entries) {
+        const container = document.getElementById("activity-feed");
+        if (!container) {
+            return;
+        }
+        // Clear existing content
+        container.innerHTML = "";
+        
+        if (!entries.length) {
+            const emptyItem = document.createElement("li");
+            emptyItem.className = "text-muted";
+            emptyItem.textContent = "No activity yet. Waiting for incoming events.";
+            container.appendChild(emptyItem);
+            return;
+        }
+        
+        // Build activity items using DOM APIs to prevent XSS
+        entries.forEach((entry) => {
+            const listItem = document.createElement("li");
+            listItem.className = "activity-item mb-3";
+            
+            // Create main flex container
+            const mainDiv = document.createElement("div");
+            mainDiv.className = "d-flex gap-3";
+            
+            // Avatar
+            const avatarContainer = document.createElement("div");
+            avatarContainer.className = "flex-shrink-0";
+            
+            const avatar = document.createElement("div");
+            avatar.className = "activity-avatar participant-link";
+            avatar.setAttribute("data-chat-id", entry.chat_id || "");
+            avatar.setAttribute("data-user-id", entry.sender_id || "");
+            avatar.setAttribute("data-chat-name", entry.chat_name || "");
+            avatar.setAttribute("data-sender-name", entry.sender || "");
+            avatar.title = "Click for sender information";
+            
+            // Add avatar image if available
+            if (entry.avatar_url) {
+                const img = document.createElement("img");
+                img.src = entry.avatar_url;
+                img.alt = entry.sender || "";
+                img.onerror = function() {
+                    this.style.display = 'none';
+                };
+                avatar.appendChild(img);
+            }
+            
+            // Add initials as fallback
+            const initialsSpan = document.createElement("span");
+            initialsSpan.className = "avatar-initials";
+            initialsSpan.textContent = entry.sender ? entry.sender[0].toUpperCase() : "?";
+            avatar.appendChild(initialsSpan);
+            
+            avatarContainer.appendChild(avatar);
+            mainDiv.appendChild(avatarContainer);
+            
+            // Content area
+            const contentDiv = document.createElement("div");
+            contentDiv.className = "flex-grow-1";
+            
+            // Header with sender, chat, timestamp, importance
+            const headerDiv = document.createElement("div");
+            headerDiv.className = "d-flex justify-content-between align-items-start";
+            
+            const leftDiv = document.createElement("div");
+            
+            // First line: Sender in Chat
+            const firstLineP = document.createElement("p");
+            firstLineP.className = "mb-1";
+            
+            const senderSpan = document.createElement("span");
+            senderSpan.className = "fw-semibold participant-link";
+            senderSpan.setAttribute("data-chat-id", entry.chat_id || "");
+            senderSpan.setAttribute("data-user-id", entry.sender_id || "");
+            senderSpan.setAttribute("data-chat-name", entry.chat_name || "");
+            senderSpan.setAttribute("data-sender-name", entry.sender || "");
+            senderSpan.style.cssText = "cursor: pointer; text-decoration: underline; color: var(--bs-link-color);";
+            senderSpan.title = "Click for sender information";
+            senderSpan.textContent = entry.sender || "Unknown sender";
+            
+            const inText = document.createElement("span");
+            inText.className = "text-muted small";
+            inText.textContent = " in ";
+            
+            const chatSpan = document.createElement("span");
+            chatSpan.className = "participant-link";
+            chatSpan.setAttribute("data-chat-id", entry.chat_id || "");
+            chatSpan.setAttribute("data-chat-name", entry.chat_name || "");
+            chatSpan.style.cssText = "cursor: pointer; text-decoration: underline; color: var(--bs-link-color);";
+            chatSpan.title = "Click for chat information";
+            chatSpan.textContent = entry.chat_name || "Unknown chat";
+            
+            firstLineP.appendChild(senderSpan);
+            firstLineP.appendChild(inText);
+            firstLineP.appendChild(chatSpan);
+            leftDiv.appendChild(firstLineP);
+            
+            // Second line: Timestamp
+            const timestampP = document.createElement("p");
+            timestampP.className = "mb-2 text-muted small";
+            const clockIcon = document.createElement("i");
+            clockIcon.className = "bi bi-clock me-1";
+            timestampP.appendChild(clockIcon);
+            timestampP.appendChild(document.createTextNode(entry.timestamp || ""));
+            leftDiv.appendChild(timestampP);
+            
+            headerDiv.appendChild(leftDiv);
+            
+            // Importance badge
+            const importanceBadge = document.createElement("span");
+            importanceBadge.className = "badge bg-success";
+            importanceBadge.textContent = entry.importance || "";
+            headerDiv.appendChild(importanceBadge);
+            
+            contentDiv.appendChild(headerDiv);
+            
+            // Message paragraph
+            const messageP = document.createElement("p");
+            messageP.className = "mb-2";
+            messageP.textContent = entry.message || "";
+            contentDiv.appendChild(messageP);
+            
+            // Metadata badges (replies, reactions, etc.)
+            if (entry.replies || entry.reactions || entry.is_reply || entry.has_media || entry.is_pinned || entry.has_forward) {
+                const metadataDiv = document.createElement("div");
+                metadataDiv.className = "d-flex flex-wrap gap-2 mb-2";
+                
+                if (entry.replies) {
+                    const repliesBadge = document.createElement("span");
+                    repliesBadge.className = "badge bg-secondary";
+                    repliesBadge.title = "Replies";
+                    repliesBadge.innerHTML = `<i class="bi bi-chat-left-text me-1"></i>${entry.replies}`;
+                    metadataDiv.appendChild(repliesBadge);
+                }
+                
+                if (entry.reactions) {
+                    const reactionsBadge = document.createElement("span");
+                    reactionsBadge.className = "badge bg-secondary";
+                    reactionsBadge.title = "Reactions";
+                    reactionsBadge.innerHTML = `<i class="bi bi-emoji-smile me-1"></i>${entry.reactions}`;
+                    metadataDiv.appendChild(reactionsBadge);
+                }
+                
+                if (entry.is_reply) {
+                    const replyBadge = document.createElement("span");
+                    replyBadge.className = "badge bg-secondary";
+                    replyBadge.title = entry.reply_to_msg_id ? `Reply to message ${entry.reply_to_msg_id}` : "Reply";
+                    replyBadge.innerHTML = '<i class="bi bi-reply"></i>';
+                    metadataDiv.appendChild(replyBadge);
+                }
+                
+                if (entry.has_media) {
+                    const mediaBadge = document.createElement("span");
+                    mediaBadge.className = "badge bg-secondary";
+                    mediaBadge.title = entry.media_type || "Media";
+                    mediaBadge.innerHTML = `<i class="bi bi-paperclip me-1"></i>${entry.media_type || 'Media'}`;
+                    metadataDiv.appendChild(mediaBadge);
+                }
+                
+                if (entry.is_pinned) {
+                    const pinnedBadge = document.createElement("span");
+                    pinnedBadge.className = "badge bg-warning";
+                    pinnedBadge.title = "Pinned message";
+                    pinnedBadge.innerHTML = '<i class="bi bi-pin-angle-fill"></i>';
+                    metadataDiv.appendChild(pinnedBadge);
+                }
+                
+                if (entry.has_forward) {
+                    const forwardBadge = document.createElement("span");
+                    forwardBadge.className = "badge bg-secondary";
+                    forwardBadge.title = entry.forward_from ? `Forwarded from ${entry.forward_from}` : "Forwarded";
+                    forwardBadge.innerHTML = `<i class="bi bi-arrow-right me-1"></i>${entry.forward_from || 'Forwarded'}`;
+                    metadataDiv.appendChild(forwardBadge);
+                }
+                
+                contentDiv.appendChild(metadataDiv);
+            }
+            
+            // Tags div
+            const tagsDiv = document.createElement("div");
+            tagsDiv.className = "d-flex flex-wrap gap-2";
+            
+            (entry.tags || []).forEach((tag) => {
+                const tagSpan = document.createElement("span");
+                tagSpan.className = "badge bg-info text-uppercase";
+                tagSpan.textContent = tag;
+                tagsDiv.appendChild(tagSpan);
+            });
+            
+            contentDiv.appendChild(tagsDiv);
+            mainDiv.appendChild(contentDiv);
+            
+            listItem.appendChild(mainDiv);
+            container.appendChild(listItem);
+        });
+    }
+
+    // Store raw activity data for filtering
+    let rawActivityData = [];
+    let monitoredChannelIds = new Set();
+    let monitoredUserIds = new Set();
+
+    // Load monitored channels and users from config
+    async function loadMonitoredEntities() {
+        try {
+            const response = await fetch('/api/config/current');
+            if (response.ok) {
+                const data = await response.json();
+                
+                // Load monitored channels
+                if (data.channels) {
+                    data.channels.forEach(ch => {
+                        if (ch.id) {
+                            // Handle both positive and negative chat IDs
+                            monitoredChannelIds.add(parseInt(ch.id));
+                        }
+                    });
+                }
+                
+                // Load monitored users
+                if (data.monitored_users) {
+                    data.monitored_users.forEach(user => {
+                        if (user.id) {
+                            monitoredUserIds.add(parseInt(user.id));
+                        }
+                    });
+                }
+                
+                console.log(`[Activity Filter] Loaded ${monitoredChannelIds.size} monitored channels, ${monitoredUserIds.size} monitored users`);
+            } else {
+                console.error('Failed to fetch config:', response.status);
+            }
+        } catch (error) {
+            console.error("Failed to load monitored entities:", error);
+        }
+    }
+
+    function filterActivityData(entries, filterType) {
+        if (filterType === 'all') {
+            return entries;
+        }
+
+        return entries.filter(entry => {
+            const chatId = entry.chat_id ? parseInt(entry.chat_id) : null;
+            const senderId = entry.sender_id ? parseInt(entry.sender_id) : null;
+
+            if (filterType === 'monitored-channels') {
+                // Telegram ID format: messages use negative IDs (-1001523176225)
+                // Config stores positive IDs (1523176225)
+                // Convert negative to positive: remove -100 prefix
+                let normalizedChatId = chatId;
+                if (chatId && chatId < 0) {
+                    // Convert -1001523176225 to 1523176225
+                    const chatIdStr = Math.abs(chatId).toString();
+                    if (chatIdStr.startsWith('100')) {
+                        normalizedChatId = parseInt(chatIdStr.substring(3));
+                    }
+                }
+                
+                // Check both formats
+                return chatId && (
+                    monitoredChannelIds.has(chatId) ||           // Direct match (negative)
+                    monitoredChannelIds.has(normalizedChatId)    // Normalized match (positive)
+                );
+            } else if (filterType === 'monitored-users') {
+                // Show messages FROM monitored users (sender_id) regardless of which chat
+                // This catches monitored users posting in ANY channel or group
+                return senderId && monitoredUserIds.has(senderId);
+            }
+
+            return false;
+        });
+    }
+
+    async function updateActivity() {
+        try {
+            const response = await fetch(`${activityUrl}?limit=10`);
+            if (!response.ok) {
+                throw new Error("activity fetch failed");
+            }
+            const data = await response.json();
+            rawActivityData = data.entries || [];
+            
+            // Apply current filter
+            const filterSelect = document.getElementById('activity-filter');
+            const filterType = filterSelect ? filterSelect.value : 'all';
+            const filteredData = filterActivityData(rawActivityData, filterType);
+            
+            renderActivity(filteredData);
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    function renderAlerts(alerts) {
+        const body = document.getElementById("recent-alerts-body");
+        if (!body) {
+            return;
+        }
+        // Clear existing content
+        body.innerHTML = "";
+        
+        if (!alerts.length) {
+            const emptyRow = document.createElement("tr");
+            const emptyCell = document.createElement("td");
+            emptyCell.setAttribute("colspan", "7");
+            emptyCell.className = "text-center text-muted";
+            emptyCell.textContent = "No alerts available.";
+            emptyRow.appendChild(emptyCell);
+            body.appendChild(emptyRow);
+            return;
+        }
+        
+        // Build rows using DOM APIs to prevent XSS
+        alerts.slice(0, 10).forEach((alert) => {
+            const row = document.createElement("tr");
+            
+            // Chat name
+            const chatNameCell = document.createElement("td");
+            chatNameCell.textContent = alert.chat_name || "";
+            row.appendChild(chatNameCell);
+            
+            // Sender
+            const senderCell = document.createElement("td");
+            senderCell.textContent = alert.sender || "Unknown";
+            row.appendChild(senderCell);
+            
+            // Excerpt
+            const excerptCell = document.createElement("td");
+            excerptCell.textContent = alert.excerpt || "";
+            row.appendChild(excerptCell);
+            
+            // Score badge
+            const scoreCell = document.createElement("td");
+            const badge = document.createElement("span");
+            badge.className = "badge bg-danger";
+            badge.textContent = Number(alert.score || 0).toFixed(2);
+            scoreCell.appendChild(badge);
+            row.appendChild(scoreCell);
+            
+            // Trigger
+            const triggerCell = document.createElement("td");
+            triggerCell.textContent = alert.trigger || "N/A";
+            row.appendChild(triggerCell);
+            
+            // Sent to
+            const sentToCell = document.createElement("td");
+            sentToCell.textContent = alert.sent_to || "dm";
+            row.appendChild(sentToCell);
+            
+            // Created at
+            const createdAtCell = document.createElement("td");
+            createdAtCell.textContent = alert.created_at || "N/A";
+            row.appendChild(createdAtCell);
+            
+            body.appendChild(row);
+        });
+    }
+
+    async function updateAlerts() {
+        try {
+            const response = await fetch(`${alertsUrl}?limit=20`);
+            if (!response.ok) {
+                throw new Error("alerts fetch failed");
+            }
+            const data = await response.json();
+            renderAlerts(data.alerts || []);
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+
+    document.addEventListener("DOMContentLoaded", () => {
+        // Prevent collapse toggling when interacting with controls inside collapsible headers
+        // We need to stop propagation AFTER the button's own handlers run, not before
+        const stopCollapseOnButton = (buttonId) => {
+            const btn = document.getElementById(buttonId);
+            if (btn) {
+                btn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                }, false); // Use bubbling phase, not capture
+            }
+        };
+        
+        const stopCollapseOnContainer = (containerSelector) => {
+            document.querySelectorAll(containerSelector).forEach(el => {
+                el.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                }, false);
+            });
+        };
+        
+        // These will stop propagation to prevent collapse, but won't interfere with the button's own handlers
+        stopCollapseOnButton("btn-refresh-health");
+        stopCollapseOnButton("btn-view-all-alerts");
+        stopCollapseOnContainer(".live-toggle-container");
+
+        // Initialize activity filter
+        const activityFilter = document.getElementById("activity-filter");
+        if (activityFilter) {
+            // Prevent filter dropdown from toggling collapse
+            activityFilter.addEventListener("click", (e) => {
+                e.stopPropagation();
+            });
+            
+            // Load monitored entities on page load
+            loadMonitoredEntities();
+            
+            // Handle filter change
+            activityFilter.addEventListener("change", () => {
+                const filteredData = filterActivityData(rawActivityData, activityFilter.value);
+                renderActivity(filteredData);
+                
+                // Save filter preference
+                localStorage.setItem("tgsentinel:activity-filter", activityFilter.value);
+            });
+            
+            // Restore saved filter preference
+            const savedFilter = localStorage.getItem("tgsentinel:activity-filter");
+            if (savedFilter) {
+                activityFilter.value = savedFilter;
+            }
+        }
+
+        document.getElementById("btn-refresh-health")?.addEventListener("click", async (ev) => {
+            const btn = ev.currentTarget;
+            const original = btn.innerHTML;
+            try {
+                btn.disabled = true;
+                btn.setAttribute("aria-busy", "true");
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Refreshing';
+                await updateHealth();
+            } catch (e) {
+                try { showToast("Failed to refresh system health", "error"); } catch (_) {}
+            } finally {
+                btn.disabled = false;
+                btn.removeAttribute("aria-busy");
+                btn.innerHTML = original;
+            }
+        });
+
+        // Toggle Live Feed with new switch design
+        let liveInterval = null;
+        const toggleSwitch = document.getElementById("live-toggle-switch");
+        const toggleStatus = document.getElementById("live-toggle-status");
+        
+        function updateLiveState(isLive) {
+            if (isLive) {
+                // Start live updates
+                liveInterval = setInterval(updateActivity, 5000);
+                toggleSwitch.setAttribute("data-live", "true");
+                toggleSwitch.setAttribute("aria-checked", "true");
+                toggleSwitch.classList.add("active");
+                toggleStatus.textContent = "ON";
+                // Save to localStorage
+                localStorage.setItem("tgsentinel:live-feed-enabled", "true");
+                updateActivity(); // Immediate update
+            } else {
+                // Stop live updates
+                if (liveInterval) {
+                    clearInterval(liveInterval);
+                    liveInterval = null;
+                }
+                toggleSwitch.setAttribute("data-live", "false");
+                toggleSwitch.setAttribute("aria-checked", "false");
+                toggleSwitch.classList.remove("active");
+                toggleStatus.textContent = "OFF";
+                // Save to localStorage
+                localStorage.setItem("tgsentinel:live-feed-enabled", "false");
+            }
+        }
+        
+        if (toggleSwitch) {
+            // Restore saved state from localStorage
+            const savedState = localStorage.getItem("tgsentinel:live-feed-enabled");
+            if (savedState === "true") {
+                updateLiveState(true);
+            }
+            
+            // Click handler
+            toggleSwitch.addEventListener("click", () => {
+                const isLive = toggleSwitch.getAttribute("data-live") === "true";
+                updateLiveState(!isLive);
+            });
+            
+            // Keyboard support
+            toggleSwitch.addEventListener("keydown", (e) => {
+                if (e.key === " " || e.key === "Enter") {
+                    e.preventDefault();
+                    const isLive = toggleSwitch.getAttribute("data-live") === "true";
+                    updateLiveState(!isLive);
+                }
+            });
+        }
+
+        // Participant info modal click handlers
+        document.addEventListener("click", (e) => {
+            const participantLink = e.target.closest(".participant-link");
+            if (participantLink) {
+                e.preventDefault();
+                const chatId = participantLink.getAttribute("data-chat-id");
+                const userId = participantLink.getAttribute("data-user-id");
+                const chatName = participantLink.getAttribute("data-chat-name");
+                const senderName = participantLink.getAttribute("data-sender-name");
+                
+                // Determine info type based on what data is available
+                // If has userId and senderName, it's a user click
+                // If has chatName only, it's a chat click
+                let infoType = null;
+                if (userId && senderName) {
+                    infoType = 'user';
+                } else if (chatName && !userId) {
+                    infoType = 'chat';
+                }
+                
+                // Dispatch custom event that will be handled in base.html
+                const event = new CustomEvent("tgsentinel:show-participant-info", {
+                    detail: {
+                        chatId: chatId,
+                        userId: userId || null,
+                        chatName: chatName || null,
+                        senderName: senderName || null,
+                        infoType: infoType
+                    }
+                });
+                document.dispatchEvent(event);
+            }
+        });
+
+        updateSummary();
+        updateHealth();
+        updateActivity();
+        updateAlerts();
+
+        setInterval(updateSummary, 60000);
+        setInterval(updateActivity, 45000);
+        setInterval(updateAlerts, 90000);
+
+        document.addEventListener("tgsentinel:dashboard-update", () => {
+            updateSummary();
+            updateHealth();
+            updateActivity();
+            updateAlerts();
+        });
+    });
+</script>
+{% endblock %}

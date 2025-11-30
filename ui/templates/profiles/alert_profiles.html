@@ -1,0 +1,67 @@
+{# Alert Profiles Tab Content #}
+<section class="row g-4 mb-4">
+    <!-- Alert Profiles List (Left Column) -->
+    <div class="col-12 col-xl-4">
+        <article class="card alert-profiles-list-card" aria-labelledby="alert-profiles-list-heading">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#alert-profiles-list-body" aria-expanded="true" aria-controls="alert-profiles-list-body">
+                    <i class="bi bi-chevron-right collapse-icon"></i>
+                    <div>
+                        <h1 class="card-title mb-0" id="alert-profiles-list-heading">Alert Profiles</h1>
+                        <small class="text-muted"><span id="alert-profiles-count">0</span> profiles</small>
+                    </div>
+                </button>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-primary" type="button" id="btn-alert-bulk-actions" title="Bulk actions">
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M3 9.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/>
+                        </svg>
+                    </button>
+                    <button class="btn btn-sm btn-primary" type="button" id="btn-new-alert-profile">
+                        <svg width="16" height="16" fill="currentColor" class="bi bi-plus-lg" viewBox="0 0 16 16">
+                            <path fill-rule="evenodd" d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2Z"/>
+                        </svg>
+                        New
+                    </button>
+                </div>
+            </div>
+            <div class="collapse show" id="alert-profiles-list-body">
+                <div class="card-body p-0">
+                    <!-- Search/Filter Bar -->
+                    <div class="p-3 border-bottom">
+                        <input type="text" class="form-control form-control-sm" id="alert-profiles-search" placeholder="🔍 Search profiles...">
+                    </div>
+                    <!-- Profiles List with virtualized scrolling -->
+                    <div class="alert-profiles-list-container" id="alert-profiles-list-container">
+                        <div class="list-group list-group-flush" id="alert-profiles-list">
+                            <!-- Populated dynamically by alert_profiles.js -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </article>
+    </div>
+
+    <!-- Alert Profile Editor (Right Column) -->
+    <div class="col-12 col-xl-8">
+        <article class="card h-100" aria-labelledby="alert-profile-editor-heading">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <button class="collapse-button text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent" type="button" data-bs-toggle="collapse" data-bs-target="#alert-profile-editor-body" aria-expanded="true" aria-controls="alert-profile-editor-body">
+                    <i class="bi bi-chevron-right collapse-icon"></i>
+                    <div>
+                        <h1 class="card-title mb-0" id="alert-profile-editor-heading">Alert Profile Editor</h1>
+                        <small class="text-muted">Configure keyword-based alert detection</small>
+                    </div>
+                </button>
+                <a href="/docs#alert-profiles" class="btn btn-outline-primary btn-sm" title="View alert profiles documentation" target="_blank" rel="noopener">
+                    <i class="bi bi-info-circle"></i>
+                </a>
+            </div>
+            <div class="collapse show" id="alert-profile-editor-body">
+                <div class="card-body">
+                    {% include 'profiles/_alert_profile_form.html' %}
+                </div>
+            </div>
+        </article>
+    </div>
+</section>
