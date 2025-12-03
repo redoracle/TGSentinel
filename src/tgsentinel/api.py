@@ -260,6 +260,29 @@ def create_api_app() -> Flask:
             200,
         )
 
+    @app.route("/api/ready", methods=["GET"])
+    def ready():
+        """Readiness check endpoint for login UI.
+
+        Returns whether the auth worker is ready to accept authentication requests.
+        This prevents premature login attempts during service initialization.
+        """
+        auth_worker_ready = _sentinel_state.get("auth_worker_ready", False)
+        return (
+            jsonify(
+                {
+                    "status": "ok",
+                    "ready": auth_worker_ready,
+                    "message": (
+                        "Auth worker initialized"
+                        if auth_worker_ready
+                        else "Initializing service..."
+                    ),
+                }
+            ),
+            200,
+        )
+
     @app.route("/api/health/semantic", methods=["GET"])
     def health_semantic():
         """Semantic scoring health check endpoint.

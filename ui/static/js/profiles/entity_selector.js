@@ -118,7 +118,11 @@
         if (applyButton) {
             applyButton.addEventListener('click', function() {
                 applyModalSelection();
-                window.SharedUtils.safeHideModal('entitySelectorModal');
+                // Close the modal using Bootstrap's modal API
+                const modal = bootstrap.Modal.getInstance(document.getElementById('selectEntitiesModal'));
+                if (modal) {
+                    modal.hide();
+                }
             });
         }
         

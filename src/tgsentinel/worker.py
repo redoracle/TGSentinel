@@ -291,8 +291,8 @@ async def process_stream_message(
         replies=_to_int(payload.get("replies", 0)),
         vip=vip,
         keywords=keywords,
-        react_thr=rule.reaction_threshold,
-        reply_thr=rule.reply_threshold,
+        react_thr=resolved_profile.reaction_threshold,
+        reply_thr=resolved_profile.reply_threshold,
         # Enhanced metadata
         is_private=is_private,
         is_reply_to_user=is_reply_to_user,
@@ -578,15 +578,37 @@ async def process_loop(
         await handshake_gate.wait()
         log.debug("[WORKER] Handshake gate passed, ready to process")
 
+    # Verify consumer group exists (should be created in main.py startup)
+    # This is a fallback check - the group should already exist from startup
     try:
         r.xgroup_create(stream, group, id="$", mkstream=True)
-        log.info("[WORKER] Created consumer group '%s' for stream '%s'", group, stream)
+        log.info(
+            "[WORKER] Created consumer group '%s' for stream '%s' (first worker startup)",
+            group,
+            stream,
+        )
     except Exception as e:
         error_msg = str(e)
         if "BUSYGROUP" in error_msg or "already exists" in error_msg.lower():
-            log.debug("[WORKER] Consumer group already exists (expected): %s", e)
+            log.debug(
+                "[WORKER] Consumer group '%s' already exists (expected from main.py initialization)",
+                group,
+            )
+        elif "NOGROUP" in error_msg:
+            log.error(
+                "[WORKER] Consumer group missing and creation failed. "
+                "This indicates Redis stream initialization in main.py failed or was skipped. "
+                "Error: %s",
+                e,
+                exc_info=True,
+            )
+            raise
         else:
-            log.error("[WORKER] Failed to create consumer group: %s", e, exc_info=True)
+            log.error(
+                "[WORKER] Unexpected error creating consumer group: %s",
+                e,
+                exc_info=True,
+            )
             raise
 
     log.info("[WORKER] Loading rules for %d channels", len(cfg.channels))

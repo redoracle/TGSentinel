@@ -1213,6 +1213,7 @@ def init_app() -> None:
                     "/api/session/",
                     "/api/ui/lock",
                     "/api/worker/status",
+                    "/api/worker/ready",  # Allow readiness check before login
                     "/api/worker/logout-progress",
                     "/api/worker/login-progress",
                     "/api/avatar/",
@@ -1309,8 +1310,16 @@ def _ensure_init(func: Callable[..., Any]) -> Callable[..., Any]:
                         or path.startswith("/api/ui/lock")
                         or path.startswith("/api/worker/status")
                         or path.startswith(
+                            "/api/worker/ready"
+                        )  # Allow readiness check before login
+                        or path.startswith("/api/worker/logout-progress")
+                        or path.startswith("/api/worker/login-progress")
+                        or path.startswith(
                             "/api/avatar/"
                         )  # Allow avatar access without auth
+                        or path.startswith(
+                            "/api/analytics/"
+                        )  # Allow analytics endpoints
                     )
                     # Require login if session missing or worker unauthorized
                     if not allowed and (is_session_missing or (worker_auth is False)):

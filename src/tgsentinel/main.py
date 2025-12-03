@@ -374,6 +374,42 @@ async def _run():
     except Exception as exc:
         log.warning("[AUTH] Failed to clear stale auth queue: %s", exc)
 
+    # Initialize Redis Stream and consumer group for message processing
+    # This must happen before any workers start to prevent NOGROUP errors
+    try:
+        stream_name = cfg.system.redis.stream
+        group_name = cfg.system.redis.group
+
+        # Create consumer group with mkstream=True to auto-create stream
+        try:
+            r.xgroup_create(stream_name, group_name, id="$", mkstream=True)
+            log.info(
+                "[STARTUP] Created Redis Stream consumer group '%s' for stream '%s'",
+                group_name,
+                stream_name,
+            )
+        except Exception as group_exc:
+            error_msg = str(group_exc)
+            if "BUSYGROUP" in error_msg or "already exists" in error_msg.lower():
+                log.debug(
+                    "[STARTUP] Consumer group '%s' already exists (expected on restart)",
+                    group_name,
+                )
+            else:
+                log.error(
+                    "[STARTUP] Failed to create consumer group: %s",
+                    group_exc,
+                    exc_info=True,
+                )
+                raise
+    except Exception as stream_exc:
+        log.error(
+            "[STARTUP] Failed to initialize Redis Stream: %s",
+            stream_exc,
+            exc_info=True,
+        )
+        raise
+
     # Start auth_worker early so UI can trigger auth requests
     auth_worker_task = asyncio.create_task(
         auth_manager.auth_queue_worker(shutdown_event)
@@ -387,6 +423,7 @@ async def _run():
     set_engine(engine)
     set_shutdown_coordinator(shutdown_coordinator)
     set_sentinel_state("session_path", str(session_file_path))
+    set_sentinel_state("auth_worker_ready", True)  # Signal readiness for login UI
     start_api_server(host="0.0.0.0", port=api_port)
     log.info("[STARTUP] HTTP API server started on port %d", api_port)
 

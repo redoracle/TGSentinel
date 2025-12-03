@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 
+import requests
 from flask import Blueprint, jsonify
 
 # Import dependency container
@@ -23,6 +25,37 @@ logger = logging.getLogger(__name__)
 
 # Create blueprint
 worker_bp = Blueprint("worker", __name__)
+
+
+@worker_bp.get("/ready")
+def worker_ready():
+    """Check if the sentinel service is ready to accept authentication requests.
+
+    This proxies to the sentinel /api/ready endpoint to determine if the
+    auth worker has been initialized. Prevents premature login attempts
+    during service startup.
+
+    Returns:
+        JSON with ready status and message from sentinel
+    """
+    sentinel_api_url = os.getenv("SENTINEL_API_BASE_URL", "http://sentinel:8080/api")
+    try:
+        response = requests.get(f"{sentinel_api_url}/ready", timeout=5)
+        response.raise_for_status()
+        return jsonify(response.json())
+    except requests.exceptions.RequestException as exc:
+        logger.debug("Readiness check error: %s", exc)
+        # If we can't reach sentinel, it's not ready - return 503 Service Unavailable
+        return (
+            jsonify(
+                {
+                    "status": "error",
+                    "ready": False,
+                    "message": "Service initializing...",
+                }
+            ),
+            503,
+        )
 
 
 @worker_bp.get("/status")

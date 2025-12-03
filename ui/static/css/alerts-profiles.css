@@ -379,10 +379,22 @@
 .alerts-list-container {
   max-height: 600px;
   overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(102, 126, 234, 0.5) transparent;
 }
 
+/* Modern scrollbar properties (Firefox 64+, Chrome 121+) */
+@supports (scrollbar-width: thin) {
+  .alerts-list-container {
+    scrollbar-width: thin;
+  }
+}
+
+@supports (scrollbar-color: auto) {
+  .alerts-list-container {
+    scrollbar-color: rgba(102, 126, 234, 0.5) transparent;
+  }
+}
+
+/* Webkit scrollbar fallback (Chrome/Safari) */
 .alerts-list-container::-webkit-scrollbar {
   width: 6px;
 }
@@ -710,10 +722,16 @@
 }
 
 /* Collapsible Section Styling - Match Alerts Feed exactly */
+.collapse-button {
+  text-decoration: none;
+  color: inherit;
+}
+
 .collapse-icon {
   display: inline-block;
   transition: transform 0.3s ease-in-out;
   transform: rotate(90deg);
+  font-size: 0.875rem;
 }
 
 button.collapsed .collapse-icon,
@@ -723,6 +741,13 @@ button[aria-expanded="false"] .collapse-icon {
 
 .card-header[role="button"]:hover {
   background: rgba(102, 126, 234, 0.05);
+}
+
+/* Info icon tooltip styling */
+.info-tooltip-icon {
+  cursor: pointer;
+  color: #0dcaf0;
+  font-size: 0.9rem;
 }
 
 /* Responsive Adjustments */

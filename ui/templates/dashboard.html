@@ -264,53 +264,6 @@
         </article>
     </div>
 </section>
-
-<section class="card" aria-labelledby="alerts-overview-heading">
-    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
-        <button class="text-start p-0 d-flex align-items-center gap-2 border-0 bg-transparent collapse-trigger" type="button" data-bs-toggle="collapse" data-bs-target="#latestAlertsCollapse" aria-expanded="false" aria-controls="latestAlertsCollapse">
-            <i class="bi bi-chevron-right collapse-icon chevron-sm"></i>
-            <div>
-                <h2 class="card-title mb-0" id="alerts-overview-heading">Latest Alerts</h2>
-                <small class="text-muted">Digest of the most recent escalations</small>
-            </div>
-        </button>
-        <a class="btn btn-outline-primary btn-sm" href="{{ url_for('views.alerts') }}" id="btn-view-all-alerts">View all</a>
-    </div>
-    <div class="collapse" id="latestAlertsCollapse">
-        <div class="card-body table-responsive">
-            <table class="table align-middle mb-0" aria-describedby="alerts-overview-heading">
-                <thead>
-                    <tr>
-                        <th scope="col">Channel</th>
-                        <th scope="col">Sender</th>
-                        <th scope="col">Excerpt</th>
-                        <th scope="col">Score</th>
-                        <th scope="col">Trigger</th>
-                        <th scope="col">Sent to</th>
-                        <th scope="col">Timestamp</th>
-                    </tr>
-                </thead>
-                <tbody id="recent-alerts-body">
-                    {%- for alert in recent_alerts %}
-                    <tr>
-                        <td>{{ alert.chat_name }}</td>
-                        <td>{{ alert.sender | default("Unknown") }}</td>
-                        <td>{{ alert.excerpt }}</td>
-                        <td><span class="badge bg-danger badge-raised">{{ '%.2f'|format(alert.score) }}</span></td>
-                        <td>{{ alert.trigger or 'N/A' }}</td>
-                        <td>{{ alert.sent_to }}</td>
-                        <td>{{ alert.created_at }}</td>
-                    </tr>
-                    {%- else %}
-                    <tr>
-                        <td colspan="7" class="text-center text-muted">No alerts have been sent yet.</td>
-                    </tr>
-                    {%- endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-</section>
 {% endblock %}
 
 {% block extra_scripts %}

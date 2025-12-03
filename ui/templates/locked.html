@@ -104,11 +104,66 @@
         
         modalEl.addEventListener('shown.bs.modal', addGlassClass);
         
+        // Add loading overlay to modal content
+        const modalContent = modalEl.querySelector('.modal-content');
+        const loadingOverlay = document.createElement('div');
+        loadingOverlay.id = 'initLoadingOverlay';
+        loadingOverlay.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:1050;display:flex;align-items:center;justify-content:center;border-radius:var(--bs-modal-border-radius);';
+        loadingOverlay.innerHTML = '<div class="text-center"><div class="spinner-border text-primary mb-2" role="status"><span class="visually-hidden">Loading...</span></div><div class="text-muted">Initializing service...</div></div>';
+        modalContent.style.position = 'relative';
+        modalContent.appendChild(loadingOverlay);
+        
+        // Disable all form inputs initially
+        const disableForm = (disabled) => {
+          modalEl.querySelectorAll('input, button').forEach(el => {
+            if (el.id !== 'initLoadingOverlay') {
+              el.disabled = disabled;
+            }
+          });
+        };
+        
+        disableForm(true);
+        
+        // Poll readiness endpoint
+        const checkReadiness = async () => {
+          try {
+            const response = await fetch('/api/worker/ready', { method: 'GET' });
+            if (!response.ok) {
+              console.error('Readiness check failed:', response.statusText);
+              // Retry after delay
+              setTimeout(checkReadiness, 500);
+              return;
+            }
+            
+            const data = await response.json();
+            
+            if (data.ready) {
+              // Service is ready, enable form and remove overlay
+              disableForm(false);
+              loadingOverlay.remove();
+              console.log('Service ready, login enabled');
+            } else {
+              // Not ready yet, check again
+              setTimeout(checkReadiness, 500);
+            }
+          } catch (error) {
+            console.error('Readiness check error:', error);
+            // Retry after delay
+            setTimeout(checkReadiness, 500);
+          }
+        };
+        
+        // Show modal immediately but keep form disabled
         modal.show();
+        
+        // Start readiness polling
+        checkReadiness();
+        
       } catch (e) {
         console.error('Modal initialization failed:', e);
       }
     });
   </script>
+
 </body>
 </html>

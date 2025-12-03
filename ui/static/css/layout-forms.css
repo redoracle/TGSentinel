@@ -232,6 +232,11 @@ main.container-fluid {
   transition: var(--transition-smooth);
 }
 
+.form-select option {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
 .form-control:focus,
 .form-select:focus {
   background: var(--bg-elevated);
@@ -329,6 +334,63 @@ button[aria-expanded="false"] .collapse-icon {
 /* Small size variant for collapse icon */
 .collapse-icon-sm {
   font-size: 0.875rem;
+}
+
+/* ============================================================================
+   Table Avatar Styling
+   --------------------------------------------------------------------------
+   Avatar components for table rows (channels and users).
+   Supports both image display and fallback initials.
+   ========================================================================= */
+
+.channel-avatar,
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: white;
+  flex-shrink: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.channel-avatar img,
+.user-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+/* Background colors based on entity type */
+.channel-avatar[data-type="chat"],
+.channel-avatar[data-chat-id^="-"] {
+  background-color: #0dcaf0; /* Info cyan for channels/groups */
+}
+
+.channel-avatar[data-type="user"] {
+  background-color: #6c757d; /* Gray for private channels */
+}
+
+.user-avatar {
+  background-color: #6f42c1; /* Purple for users */
+}
+
+/* ID column width consistency */
+#channels-table th:first-child,
+#channels-table td:first-child,
+#users-table th:first-child,
+#users-table td:first-child {
+  width: 120px;
+  min-width: 120px;
 }
 
 /* ============================================================================
