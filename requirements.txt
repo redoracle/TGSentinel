@@ -303,7 +303,7 @@ simple-websocket==1.1.0
     # via
     #   -r requirements.in
     #   python-engineio
-sqlalchemy==2.0.44
+sqlalchemy==2.0.45
     # via -r requirements.in
 sympy==1.14.0
     # via
