@@ -635,9 +635,8 @@ volumes:
 
 ### 🚧 In Progress
 
-- Message format template system (dev UI available)
-- Profile backtesting with historical data
-- Advanced feedback loop with score adjustments
+- Reddit: PRAW with OAuth2 (application-only auth)
+- Compliance: Reddit API Terms of Service v1.2
 
 ### 🔮 Future
 
