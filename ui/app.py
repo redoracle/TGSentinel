@@ -14,8 +14,16 @@ import os
 import sys
 import threading
 from datetime import datetime, timedelta, timezone
+from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Tuple
+
+from flask import (
+    Flask,
+    jsonify,
+    session,
+)
+from sqlalchemy.engine import Engine
 
 # Import shared utilities (handle both package and direct imports)
 try:
@@ -138,6 +146,64 @@ def _get_stream_name() -> str:
     return get_stream_name(config, STREAM_DEFAULT)
 
 
+try:  # Optional dependency for process metrics.
+    import psutil  # type: ignore
+except Exception:  # pragma: no cover - psutil is optional
+    psutil = None  # type: ignore
+
+try:
+    import redis  # type: ignore
+except Exception:  # pragma: no cover - redis is optional
+    redis = None  # type: ignore
+
+# TelegramClient should NOT be used in UI - sentinel is the sole session owner
+# Removing import to prevent accidental dual-writer violations
+TelegramClient = None  # type: ignore
+
+try:
+    from flask_cors import CORS  # type: ignore
+except ImportError:  # pragma: no cover - optional dependency
+
+    def CORS(app: Flask, *args: Any, **kwargs: Any) -> Flask:
+        logging.getLogger(__name__).warning(
+            "flask-cors not installed; continuing without CORS support"
+        )
+        return app
+
+
+try:
+    from flask_socketio import SocketIO, emit  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    logging.getLogger(__name__).warning(
+        "flask_socketio not installed; continuing without Socket.IO support"
+    )
+
+    class _SocketIOShim:
+        def __init__(self, app: Flask | None = None, *args: Any, **kwargs: Any) -> None:
+            self.app = app
+
+        def on(
+            self, *args: Any, **kwargs: Any
+        ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+            def _decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+                return func
+
+            return _decorator
+
+        def run(self, app: Flask, *args: Any, **kwargs: Any) -> None:
+            host = kwargs.get("host", "0.0.0.0")
+            port = kwargs.get("port", 5000)
+            app.run(host=host, port=port)
+
+        def emit(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401
+            return None
+
+    def emit(*args: Any, **kwargs: Any) -> None:  # type: ignore
+        return None
+
+    SocketIO = _SocketIOShim  # type: ignore
+
+
 # Auth function wrappers (keep module-level signatures)
 def _validate_session_file(file_content: bytes) -> Tuple[bool, str]:
     return validate_session_file(file_content)
@@ -192,73 +258,6 @@ def _submit_auth_request(
 def _wait_for_worker_authorization(timeout: float = 60.0) -> bool:
     return wait_for_worker_authorization(redis_client, timeout)
 
-
-try:  # Optional dependency for process metrics.
-    import psutil  # type: ignore
-except Exception:  # pragma: no cover - psutil is optional
-    psutil = None  # type: ignore
-
-try:
-    import redis  # type: ignore
-except Exception:  # pragma: no cover - redis is optional
-    redis = None  # type: ignore
-
-# TelegramClient should NOT be used in UI - sentinel is the sole session owner
-# Removing import to prevent accidental dual-writer violations
-TelegramClient = None  # type: ignore
-
-from flask import (
-    Flask,
-    jsonify,
-    session,
-)
-
-try:
-    from flask_cors import CORS  # type: ignore
-except ImportError:  # pragma: no cover - optional dependency
-
-    def CORS(app: Flask, *args: Any, **kwargs: Any) -> Flask:
-        logging.getLogger(__name__).warning(
-            "flask-cors not installed; continuing without CORS support"
-        )
-        return app
-
-
-try:
-    from flask_socketio import SocketIO, emit  # type: ignore
-except Exception:  # pragma: no cover - optional dependency
-    logging.getLogger(__name__).warning(
-        "flask_socketio not installed; continuing without Socket.IO support"
-    )
-
-    class _SocketIOShim:
-        def __init__(self, app: Flask | None = None, *args: Any, **kwargs: Any) -> None:
-            self.app = app
-
-        def on(
-            self, *args: Any, **kwargs: Any
-        ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-            def _decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-                return func
-
-            return _decorator
-
-        def run(self, app: Flask, *args: Any, **kwargs: Any) -> None:
-            host = kwargs.get("host", "0.0.0.0")
-            port = kwargs.get("port", 5000)
-            app.run(host=host, port=port)
-
-        def emit(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401
-            return None
-
-    def emit(*args: Any, **kwargs: Any) -> None:  # type: ignore
-        return None
-
-    SocketIO = _SocketIOShim  # type: ignore
-
-from functools import wraps
-
-from sqlalchemy.engine import Engine
 
 # Ensure we can import the core package when running the UI standalone.
 REPO_ROOT = Path(__file__).resolve().parents[1]

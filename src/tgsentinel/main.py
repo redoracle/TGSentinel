@@ -1,3 +1,5 @@
+# ruff: noqa: E402
+
 # Set umask to ensure files created are world-readable/writable (for container multi-access)
 # MUST be at the very top before any imports or file operations
 import os as _os_early

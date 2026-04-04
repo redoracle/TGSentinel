@@ -10,8 +10,10 @@ MAKEFLAGS += --no-builtin-rules
 # Project configuration
 PROJECT_NAME := tgsentinel
 PYTHON := python3
-PIP := $(PYTHON) -m pip
 VENV_DIR := .venv
+VENV_PYTHON := $(VENV_DIR)/bin/python
+PIP := $(VENV_PYTHON) -m pip
+PIP_COMPILE := $(VENV_PYTHON) -m piptools compile
 VENV_ACTIVATE := $(VENV_DIR)/bin/activate
 
 # Source directories
@@ -36,17 +38,12 @@ YELLOW := \033[33m
 RED := \033[31m
 RESET := \033[0m
 
-# Ensure virtual environment is activated
+# Ensure virtual environment exists
 define ensure_venv
-	@if [ -z "$$VIRTUAL_ENV" ]; then \
-		if [ -f "$(VENV_ACTIVATE)" ]; then \
-			echo -e "$(YELLOW)⚠️  Activating virtual environment...$(RESET)"; \
-			. "$(VENV_ACTIVATE)"; \
-		else \
-			echo -e "$(RED)❌ Virtual environment not found at $(VENV_ACTIVATE)$(RESET)" >&2; \
-			echo -e "$(YELLOW)💡 Create one with: $(PYTHON) -m venv $(VENV_DIR)$(RESET)" >&2; \
-			exit 1; \
-		fi; \
+	@if [ ! -x "$(VENV_PYTHON)" ]; then \
+		echo -e "$(RED)❌ Virtual environment not found at $(VENV_DIR)$(RESET)" >&2; \
+		echo -e "$(YELLOW)💡 Create one with: $(PYTHON) -m venv $(VENV_DIR)$(RESET)" >&2; \
+		exit 1; \
 	fi
 endef
 
@@ -71,7 +68,7 @@ help: ## Show this help message with available targets
 venv: ## Create a new virtual environment
 	@printf "$(CYAN)🔧 Creating virtual environment...$(RESET)\n"
 	@$(PYTHON) -m venv $(VENV_DIR)
-	@. $(VENV_ACTIVATE) && $(PIP) install --upgrade pip setuptools wheel
+	@$(PIP) install --upgrade pip setuptools wheel
 	@printf "$(GREEN)✅ Virtual environment created at $(VENV_DIR)$(RESET)\n"
 	@printf "$(YELLOW)💡 Activate with: source $(VENV_ACTIVATE)$(RESET)\n"
 
@@ -79,14 +76,14 @@ venv: ## Create a new virtual environment
 install: ## Install project dependencies
 	@printf "$(CYAN)📦 Installing dependencies...$(RESET)\n"
 	$(call ensure_venv)
-	@. $(VENV_ACTIVATE) && $(PIP) install -r requirements.txt
+	@$(PIP) install -r requirements.txt
 	@printf "$(GREEN)✅ Dependencies installed!$(RESET)\n"
 
 .PHONY: install-dev
 install-dev: ## Install development dependencies
 	@printf "$(CYAN)📦 Installing development dependencies...$(RESET)\n"
 	$(call ensure_venv)
-	@. $(VENV_ACTIVATE) && $(PIP) install -r requirements.txt && \
+	@$(PIP) install -r requirements.txt && \
 		$(PIP) install black isort flake8 mypy pytest pytest-cov pytest-asyncio ruff
 	@printf "$(GREEN)✅ Development dependencies installed!$(RESET)\n"
 
@@ -98,12 +95,15 @@ upgrade: ## Secure dependency upgrade using pip-tools (creates requirements.in, 
 		printf "$(YELLOW)📝 Creating requirements.in from requirements.txt...$(RESET)\n"; \
 		cp requirements.txt requirements.in; \
 	fi
-	@printf "$(CYAN)📦 Installing pip-tools...$(RESET)\n"
-	@. $(VENV_ACTIVATE) && $(PIP) install pip-tools
+	@printf "$(CYAN)📦 Installing pip-tools with compatible pip version...$(RESET)\n"
+	@# pip-tools uses PackageFinder.allow_all_prereleases, removed in pip>=26.
+	@# Temporarily pin pip to <26 for the compile step, then restore latest.
+	@$(PIP) install --quiet "pip<26" pip-tools
 	@printf "$(CYAN)🔄 Compiling dependencies with version pinning...$(RESET)\n"
-	@. $(VENV_ACTIVATE) && pip-compile --upgrade requirements.in
-	@printf "$(CYAN)📥 Installing upgraded dependencies...$(RESET)\n"
-	@. $(VENV_ACTIVATE) && $(PIP) install -r requirements.txt
+	@$(PIP_COMPILE) --upgrade requirements.in
+	@printf "$(CYAN)📥 Installing upgraded dependencies and restoring pip...$(RESET)\n"
+	@$(PIP) install -r requirements.txt
+	@$(PIP) install --upgrade --quiet pip
 	@printf "$(GREEN)✅ Dependencies upgraded securely!$(RESET)\n"
 	@printf "$(YELLOW)💡 Commit both requirements.in and requirements.txt to version control$(RESET)\n"
 
@@ -173,31 +173,31 @@ type-check: ## Run mypy type checking
 test: ## Run all tests (unit + integration + contracts)
 	@printf "$(CYAN)🧪 Running all tests...$(RESET)\n"
 	$(call ensure_venv)
-	@. $(VENV_ACTIVATE) && $(PYTHON) tools/run_tests.py
+	@$(VENV_PYTHON) tools/run_tests.py
 
 .PHONY: test-unit
 test-unit: ## Run unit tests only
 	@printf "$(CYAN)🧪 Running unit tests...$(RESET)\n"
 	$(call ensure_venv)
-	@. $(VENV_ACTIVATE) && pytest tests/unit/ $(PYTEST_ARGS)
+	@$(VENV_PYTHON) -m pytest tests/unit/ $(PYTEST_ARGS)
 
 .PHONY: test-integration
 test-integration: ## Run integration tests only
 	@printf "$(CYAN)🧪 Running integration tests...$(RESET)\n"
 	$(call ensure_venv)
-	@. $(VENV_ACTIVATE) && pytest tests/integration/ $(PYTEST_ARGS)
+	@$(VENV_PYTHON) -m pytest tests/integration/ $(PYTEST_ARGS)
 
 .PHONY: test-contracts
 test-contracts: ## Run contract tests only
 	@printf "$(CYAN)🧪 Running contract tests...$(RESET)\n"
 	$(call ensure_venv)
-	@. $(VENV_ACTIVATE) && pytest tests/contracts/ $(PYTEST_ARGS)
+	@$(VENV_PYTHON) -m pytest tests/contracts/ $(PYTEST_ARGS)
 
 .PHONY: test-validation
 test-validation: ## Run validation tests only
 	@printf "$(CYAN)🧪 Running validation tests...$(RESET)\n"
 	$(call ensure_venv)
-	@. $(VENV_ACTIVATE) && pytest tests/validation/ $(PYTEST_ARGS)
+	@$(VENV_PYTHON) -m pytest tests/validation/ $(PYTEST_ARGS)
 
 .PHONY: test-infra
 test-infra: ## Run infrastructure tests (requires running services)
@@ -205,13 +205,13 @@ test-infra: ## Run infrastructure tests (requires running services)
 	@printf "$(YELLOW)⚠️  Note: Requires Redis, Sentinel, and UI services to be running$(RESET)\n"
 	@printf "$(YELLOW)   Start with: docker compose up -d redis sentinel ui$(RESET)\n"
 	$(call ensure_venv)
-	@. $(VENV_ACTIVATE) && pytest tests/infrastructure/ $(PYTEST_ARGS)
+	@$(VENV_PYTHON) -m pytest tests/infrastructure/ $(PYTEST_ARGS)
 
 .PHONY: test-cov
 test-cov: ## Run tests with coverage report
 	@printf "$(CYAN)🧪 Running tests with coverage...$(RESET)\n"
 	$(call ensure_venv)
-	@. $(VENV_ACTIVATE) && pytest $(PYTEST_COV_ARGS)
+	@$(VENV_PYTHON) -m pytest $(PYTEST_COV_ARGS)
 	@printf "$(GREEN)✅ Coverage report generated in htmlcov/index.html$(RESET)\n"
 
 .PHONY: test-watch
@@ -224,13 +224,13 @@ test-watch: ## Run tests in watch mode (re-run on file changes)
 test-failed: ## Re-run only failed tests from last run
 	@printf "$(CYAN)🧪 Re-running failed tests...$(RESET)\n"
 	$(call ensure_venv)
-	@. $(VENV_ACTIVATE) && pytest --lf $(PYTEST_ARGS)
+	@$(VENV_PYTHON) -m pytest --lf $(PYTEST_ARGS)
 
 .PHONY: code-test
 code-test: ## Run code logic tests only (unit + integration + contracts)
 	@printf "$(CYAN)🧪 Running code logic tests...$(RESET)\n"
 	$(call ensure_venv)
-	@. $(VENV_ACTIVATE) && pytest tests/unit/ tests/integration/ tests/contracts/ $(PYTEST_ARGS)
+	@$(VENV_PYTHON) -m pytest tests/unit/ tests/integration/ tests/contracts/ $(PYTEST_ARGS)
 
 # =============================================================================
 # Docker Operations
@@ -374,12 +374,12 @@ pre-push: format-check test ## Run pre-push checks
 .PHONY: deps-list
 deps-list: ## List all installed Python packages
 	$(call ensure_venv)
-	@. $(VENV_ACTIVATE) && $(PIP) list
+	@$(PIP) list
 
 .PHONY: deps-outdated
 deps-outdated: ## Show outdated dependencies
 	$(call ensure_venv)
-	@. $(VENV_ACTIVATE) && $(PIP) list --outdated
+	@$(PIP) list --outdated
 
 .PHONY: deps-tree
 deps-tree: ## Show dependency tree

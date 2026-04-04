@@ -1,36 +1,33 @@
 # 🛰️ TG Sentinel
 
-> **Intelligent Telegram Activity Sentinel**
->
-> TG Sentinel is a self-hosted, privacy-preserving Telegram companion that listens to all messages across your channels, groups, and private chats (using your own user session, not a bot), and alerts you only when something truly important happens.
->
-> Its goal is simple: **reduce noise, preserve signal.**
+TG Sentinel is a self-hosted Telegram monitoring tool. It connects using your own user session (not a bot), listens across all your channels, groups, and chats, and alerts you only when something genuinely worth your attention arrives.
+
+The goal is straightforward: less noise, more signal.
 
 ---
 
 ## 🚀 Overview
 
-Modern Telegram power-users often belong to dozens of channels and groups, most of which are muted due to noise.  
-TG Sentinel automatically monitors them for you, applies intelligent filtering and semantic scoring, and delivers concise alerts or daily digests containing only high-value messages.
+Heavy Telegram users often belong to dozens of channels and groups, most of them muted because the volume makes them unreadable. TG Sentinel monitors them automatically, applies keyword and semantic filtering, and delivers concise alerts or scheduled digests containing only the messages that actually matter.
 
-TG Sentinel runs locally or on your own server — your data never leaves your environment.
+Everything runs locally or on your own server. Your data never leaves your environment.
 
 ---
 
 ## 🧩 Core Features
 
-| Category                        | Description                                                                                                                                      |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **User-client ingestion**       | Connects directly to Telegram via **MTProto (user session)** using [Telethon](https://docs.telethon.dev). No bots or group invites needed.       |
-| **Global listener**             | Subscribes to all dialogs, channels, and groups you belong to (except secret chats).                                                             |
-| **Two-stage importance engine** | Stage A: fast heuristics (mentions, VIPs, keywords, reactions, replies, pins). Stage B: semantic scoring using embeddings for interest profiles. |
-| **Unified profiles system**     | Alert profiles (keyword-based) and Interest profiles (semantic-based) managed from a single web UI with per-profile digest schedules.            |
-| **Digest & alerts**             | Per-profile delivery: immediate DMs, scheduled hourly/daily digests, or webhook delivery. Flexible top-N and min_score thresholds.               |
-| **Webhook integration**         | Configure outbound webhooks with Fernet encryption, template customization, and per-profile routing for external integrations.                   |
-| **Web UI dashboard**            | Modern Flask-based interface for monitoring alerts, managing profiles, configuring webhooks, viewing analytics, and system health.               |
-| **Privacy-first**               | Runs entirely under your control. No external APIs required. Message contents are analyzed locally with optional embeddings.                     |
-| **Resilient & observable**      | Durable ingestion via Redis Streams; Prometheus metrics; graceful reconnection; structured JSON logging; Docker health checks.                   |
-| **Dual-service architecture**   | Sentinel service (Telethon + worker) and UI service (Flask + WebSockets) communicate via Redis IPC for clean separation and scalability.         |
+| Category                      | Description                                                                                                                                    |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| **User-client ingestion**     | Connects directly to Telegram via MTProto (user session) using [Telethon](https://docs.telethon.dev). No bots or group invites needed.         |
+| **Global listener**           | Subscribes to all dialogs, channels, and groups you belong to, except secret chats.                                                            |
+| **Two-stage filtering**       | Stage A: fast heuristics (mentions, VIPs, keywords, reactions, replies, pins). Stage B: semantic scoring via embeddings for interest profiles. |
+| **Unified profiles**          | Alert profiles (keyword-based) and Interest profiles (semantic-based) managed from a single web UI, with per-profile digest schedules.         |
+| **Digest and alerts**         | Per-profile delivery: immediate DMs, hourly/daily digests, or webhooks. Configurable top-N and min_score thresholds.                           |
+| **Webhook integration**       | Outbound webhooks with Fernet encryption, template customization, and per-profile routing.                                                     |
+| **Web UI dashboard**          | Flask-based interface for alerts, profile management, webhooks, analytics, and system health.                                                  |
+| **Privacy-first**             | Runs entirely under your control. No external APIs required. Message analysis is local, with optional embeddings.                              |
+| **Resilient and observable**  | Durable ingestion via Redis Streams, Prometheus metrics, graceful reconnection, structured JSON logging, and Docker health checks.             |
+| **Dual-service architecture** | Sentinel service (Telethon + worker) and UI service (Flask + WebSockets) communicate via Redis IPC for clean separation.                       |
 
 ---
 
@@ -55,87 +52,58 @@ flowchart TD
     K --> N[Prometheus Metrics]
 ```
 
-Components
+### Components
 
-1️⃣ Sentinel Service (Telegram Client)
-• Based on Telethon (Python) with asyncio event loop.
-• Maintains a persistent session (.session file) with exclusive ownership.
-• Streams NewMessage events from all accessible chats in real-time.
-• Performs normalization: chat ID, sender, timestamp, text, entities, reply/reaction counts.
-• **Single-Owner Pattern**: Only the sentinel container owns and writes to the session SQLite database.
-• Exposes Flask API (port 8080) for UI communication and health checks.
-• Handles Redis-based IPC for authentication and Telegram data access delegation.
+**1. Sentinel Service**
 
-2️⃣ Redis Stream (Message Bus)
-• Lightweight, append-only queue between ingestion and analysis stages.
-• Ensures at-least-once delivery, buffering, and natural backpressure.
+Built on Telethon (Python) with an asyncio event loop. Maintains a persistent session file with exclusive ownership, streams `NewMessage` events from all accessible chats in real time, and normalizes each message (chat ID, sender, timestamp, text, entities, reply/reaction counts). Exposes a Flask API on port 8080 for UI communication and health checks. Handles Redis-based IPC for authentication and Telegram data access delegation.
 
-3️⃣ Profile Resolver & Evaluators
-• **Profile Resolver**: Matches incoming messages against all enabled profiles (alert + interest).
-• **Alert Evaluator**: Fast keyword-based scoring for alert profiles.
-• Checks: Mentions, VIP senders, urgency/security/action keywords, admin/pinned posts
-• Configurable keyword weights and minimum score thresholds
-• Per-profile delivery recommendations (immediate DM, digest, webhook)
-• **Interest Evaluator**: Semantic scoring using sentence transformers.
-• Computes embeddings for message and positive/negative samples
-• Cosine similarity scoring with configurable thresholds (default 0.55)
-• Negative sample weighting to reduce false positives
-• Both evaluators produce scored results with matched profile IDs for delivery routing.
+**2. Redis Stream**
 
-4️⃣ Delivery Router & Digest Scheduler
-• **Per-profile delivery modes**: immediate DM, scheduled digest (hourly/daily), webhook, or hybrid (both).
-• **Digest Scheduler**: Multi-schedule support per profile with configurable:
-• Schedule type: none (immediate), hourly, daily (with specific hour)
-• Min score threshold and top-N message limits
-• Target channel (DM or specific chat)
-• **Webhook Delivery**: Fernet-encrypted payloads with customizable templates and retry logic.
-• **Deduplication**: Content hash-based to prevent duplicate alerts within rolling windows.
-• **Rate Limiting**: Per-channel and per-profile limits enforced via Redis.
+A lightweight append-only queue between ingestion and analysis. Provides at-least-once delivery, natural buffering, and backpressure.
 
-5️⃣ Persistence Layer (SQLite)
-• **sentinel.db**: Main application database
-• Message metadata: chat_id, message_id, content_hash, score, matched_profiles
-• Alert history: alerted timestamp, delivery mode, profile associations
-• Digest tracking: digest_schedule field, digest_processed flag
-• Sender information: sender_id, sender_name for analytics
-• Trigger annotations: JSON field with keyword/semantic match details
-• **Retention**: Configurable cleanup of old messages (default: processed digests + 7 days)
-• **Indexes**: Optimized for alert queries, digest selection, and analytics aggregations
-• **Schema migrations**: Idempotent column additions via \_add_column_if_missing on startup
+**3. Profile Resolver and Evaluators**
 
-6️⃣ Web UI Service
-• **Flask application** (port 5000) with Socket.IO for real-time updates
-• **Zero Telethon access**: All Telegram operations delegated to sentinel via Redis IPC
-• **Page routes**: Dashboard, Alerts, Feeds (real-time), Config, Profiles, Analytics, Developer Console, API Docs
-• **API routes**: Profiles, Config, Session management, Webhooks, Digest schedules, Analytics
-• **Authentication**: Redis-based session validation, UI lock with configurable timeout
-• **Docker integration**: Container stats, endpoint inventory, system health monitoring
+The Profile Resolver matches incoming messages against all enabled profiles. The Alert Evaluator applies fast keyword-based scoring, checking mentions, VIP senders, urgency/security/action keywords, and admin/pinned posts, with configurable keyword weights and score thresholds. The Interest Evaluator uses sentence transformers to compute embeddings and cosine similarity scores, with negative sample weighting to reduce false positives. Both evaluators produce scored results with matched profile IDs for delivery routing.
 
-7️⃣ Observability
-• **Structured JSON logging**: All log entries with correlation_id, request_id, handler tags
-• **Prometheus metrics** (exposed via /metrics):
-• `sentinel_messages_total{stage=ingest|profile_resolution|alert_evaluation|interest_evaluation}`
-• `sentinel_alerts_sent_total{profile_id, delivery_mode}`
-• `sentinel_digest_messages_total{schedule, profile_id}`
-• `sentinel_webhook_requests_total{profile_id, status}`
-• `sentinel_build_info{version, commit, branch}`
-• **Health endpoints**: `/api/health`, `/api/status`, `/health/concurrency`
-• **Analytics dashboard**: Message volume, profile hit rates, sender analytics, anomaly detection
+**4. Delivery Router and Digest Scheduler**
+
+Routes matched messages to immediate DM, scheduled digest (hourly/daily), webhook, or a combination. The Digest Scheduler supports multiple schedules per profile, each with a configurable type, min score threshold, top-N limit, and target channel. Webhook payloads are Fernet-encrypted with customizable templates and retry logic. Deduplication is content hash-based; rate limiting is enforced per channel and per profile via Redis.
+
+**5. Persistence Layer**
+
+`sentinel.db` stores message metadata (chat_id, message_id, content_hash, score, matched_profiles), alert history (timestamp, delivery mode, profile associations), digest tracking (schedule field, processed flag), sender information, and trigger annotations (keyword/semantic match details as JSON). Old messages are cleaned up on a configurable schedule (default: processed digests + 7 days). Schema migrations are idempotent, using `_add_column_if_missing` on startup.
+
+**6. Web UI Service**
+
+A Flask application (port 5000) with Socket.IO for real-time updates. Has no direct Telethon access; all Telegram operations are delegated to the sentinel service via Redis IPC. Provides page routes for Dashboard, Alerts, Feeds, Config, Profiles, Analytics, Developer Console, and API Docs, plus API routes for profiles, config, session management, webhooks, digest schedules, and analytics.
+
+**7. Observability**
+
+Structured JSON logging with `correlation_id`, `request_id`, and handler tags on every log entry. Prometheus metrics exposed at `/metrics`:
+
+- `sentinel_messages_total{stage=ingest|profile_resolution|alert_evaluation|interest_evaluation}`
+- `sentinel_alerts_sent_total{profile_id, delivery_mode}`
+- `sentinel_digest_messages_total{schedule, profile_id}`
+- `sentinel_webhook_requests_total{profile_id, status}`
+- `sentinel_build_info{version, commit, branch}`
+
+Health endpoints: `/api/health`, `/api/status`, `/health/concurrency`.
 
 ⸻
 
 ## 🔒 Session Architecture
 
-TG Sentinel follows a **Single-Owner Process** pattern for Telegram session management to ensure data integrity and prevent SQLite concurrency issues:
+TG Sentinel uses a single owner pattern for Telegram session management to prevent SQLite concurrency issues and ensure data integrity.
 
-### Key Principles
+**Key principles**
 
-- **Sentinel Container**: Exclusive owner of the Telegram session SQLite database
-- **UI Container**: Never directly accesses the session file; all Telegram operations delegated via Redis
-- **No Re-authentication**: Session persists across container restarts once authenticated
-- **Zero Concurrency Conflicts**: Single writer pattern eliminates "database is locked" errors
+- The sentinel container owns the Telegram session SQLite database exclusively.
+- The UI container never accesses the session file directly; all Telegram operations go through Redis.
+- Once authenticated, the session persists across container restarts.
+- Single writer ownership eliminates "database is locked" errors entirely.
 
-### Architecture Flow
+### Authentication flow
 
 ```bash
 User (Web UI)
@@ -153,34 +121,30 @@ Telegram Session (SQLite)
 Telegram API
 ```
 
-### Authentication Process
+### Authentication steps
 
-1. User enters phone/code in web UI
-2. UI submits credentials to Redis (`tgsentinel:auth_queue`)
-3. Sentinel reads queue and performs sign-in operation
-4. Sentinel validates with `client.get_me()`
-5. Session persisted to disk automatically
-6. UI polls status and confirms login
+1. User enters phone/code in the web UI.
+2. UI pushes credentials to Redis (`tgsentinel:auth_queue`).
+3. Sentinel reads the queue and performs the sign-in.
+4. Sentinel validates the session with `client.get_me()`.
+5. Session is persisted to disk automatically.
+6. UI polls for status and confirms login.
 
-**Result**: Session file owned exclusively by sentinel; no dual-writer conflicts; no re-authentication loops.
+### Common session issues
 
-### Common Session Issues
+- **"database is locked"** — should not occur with the single owner pattern; if it does, verify the UI container is not accessing the session file.
+- **Re-authentication required** — session is not persisting; check container logs for save errors.
+- **Connection timeout** — network issue or Telegram API rate limits.
 
-If you experience session problems:
-
-- **"database is locked"** - Should never happen with single-owner pattern; verify UI container not accessing session
-- **Re-authentication required** - Session not persisting (check container logs for save errors)
-- **Connection timeout** - Network issues or Telegram API limits
-
-Solution: Restart containers and verify session ownership:
+To diagnose, restart containers and confirm session ownership:
 
 ```bash
 docker compose restart
 docker compose logs sentinel | grep "Session loaded"
-# Should show: "Session loaded via get_me(): User(...)"
+# Expected: "Session loaded via get_me(): User(...)"
 ```
 
-For technical details, see [Engineering Guidelines: Session Management](docs/ENGINEERING_GUIDELINES.md#session-management-single-owner-pattern).
+See [Engineering Guidelines: Session Management](docs/ENGINEERING_GUIDELINES.md#session-management-single-owner-pattern) for full technical detail.
 
 ⸻
 
@@ -189,91 +153,89 @@ For technical details, see [Engineering Guidelines: Session Management](docs/ENG
 ### Prerequisites
 
 - Docker and Docker Compose
-- Telegram account
+- A Telegram account
 - API credentials from <https://my.telegram.org/auth>
 
 ### Setup
 
-1. **Get Telegram API Credentials**
+**1. Get Telegram API credentials**
 
-   - Visit <https://my.telegram.org/auth>
-   - Log in with your phone number
-   - Go to "API development tools"
-   - Create a new application
-   - Copy your `api_id` (7-8 digits) and `api_hash` (32-character hex)
+- Go to <https://my.telegram.org/auth> and log in with your phone number.
+- Navigate to "API development tools" and create a new application.
+- Note your `api_id` (7-8 digits) and `api_hash` (32-character hex string).
 
-2. **Configure Environment**
+**2. Configure environment**
 
-   ```bash
-   # Clone the repository
-   git clone https://github.com/redoracle/TGSentinel.git
-   cd TGSentinel
+```bash
+# Clone the repository
+git clone https://github.com/redoracle/TGSentinel.git
+cd TGSentinel
 
-   # Create .env file
-   cp .env.sample .env
+# Create .env file
+cp .env.sample .env
 
-   # Edit .env with your credentials
-   nano .env
-   ```
+# Edit .env with your credentials
+nano .env
+```
 
-   Required `.env` variables:
+Required `.env` variables:
 
-   ```bash
-   TG_API_ID=changeme
-   TG_API_HASH=changeme
+```bash
+TG_API_ID=changeme
+TG_API_HASH=changeme
 
-   # Webhook encryption key (required if using webhooks)
-   # Generate with: python3 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
-   WEBHOOK_SECRET_KEY=changeme
+# Webhook encryption key (required if using webhooks)
+# Generate with: python3 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
+WEBHOOK_SECRET_KEY=changeme
 
-   # Alert settings
-   NOTIFICATION_MODE=both              # dm | channel | both
-   NOTIFICATION_CHANNEL=changeme       # Your notification channel/bot
-   HOURLY_DIGEST=true
-   DAILY_DIGEST=true
+# Alert settings
+NOTIFICATION_MODE=both              # dm | channel | both
+NOTIFICATION_CHANNEL=changeme       # Your notification channel/bot
+HOURLY_DIGEST=true
+DAILY_DIGEST=true
 
-   # Optional: customize other settings
-   EMBEDDINGS_MODEL=all-MiniLM-L6-v2
-   SIMILARITY_THRESHOLD=0.55  # Recommended (code default: 0.42, see docs/SEMANTIC_HELP.md)
+# Optional: customize other settings
+EMBEDDINGS_MODEL=all-MiniLM-L6-v2
+SIMILARITY_THRESHOLD=0.55  # Recommended (code default: 0.42, see docs/SEMANTIC_HELP.md)
 
-   # Redis configuration
-   REDIS_HOST=redis
-   REDIS_PORT=6379
-   REDIS_STREAM=tgsentinel:messages
-   REDIS_GROUP=workers
-   REDIS_CONSUMER=worker-1
+# Redis configuration
+REDIS_HOST=redis
+REDIS_PORT=6379
+REDIS_STREAM=tgsentinel:messages
+REDIS_GROUP=workers
+REDIS_CONSUMER=worker-1
 
-   # Storage paths
-   DB_URI=sqlite:////app/data/sentinel.db
-   TG_SESSION_PATH=/app/data/tgsentinel.session
+# Storage paths
+DB_URI=sqlite:////app/data/sentinel.db
+TG_SESSION_PATH=/app/data/tgsentinel.session
 
-   # Sentinel API
-   SENTINEL_API_PORT=8080
-   SENTINEL_API_BASE_URL=http://sentinel:8080/api
+# Sentinel API
+SENTINEL_API_PORT=8080
+SENTINEL_API_BASE_URL=http://sentinel:8080/api
 
-   # UI security
-   UI_SECRET_KEY=2cecbcb9ed37253a7c608643ca1a898f19f173195561d11a4f10a6b5cf3380eb
-   UI_LOCK_PASSWORD=changeme
-   UI_LOCK_TIMEOUT=900
+# UI security
+UI_SECRET_KEY=2cecbcb9ed37253a7c608643ca1a898f19f173195561d11a4f10a6b5cf3380eb
+UI_LOCK_PASSWORD=changeme
+UI_LOCK_TIMEOUT=900
 
-   # Admin operations
-   ADMIN_TOKEN=changeme
+# Admin operations
+ADMIN_TOKEN=changeme
 
-   # Anomaly detection
-   ANOMALY_VOLUME_THRESHOLD=4.0
-   ANOMALY_IMPORTANCE_THRESHOLD=2.5
-   ANOMALY_ALERT_RATE=0.6
-   ANOMALY_USE_STDDEV=true
-   ANOMALY_STDDEV_MULTIPLIER=2.5
+# Anomaly detection
+ANOMALY_VOLUME_THRESHOLD=4.0
+ANOMALY_IMPORTANCE_THRESHOLD=2.5
+ANOMALY_ALERT_RATE=0.6
+ANOMALY_USE_STDDEV=true
+ANOMALY_STDDEV_MULTIPLIER=2.5
 
-   # Runtime
-   PYTHONUNBUFFERED=1
-   LOG_LEVEL=INFO
-   ```
+# Runtime
+PYTHONUNBUFFERED=1
+LOG_LEVEL=INFO
+```
 
-### Configure Profiles\*\* (recommended)
+### Configure profiles (recommended)
 
-Profiles are managed via the Web UI at `http://localhost:5001/profiles`, but you can also edit YAML files:
+Profiles are managed through the web UI at `http://localhost:5001/profiles`. You can also edit the YAML files directly.
 
 **Alert Profiles** (`config/profiles_alert.yml`):
 
@@ -326,61 +288,43 @@ Profiles are managed via the Web UI at `http://localhost:5001/profiles`, but you
 
 ### Digest Schedule Behavior
 
-TG Sentinel supports **6 schedule types** with **automatic catch-up** after downtime:
+TG Sentinel supports six schedule types with automatic catch-up after downtime:
 
-#### Available Schedules
+| Schedule    | Frequency                                                              |
+| ----------- | ---------------------------------------------------------------------- |
+| `hourly`    | Every hour (e.g., 14:00, 15:00, 16:00...)                              |
+| `every_4h`  | Every 4 hours (00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC)           |
+| `every_6h`  | Every 6 hours (00:00, 06:00, 12:00, 18:00 UTC)                         |
+| `every_12h` | Every 12 hours (00:00, 12:00 UTC)                                      |
+| `daily`     | Once per day at a configured hour (default: 08:00 UTC)                 |
+| `weekly`    | Once per week at a configured day and hour (default: Monday 08:00 UTC) |
+| `none`      | Immediate alerts only, no batching                                     |
 
-- **hourly** — Every hour (14:00, 15:00, 16:00...)
-- **every_4h** — Every 4 hours (00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC)
-- **every_6h** — Every 6 hours (00:00, 06:00, 12:00, 18:00 UTC)
-- **every_12h** — Every 12 hours (00:00, 12:00 UTC)
-- **daily** — Once per day at configured hour (default: 08:00 UTC)
-- **weekly** — Once per week on configured day+hour (default: Monday 08:00 UTC)
-- **none** — Instant alerts only (no batching)
+#### Catch-up after downtime
 
-#### Catch-up After Downtime
+- `hourly`: triggers immediately on restart if more than one hour has passed since the last run.
+- `every_4h`, `every_6h`, `every_12h`: trigger at the next scheduled clock boundary if the window was missed. For example, if `every_6h` last ran at 06:00 and the app restarts at 14:00, the next run fires at 18:00.
+- `daily` and `weekly`: trigger immediately on restart if 24 hours or 7 days have passed, respectively.
 
-If the application is down and misses a scheduled digest run:
+State is persisted in Redis (`tgsentinel:digest_schedule_time:*`) and in `data/digest_scheduler_state.json` for recovery after restarts.
 
-- **Hourly schedule**: Triggers **immediately** on restart if 1+ hours have passed since last run
-- **Periodic schedules** (every_4h, every_6h, every_12h): Trigger at the **next scheduled hour** if the time window was missed
-  - Example: If `every_6h` last ran at 06:00 and app restarts at 14:00 (8 hours later), it will trigger at 18:00 (next scheduled hour)
-- **Daily/weekly schedules**: Trigger **immediately** on restart if 24+ hours / 7+ days have passed since last run
-- State persisted in Redis (`tgsentinel:digest_schedule_time:*`) and local JSON file (`data/digest_scheduler_state.json`) for recovery
+**Example:** If the app is down from Tuesday to Thursday and restarts Friday morning, the daily digest fires immediately with messages from the last 24 hours, the hourly digest fires if more than an hour has passed, and `every_6h` waits for the next scheduled boundary.
 
-**Example**: If app is down Tuesday-Thursday and restarts Friday morning:
+**Schedule slot limits:** Each profile supports up to 3 schedule slots, each with a different schedule type. A profile can have `hourly`, `daily`, and `weekly` slots, but not two `hourly` slots.
 
-- **Daily digest** triggers immediately with messages from last 24 hours
-- **Hourly digest** triggers immediately if 1+ hours have passed
-- **every_6h digest** waits until next scheduled hour (00:00, 06:00, 12:00, or 18:00 UTC)
-
-#### Schedule Slot Limits
-
-- Each profile supports **up to 3 schedule slots**
-- Each slot must use a **different schedule type** (enforced by validation)
-- Example: One profile can have `hourly`, `daily`, and `weekly` slots, but not two `hourly` slots
-
-### Start Services
+### Start services
 
 ```bash
 docker compose build
 docker compose up -d
 ```
 
-**Web UI Authentication** (First Login)
+Open `http://localhost:5001` in your browser. If no session exists, you will see the login flow. You can either upload a pre-generated `.session` file (see `tools/generate_session.py`) or authenticate via phone number and confirmation code. The session persists across restarts in the `tgsentinel_sentinel_data` volume.
 
-Open `http://localhost:5001` in your browser.
-
-- If no session exists, you'll see the login flow
-- Option 1: Upload a pre-generated `.session` file (see `tools/generate_session.py`)
-- Option 2: Enter phone number → receive code → enter code (+ 2FA if enabled)
-- All authentication handled through the web UI via Redis IPC
-- Session persists across container restarts in `tgsentinel_sentinel_data` volume
-
-  **Monitor Logs**
+**Monitor logs**
 
 ```bash
-docker compose logs -f sentinel  # Worker + API logs
+docker compose logs -f sentinel  # Worker and API logs
 docker compose logs -f ui        # Web UI logs
 ```
 
@@ -708,7 +652,7 @@ volumes:
 
 | Layer           | Technology                          | Notes                                                     |
 | --------------- | ----------------------------------- | --------------------------------------------------------- |
-| **Ingestion**   | Python 3.11+ + Telethon (asyncio)   | MTProto user session, single-owner pattern                |
+| **Ingestion**   | Python 3.11+ + Telethon (asyncio)   | MTProto user session, single owner pattern                |
 | **Message Bus** | Redis 7 Streams                     | Durable queue with consumer groups                        |
 | **Persistence** | SQLite 3                            | Application DB (sentinel.db) with indexed queries         |
 | **Embeddings**  | sentence-transformers (HuggingFace) | Local models: all-MiniLM-L6-v2, all-mpnet-base-v2         |
