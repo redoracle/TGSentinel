@@ -1,4 +1,4 @@
-# 🛰️ TG Sentinel
+# <img src="logo.png" alt="TG Sentinel logo" width="48" style="vertical-align:middle; margin-right:10px;" /> TG Sentinel
 
 TG Sentinel is a self-hosted Telegram monitoring tool. It connects using your own user session (not a bot), listens across all your channels, groups, and chats, and alerts you only when something genuinely worth your attention arrives.
 
@@ -54,31 +54,31 @@ flowchart TD
 
 ### Components
 
-**1. Sentinel Service**
+## 1. Sentinel Service\*\*
 
 Built on Telethon (Python) with an asyncio event loop. Maintains a persistent session file with exclusive ownership, streams `NewMessage` events from all accessible chats in real time, and normalizes each message (chat ID, sender, timestamp, text, entities, reply/reaction counts). Exposes a Flask API on port 8080 for UI communication and health checks. Handles Redis-based IPC for authentication and Telegram data access delegation.
 
-**2. Redis Stream**
+## 2. Redis Stream
 
 A lightweight append-only queue between ingestion and analysis. Provides at-least-once delivery, natural buffering, and backpressure.
 
-**3. Profile Resolver and Evaluators**
+## 3. Profile Resolver and Evaluators
 
 The Profile Resolver matches incoming messages against all enabled profiles. The Alert Evaluator applies fast keyword-based scoring, checking mentions, VIP senders, urgency/security/action keywords, and admin/pinned posts, with configurable keyword weights and score thresholds. The Interest Evaluator uses sentence transformers to compute embeddings and cosine similarity scores, with negative sample weighting to reduce false positives. Both evaluators produce scored results with matched profile IDs for delivery routing.
 
-**4. Delivery Router and Digest Scheduler**
+## 4. Delivery Router and Digest Scheduler
 
 Routes matched messages to immediate DM, scheduled digest (hourly/daily), webhook, or a combination. The Digest Scheduler supports multiple schedules per profile, each with a configurable type, min score threshold, top-N limit, and target channel. Webhook payloads are Fernet-encrypted with customizable templates and retry logic. Deduplication is content hash-based; rate limiting is enforced per channel and per profile via Redis.
 
-**5. Persistence Layer**
+## 5. Persistence Layer
 
 `sentinel.db` stores message metadata (chat_id, message_id, content_hash, score, matched_profiles), alert history (timestamp, delivery mode, profile associations), digest tracking (schedule field, processed flag), sender information, and trigger annotations (keyword/semantic match details as JSON). Old messages are cleaned up on a configurable schedule (default: processed digests + 7 days). Schema migrations are idempotent, using `_add_column_if_missing` on startup.
 
-**6. Web UI Service**
+## 6. Web UI Service
 
 A Flask application (port 5000) with Socket.IO for real-time updates. Has no direct Telethon access; all Telegram operations are delegated to the sentinel service via Redis IPC. Provides page routes for Dashboard, Alerts, Feeds, Config, Profiles, Analytics, Developer Console, and API Docs, plus API routes for profiles, config, session management, webhooks, digest schedules, and analytics.
 
-**7. Observability**
+## 7. Observability
 
 Structured JSON logging with `correlation_id`, `request_id`, and handler tags on every log entry. Prometheus metrics exposed at `/metrics`:
 
@@ -96,7 +96,7 @@ Health endpoints: `/api/health`, `/api/status`, `/health/concurrency`.
 
 TG Sentinel uses a single owner pattern for Telegram session management to prevent SQLite concurrency issues and ensure data integrity.
 
-**Key principles**
+## Key principles
 
 - The sentinel container owns the Telegram session SQLite database exclusively.
 - The UI container never accesses the session file directly; all Telegram operations go through Redis.
@@ -158,13 +158,13 @@ See [Engineering Guidelines: Session Management](docs/ENGINEERING_GUIDELINES.md#
 
 ### Setup
 
-**1. Get Telegram API credentials**
+## 1. Get Telegram API credentials
 
 - Go to <https://my.telegram.org/auth> and log in with your phone number.
 - Navigate to "API development tools" and create a new application.
 - Note your `api_id` (7-8 digits) and `api_hash` (32-character hex string).
 
-**2. Configure environment**
+## 2. Configure environment
 
 ```bash
 # Clone the repository
@@ -321,7 +321,7 @@ docker compose up -d
 
 Open `http://localhost:5001` in your browser. If no session exists, you will see the login flow. You can either upload a pre-generated `.session` file (see `tools/generate_session.py`) or authenticate via phone number and confirmation code. The session persists across restarts in the `tgsentinel_sentinel_data` volume.
 
-**Monitor logs**
+## Monitor logs
 
 ```bash
 docker compose logs -f sentinel  # Worker and API logs
@@ -795,3 +795,9 @@ Apache-2.0 supports a clean path toward:
 • Partnerships and integrations
 
 The community version remains fully open, while advanced features can be offered under commercial licenses without conflict.
+
+## Support
+
+If you find this plugin useful and want to support its development, you can support me on Ko-fi.
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/X8X71XF2G2)
