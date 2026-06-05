@@ -129,6 +129,7 @@ _fallback_avatar = fallback_avatar
 # module import safe in environments where optional validator dependencies are
 # missing while preserving the original API for tests and callers.
 
+
 def _validate_config_payload(payload: Dict[str, Any]) -> None:
     """Validate a config payload by delegating to the most-appropriate validator.
 
