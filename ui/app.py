@@ -112,6 +112,15 @@ _normalise_tags = normalize_tags  # Note: British spelling in original
 _fallback_username = fallback_username
 _fallback_avatar = fallback_avatar
 
+# Compatibility wrapper expected by some tests and callers
+try:
+    # If the standalone validator exists, expose it as a module-level alias
+    from .utils.validators import validate_config_payload as _validate_config_payload
+except Exception:
+    # Fallback: define a shim that raises ImportError if used incorrectly
+    def _validate_config_payload(payload):
+        raise ImportError("validate_config_payload is not available in this environment")
+
 
 # Redis cache function wrappers (keep module-level signatures)
 def _load_cached_user_info() -> Dict[str, Any] | None:
