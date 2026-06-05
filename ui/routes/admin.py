@@ -13,6 +13,7 @@ import logging
 import os
 import subprocess
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Callable, List, Tuple
 
 import requests
@@ -64,12 +65,33 @@ def init_admin_routes(
 def export_config():
     """Export the current YAML configuration as a downloadable file.
 
-    Fetches config from Sentinel API (single source of truth) and returns
-    it as a downloadable YAML file.
+    Prefers a local config override for tests/dev, otherwise fetches from
+    Sentinel API (single source of truth).
     """
     import io
 
     import requests as http_requests
+
+    local_config = os.getenv("TG_SENTINEL_CONFIG")
+    if local_config:
+        try:
+            config_path = Path(local_config)
+            if config_path.exists():
+                config_data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+                yaml_content = yaml.safe_dump(
+                    config_data,
+                    default_flow_style=False,
+                    allow_unicode=True,
+                    sort_keys=False,
+                )
+                return send_file(
+                    io.BytesIO(yaml_content.encode("utf-8")),
+                    mimetype="application/x-yaml",
+                    as_attachment=True,
+                    download_name="tgsentinel.yml",
+                )
+        except Exception as exc:
+            logger.warning("Local config export fallback failed: %s", exc)
 
     try:
         # Fetch config from Sentinel API (single source of truth)
@@ -106,7 +128,7 @@ def export_config():
             io.BytesIO(yaml_content.encode("utf-8")),
             mimetype="application/x-yaml",
             as_attachment=True,
-            download_name=f"tgsentinel_config_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.yml",
+            download_name="tgsentinel.yml",
         )
     except http_requests.RequestException as e:
         logger.error("Export config failed (Sentinel unavailable): %s", e)

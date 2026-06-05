@@ -3,6 +3,7 @@
 import logging
 import os
 import re
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -48,6 +49,25 @@ def _fetch_sentinel_config() -> tuple[dict, str | None]:
     except requests.exceptions.RequestException as e:
         logger.error(f"Could not connect to Sentinel API: {e}")
         return {}, "Could not reach Sentinel service"
+
+
+def _load_local_config() -> tuple[dict, str | None]:
+    """Load config from TG_SENTINEL_CONFIG when available."""
+    config_path = os.getenv("TG_SENTINEL_CONFIG")
+    if not config_path:
+        return {}, ""
+
+    path = Path(config_path)
+    if not path.exists():
+        return {}, f"Local config file not found: {path}"
+
+    try:
+        import yaml
+
+        return yaml.safe_load(path.read_text(encoding="utf-8")) or {}, None
+    except Exception as exc:
+        logger.error(f"Failed to read local config file {path}: {exc}")
+        return {}, f"Could not read local config file: {exc}"
 
 
 def _update_sentinel_config(config_updates: dict) -> tuple[bool, str | None]:

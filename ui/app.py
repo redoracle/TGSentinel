@@ -53,6 +53,7 @@ try:
         normalize_phone,
         normalize_tags,
         truncate,
+        validate_config_payload,
     )
     from .utils.serializers import serialize_channels
 except ImportError:
@@ -90,6 +91,7 @@ except ImportError:
         normalize_phone,
         normalize_tags,
         truncate,
+        validate_config_payload,
     )
     from utils.serializers import serialize_channels
 
@@ -112,8 +114,12 @@ _normalise_tags = normalize_tags  # Note: British spelling in original
 _fallback_username = fallback_username
 _fallback_avatar = fallback_avatar
 
+# Backward-compatible export expected by integration tests and callers.
+def _validate_config_payload(payload: Dict[str, Any]) -> None:
+    return validate_config_payload(payload)
 
 # Redis cache function wrappers (keep module-level signatures)
+
 def _load_cached_user_info() -> Dict[str, Any] | None:
     return load_cached_user_info(redis_client)
 
