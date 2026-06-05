@@ -263,15 +263,11 @@ class TestProfileTuner:
         from sqlalchemy import text
 
         with engine.connect() as con:
-            result = con.execute(
-                text(
-                    """
+            result = con.execute(text("""
                     SELECT profile_id, old_value, new_value, adjustment_reason, feedback_count
                     FROM profile_adjustments
                     WHERE profile_id = '3000'
-                """
-                )
-            )
+                """))
             row = result.fetchone()
 
         assert row is not None
