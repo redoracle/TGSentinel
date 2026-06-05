@@ -41,8 +41,7 @@ class RedisManager:
         # Lua script for atomic TTL refresh without value change
         # If key exists: refresh TTL and return current value
         # If key missing: set default value with TTL and return it
-        self._ttl_refresh_script = self.redis.register_script(
-            """
+        self._ttl_refresh_script = self.redis.register_script("""
             local key = KEYS[1]
             local ttl = tonumber(ARGV[1])
             local default_value = ARGV[2]
@@ -57,8 +56,7 @@ class RedisManager:
                 redis.call('SETEX', key, ttl, default_value)
                 return default_value
             end
-        """
-        )
+        """)
 
     def publish_worker_status(
         self,

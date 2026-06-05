@@ -93,9 +93,7 @@ def init_db(db_uri: str) -> Engine:
     engine = create_engine(db_uri, future=True)
     with engine.begin() as con:
         # Execute each CREATE TABLE statement separately
-        con.execute(
-            text(
-                """
+        con.execute(text("""
 CREATE TABLE IF NOT EXISTS messages(
   chat_id INTEGER,
   msg_id INTEGER,
@@ -108,13 +106,9 @@ CREATE TABLE IF NOT EXISTS messages(
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY(chat_id, msg_id)
 )
-        """
-            )
-        )
+        """))
 
-        con.execute(
-            text(
-                """
+        con.execute(text("""
 CREATE TABLE IF NOT EXISTS feedback(
   chat_id INTEGER,
   msg_id INTEGER,
@@ -124,13 +118,9 @@ CREATE TABLE IF NOT EXISTS feedback(
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY(chat_id, msg_id)
 )
-        """
-            )
-        )
+        """))
 
-        con.execute(
-            text(
-                """
+        con.execute(text("""
 CREATE TABLE IF NOT EXISTS feedback_profiles(
   chat_id INTEGER,
   msg_id INTEGER,
@@ -138,13 +128,9 @@ CREATE TABLE IF NOT EXISTS feedback_profiles(
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY(chat_id, msg_id, profile_id)
 )
-        """
-            )
-        )
+        """))
 
-        con.execute(
-            text(
-                """
+        con.execute(text("""
 CREATE TABLE IF NOT EXISTS webhook_deliveries(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   webhook_service TEXT NOT NULL,
@@ -160,14 +146,10 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries(
   attempt INTEGER DEFAULT 1,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 )
-        """
-            )
-        )
+        """))
 
         # Phase 1: Feedback Learning - Profile Adjustments Tracking
-        con.execute(
-            text(
-                """
+        con.execute(text("""
 CREATE TABLE IF NOT EXISTS profile_adjustments(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   profile_id TEXT NOT NULL,
@@ -181,14 +163,10 @@ CREATE TABLE IF NOT EXISTS profile_adjustments(
   trigger_msg_id INTEGER,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 )
-        """
-            )
-        )
+        """))
 
         # Phase 2: Sample additions tracking
-        con.execute(
-            text(
-                """
+        con.execute(text("""
 CREATE TABLE IF NOT EXISTS profile_sample_additions(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   profile_id TEXT NOT NULL,
@@ -203,9 +181,7 @@ CREATE TABLE IF NOT EXISTS profile_sample_additions(
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   committed_at DATETIME
 )
-        """
-            )
-        )
+        """))
 
         # Add columns to existing tables if they don't exist
         _add_column_if_missing(con, "messages", "chat_title", "TEXT")
@@ -276,9 +252,7 @@ CREATE TABLE IF NOT EXISTS profile_sample_additions(
         _add_column_if_missing(con, "feedback", "semantic_score", "REAL")
 
         # Phase 3: Batch history tracking
-        con.execute(
-            text(
-                """
+        con.execute(text("""
 CREATE TABLE IF NOT EXISTS batch_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     started_at DATETIME NOT NULL,
@@ -289,62 +263,40 @@ CREATE TABLE IF NOT EXISTS batch_history (
     trigger_type TEXT NOT NULL,
     status TEXT NOT NULL
 )
-        """
-            )
-        )
+        """))
 
         # Backfill Phase 0: Copy existing data to new columns
         try:
             # Copy score to keyword_score if not already backfilled
-            con.execute(
-                text(
-                    """
+            con.execute(text("""
                     UPDATE messages
                     SET keyword_score = score
                     WHERE keyword_score = 0.0 AND score IS NOT NULL
-                    """
-                )
-            )
+                    """))
 
             # Copy feed flags to new naming
-            con.execute(
-                text(
-                    """
+            con.execute(text("""
                     UPDATE messages
                     SET feed_alert_flag = flagged_for_alerts_feed
                     WHERE feed_alert_flag = 0 AND flagged_for_alerts_feed = 1
-                    """
-                )
-            )
-            con.execute(
-                text(
-                    """
+                    """))
+            con.execute(text("""
                     UPDATE messages
                     SET feed_interest_flag = flagged_for_interest_feed
                     WHERE feed_interest_flag = 0 AND flagged_for_interest_feed = 1
-                    """
-                )
-            )
+                    """))
 
             # Set semantic_type based on existing flags
-            con.execute(
-                text(
-                    """
+            con.execute(text("""
                     UPDATE messages
                     SET semantic_type = 'alert_keyword'
                     WHERE semantic_type IS NULL AND flagged_for_alerts_feed = 1
-                    """
-                )
-            )
-            con.execute(
-                text(
-                    """
+                    """))
+            con.execute(text("""
                     UPDATE messages
                     SET semantic_type = 'interest_semantic'
                     WHERE semantic_type IS NULL AND flagged_for_interest_feed = 1
-                    """
-                )
-            )
+                    """))
 
             log.info(
                 "Phase 0 backfill completed: keyword_score, feed flags, semantic_type"
@@ -501,8 +453,7 @@ def upsert_message(
 
     with engine.begin() as con:
         con.execute(
-            text(
-                """
+            text("""
           INSERT INTO messages(
               chat_id, msg_id, content_hash,
               score, keyword_score, semantic_scores_json, semantic_type,
@@ -537,8 +488,7 @@ def upsert_message(
             digest_schedule = excluded.digest_schedule,
             delivery_mode_used = excluded.delivery_mode_used,
             delivery_target_used = excluded.delivery_target_used
-        """
-            ),
+        """),
             {
                 "c": chat_id,
                 "m": msg_id,
@@ -568,13 +518,11 @@ def mark_for_alerts_feed(engine: Engine, chat_id: int, msg_id: int):
     """
     with engine.begin() as con:
         con.execute(
-            text(
-                """UPDATE messages
+            text("""UPDATE messages
                    SET flagged_for_alerts_feed = 1,
                        feed_alert_flag = 1,
                        semantic_type = COALESCE(semantic_type, 'alert_keyword')
-                   WHERE chat_id = :c AND msg_id = :m"""
-            ),
+                   WHERE chat_id = :c AND msg_id = :m"""),
             {"c": chat_id, "m": msg_id},
         )
 
@@ -586,13 +534,11 @@ def mark_for_interest_feed(engine: Engine, chat_id: int, msg_id: int):
     """
     with engine.begin() as con:
         con.execute(
-            text(
-                """UPDATE messages
+            text("""UPDATE messages
                    SET flagged_for_interest_feed = 1,
                        feed_interest_flag = 1,
                        semantic_type = COALESCE(semantic_type, 'interest_semantic')
-                   WHERE chat_id = :c AND msg_id = :m"""
-            ),
+                   WHERE chat_id = :c AND msg_id = :m"""),
             {"c": chat_id, "m": msg_id},
         )
 
@@ -629,14 +575,12 @@ def cleanup_old_messages(
         # Step 1: Delete messages older than retention_days
         # Preserve flagged messages (alerts or interest) for longer (2x retention by default)
         result = con.execute(
-            text(
-                """
+            text("""
                 DELETE FROM messages
                 WHERE datetime(created_at) < datetime('now', '-' || :retention_days || ' days')
                   AND ((flagged_for_alerts_feed = 0 AND flagged_for_interest_feed = 0)
                        OR datetime(created_at) < datetime('now', '-' || :flagged_retention_days || ' days'))
-            """
-            ),
+            """),
             {
                 "retention_days": retention_days,
                 "flagged_retention_days": retention_days * preserve_flagged_multiplier,
@@ -653,16 +597,14 @@ def cleanup_old_messages(
             # Delete messages beyond the limit, keeping the most recent ones
             # Prefer keeping flagged messages within the limit
             result = con.execute(
-                text(
-                    """
+                text("""
                     DELETE FROM messages
                     WHERE (chat_id, msg_id) NOT IN (
                         SELECT chat_id, msg_id FROM messages
                         ORDER BY (flagged_for_alerts_feed + flagged_for_interest_feed) DESC, created_at DESC
                         LIMIT :max_messages
                     )
-                """
-                ),
+                """),
                 {"max_messages": max_messages},
             )
             stats["deleted_by_count"] = result.rowcount
@@ -755,16 +697,14 @@ def record_webhook_delivery(
     """
     with engine.begin() as con:
         con.execute(
-            text(
-                """
+            text("""
                 INSERT INTO webhook_deliveries(
                     webhook_service, profile_id, profile_name, chat_id, msg_id,
                     status, http_status, response_time_ms, error_message, payload, attempt
                 )
                 VALUES(:service, :profile_id, :profile_name, :chat_id, :msg_id,
                        :status, :http_status, :response_time_ms, :error_message, :payload, :attempt)
-                """
-            ),
+                """),
             {
                 "service": webhook_service,
                 "profile_id": str(profile_id) if profile_id else None,
@@ -795,8 +735,7 @@ def get_recent_webhook_deliveries(engine: Engine, limit: int = 10) -> list[dict]
     """
     with engine.begin() as con:
         result = con.execute(
-            text(
-                """
+            text("""
                 SELECT
                     id, webhook_service, profile_id, profile_name, chat_id, msg_id,
                     status, http_status, response_time_ms, error_message,
@@ -804,8 +743,7 @@ def get_recent_webhook_deliveries(engine: Engine, limit: int = 10) -> list[dict]
                 FROM webhook_deliveries
                 ORDER BY created_at DESC
                 LIMIT :limit
-                """
-            ),
+                """),
             {"limit": limit},
         )
 
@@ -825,12 +763,10 @@ def cleanup_old_webhook_deliveries(engine: Engine, days: int = 30) -> int:
     """
     with engine.begin() as con:
         result = con.execute(
-            text(
-                """
+            text("""
                 DELETE FROM webhook_deliveries
                 WHERE created_at < datetime('now', '-' || :days || ' days')
-                """
-            ),
+                """),
             {"days": days},
         )
         return result.rowcount

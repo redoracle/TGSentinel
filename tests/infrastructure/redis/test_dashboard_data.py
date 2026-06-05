@@ -26,8 +26,7 @@ def test_db():
 
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE messages (
             chat_id INTEGER,
             msg_id INTEGER,
@@ -38,8 +37,7 @@ def test_db():
             created_at TEXT DEFAULT (datetime('now')),
             PRIMARY KEY (chat_id, msg_id)
         )
-    """
-    )
+    """)
 
     # Insert test messages with different timestamps
     now = datetime.now()
