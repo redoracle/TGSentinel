@@ -77,7 +77,9 @@ def export_config():
         try:
             config_path = Path(local_config)
             if config_path.exists():
-                config_data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+                config_data = (
+                    yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+                )
                 yaml_content = yaml.safe_dump(
                     config_data,
                     default_flow_style=False,
