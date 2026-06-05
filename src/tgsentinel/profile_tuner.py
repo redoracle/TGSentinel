@@ -209,8 +209,7 @@ class ProfileTuner:
         try:
             with self.engine.begin() as con:
                 con.execute(
-                    text(
-                        """
+                    text("""
                         INSERT INTO profile_adjustments(
                             profile_id, profile_type, adjustment_type,
                             old_value, new_value, adjustment_reason,
@@ -220,8 +219,7 @@ class ProfileTuner:
                             :old, :new, :reason,
                             :count, :chat_id, :msg_id
                         )
-                    """
-                    ),
+                    """),
                     {
                         "pid": adjustment.profile_id,
                         "ptype": adjustment.profile_type,
@@ -270,8 +268,7 @@ class ProfileTuner:
         try:
             with self.engine.connect() as con:
                 result = con.execute(
-                    text(
-                        """
+                    text("""
                         SELECT
                             adjustment_type,
                             old_value,
@@ -283,8 +280,7 @@ class ProfileTuner:
                         WHERE profile_id = :pid
                         ORDER BY created_at DESC
                         LIMIT :limit
-                    """
-                    ),
+                    """),
                     {"pid": profile_id, "limit": limit},
                 )
 
@@ -554,8 +550,7 @@ class ProfileTuner:
             # Get from database (includes metadata)
             with self.engine.connect() as con:
                 result = con.execute(
-                    text(
-                        """
+                    text("""
                         SELECT
                             sample_category,
                             sample_text,
@@ -569,8 +564,7 @@ class ProfileTuner:
                           AND profile_type = :ptype
                           AND sample_status = 'pending'
                         ORDER BY created_at ASC
-                    """
-                    ),
+                    """),
                     {"pid": profile_id, "ptype": profile_type},
                 )
 
@@ -611,15 +605,13 @@ class ProfileTuner:
         try:
             with self.engine.connect() as con:
                 result = con.execute(
-                    text(
-                        """
+                    text("""
                         SELECT COUNT(*) FROM profile_sample_additions
                         WHERE profile_id = :pid
                           AND sample_category = :cat
                           AND sample_text = :text
                           AND sample_status = 'pending'
-                    """
-                    ),
+                    """),
                     {"pid": profile_id, "cat": sample_category, "text": sample_text},
                 )
                 count = result.scalar()
@@ -643,8 +635,7 @@ class ProfileTuner:
         try:
             with self.engine.connect() as con:
                 con.execute(
-                    text(
-                        """
+                    text("""
                         INSERT INTO profile_sample_additions (
                             profile_id, profile_type, sample_category,
                             sample_text, sample_weight, sample_status,
@@ -653,8 +644,7 @@ class ProfileTuner:
                             :pid, :ptype, :cat, :text, :weight, :status,
                             :chat_id, :msg_id, :score
                         )
-                    """
-                    ),
+                    """),
                     {
                         "pid": profile_id,
                         "ptype": profile_type,
@@ -685,8 +675,7 @@ class ProfileTuner:
                 if limit:
                     # Update only the oldest N samples
                     con.execute(
-                        text(
-                            """
+                        text("""
                             UPDATE profile_sample_additions
                             SET sample_status = :new_status,
                                 committed_at = CURRENT_TIMESTAMP
@@ -698,8 +687,7 @@ class ProfileTuner:
                                 ORDER BY created_at ASC
                                 LIMIT :limit
                             )
-                        """
-                        ),
+                        """),
                         {
                             "new_status": new_status,
                             "pid": profile_id,
@@ -711,16 +699,14 @@ class ProfileTuner:
                 else:
                     # Update all matching samples
                     con.execute(
-                        text(
-                            """
+                        text("""
                             UPDATE profile_sample_additions
                             SET sample_status = :new_status,
                                 committed_at = CURRENT_TIMESTAMP
                             WHERE profile_id = :pid
                               AND sample_category = :cat
                               AND sample_status = :old_status
-                        """
-                        ),
+                        """),
                         {
                             "new_status": new_status,
                             "pid": profile_id,
@@ -793,8 +779,7 @@ class ProfileTuner:
         try:
             with self.engine.connect() as con:
                 result = con.execute(
-                    text(
-                        """
+                    text("""
                         SELECT
                             COUNT(*) as total_feedback,
                             SUM(CASE WHEN f.label = 1 THEN 1 ELSE 0 END) as positive,
@@ -805,8 +790,7 @@ class ProfileTuner:
                         WHERE fp.profile_id = :pid
                           AND f.semantic_type = :stype
                           AND f.created_at >= datetime('now', :days_back)
-                    """
-                    ),
+                    """),
                     {
                         "pid": profile_id,
                         "stype": semantic_type,

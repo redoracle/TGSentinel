@@ -19,9 +19,7 @@ def test_engine():
 
     # Create messages table with Phase 1 schema including keyword_score and Phase 0 columns
     with engine.begin() as con:
-        con.execute(
-            text(
-                """
+        con.execute(text("""
         CREATE TABLE messages (
             chat_id INTEGER,
             msg_id INTEGER,
@@ -45,9 +43,7 @@ def test_engine():
             digest_processed INTEGER DEFAULT 0,
             PRIMARY KEY(chat_id, msg_id)
         )
-        """
-            )
-        )
+        """))
 
     return engine
 
@@ -62,8 +58,7 @@ def sample_messages(test_engine):
     with test_engine.begin() as con:
         # Hourly schedule, not processed
         con.execute(
-            text(
-                """
+            text("""
             INSERT INTO messages (
                 chat_id, msg_id, content_hash, score, keyword_score,
                 flagged_for_interest_feed, feed_interest_flag, chat_title, sender_name,
@@ -75,15 +70,13 @@ def sample_messages(test_engine):
                 1111, 'CVE-2024-1234 critical', '{"security": ["CVE"]}', :ts1, '["security"]',
                 'hourly', 0
             )
-        """
-            ),
+        """),
             {"ts1": one_hour_ago.strftime("%Y-%m-%d %H:%M:%S")},
         )
 
         # Hourly schedule, not processed, lower score
         con.execute(
-            text(
-                """
+            text("""
             INSERT INTO messages (
                 chat_id, msg_id, content_hash, score, keyword_score,
                 flagged_for_interest_feed, feed_interest_flag, chat_title, sender_name,
@@ -95,15 +88,13 @@ def sample_messages(test_engine):
                 2222, 'Vulnerability found', '{"security": ["vulnerability"]}', :ts2,
                 '["security", "critical"]', 'hourly', 0
             )
-        """
-            ),
+        """),
             {"ts2": one_hour_ago.strftime("%Y-%m-%d %H:%M:%S")},
         )
 
         # Daily schedule, not processed
         con.execute(
-            text(
-                """
+            text("""
             INSERT INTO messages (
                 chat_id, msg_id, content_hash, score, keyword_score,
                 flagged_for_interest_feed, feed_interest_flag, chat_title, sender_name,
@@ -114,15 +105,13 @@ def sample_messages(test_engine):
                 -1001222222222, 1, 'hash3', 6.5, 6.5, 1, 1, 'News Channel', 'NewsBot',
                 3333, 'Daily update', '{}', :ts3, '["news"]', 'daily', 0
             )
-        """
-            ),
+        """),
             {"ts3": two_hours_ago.strftime("%Y-%m-%d %H:%M:%S")},
         )
 
         # Hourly schedule, already processed
         con.execute(
-            text(
-                """
+            text("""
             INSERT INTO messages (
                 chat_id, msg_id, content_hash, score, keyword_score,
                 flagged_for_interest_feed, feed_interest_flag, chat_title, sender_name,
@@ -133,15 +122,13 @@ def sample_messages(test_engine):
                 -1001111111111, 3, 'hash4', 9.0, 9.0, 1, 1, 'Security Channel', 'Bot',
                 4444, 'Already sent', '{}', :ts4, '["security"]', 'hourly', 1
             )
-        """
-            ),
+        """),
             {"ts4": one_hour_ago.strftime("%Y-%m-%d %H:%M:%S")},
         )
 
         # Not alerted
         con.execute(
-            text(
-                """
+            text("""
             INSERT INTO messages (
                 chat_id, msg_id, content_hash, score, keyword_score,
                 flagged_for_interest_feed, feed_interest_flag, chat_title, sender_name,
@@ -152,8 +139,7 @@ def sample_messages(test_engine):
                 -1001333333333, 1, 'hash5', 5.0, 5.0, 0, 0, 'Test Channel', 'User',
                 5555, 'Not alerted', '{}', :ts5, '["test"]', 'hourly', 0
             )
-        """
-            ),
+        """),
             {"ts5": one_hour_ago.strftime("%Y-%m-%d %H:%M:%S")},
         )
 
@@ -254,8 +240,7 @@ class TestCollectAllForSchedule:
 
         with test_engine.begin() as con:
             con.execute(
-                text(
-                    """
+                text("""
                 INSERT INTO messages (
                     chat_id, msg_id, content_hash, score, keyword_score, flagged_for_interest_feed, feed_interest_flag,
                     chat_title, sender_name, sender_id, message_text, trigger_annotations,
@@ -263,8 +248,7 @@ class TestCollectAllForSchedule:
                 ) VALUES (:chat_id, :msg_id, :content_hash, :score, :keyword_score, \
                 :flagged_for_interest_feed, :feed_interest_flag, :chat_title, :sender_name, :sender_id, :message_text, \
                 :trigger_annotations, :created_at, :matched_profiles, :digest_schedule, :digest_processed)
-                """
-                ),
+                """),
                 {
                     "chat_id": -1001111111111,
                     "msg_id": 999,
@@ -351,8 +335,7 @@ class TestCollectForProfiles:
 
         with sample_messages.begin() as con:
             con.execute(
-                text(
-                    """
+                text("""
                 INSERT INTO messages (
                     chat_id, msg_id, content_hash, score, keyword_score,
                     flagged_for_interest_feed, feed_interest_flag, chat_title, sender_name,
@@ -363,8 +346,7 @@ class TestCollectForProfiles:
                     'Semantic Channel', 'AI Bot', 8888, 'Semantic match', '{}', :ts,
                     '["security"]', 'hourly', 0, '{"security": 9.5, "other": 3.2}'
                 )
-                """
-                ),
+                """),
                 {"ts": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")},
             )
 
@@ -383,8 +365,7 @@ class TestCollectForProfiles:
 
         with sample_messages.begin() as con:
             con.execute(
-                text(
-                    """
+                text("""
                 INSERT INTO messages (
                     chat_id, msg_id, content_hash, score, keyword_score,
                     flagged_for_interest_feed, feed_interest_flag, chat_title, sender_name,
@@ -395,8 +376,7 @@ class TestCollectForProfiles:
                     'Keyword Channel', 'Keyword Bot', 6666, 'Keyword match', '{}', :ts,
                     '["security"]', 'hourly', 0
                 )
-                """
-                ),
+                """),
                 {"ts": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")},
             )
 
@@ -418,8 +398,7 @@ class TestDeduplication:
         # Insert same message twice (simulating collection from different sources)
         with test_engine.begin() as con:
             con.execute(
-                text(
-                    """
+                text("""
                 INSERT INTO messages (
                     chat_id, msg_id, content_hash, score, keyword_score, flagged_for_interest_feed, feed_interest_flag,
                     chat_title, sender_name, sender_id, message_text, trigger_annotations,
@@ -431,8 +410,7 @@ class TestDeduplication:
                     :sender_id, :message_text, :trigger_annotations, :created_at, :matched_profiles,
                     :digest_schedule, :digest_processed
                 )
-                """
-                ),
+                """),
                 {
                     "chat_id": -1001111111111,
                     "msg_id": 1,
@@ -484,8 +462,7 @@ class TestDeduplication:
 
         with test_engine.begin() as con:
             con.execute(
-                text(
-                    """
+                text("""
                 INSERT INTO messages (
                     chat_id, msg_id, content_hash, score, keyword_score, flagged_for_interest_feed, feed_interest_flag,
                     chat_title, sender_name, sender_id, message_text, trigger_annotations,
@@ -497,8 +474,7 @@ class TestDeduplication:
                     :sender_id, :message_text, :trigger_annotations, :created_at, :matched_profiles,
                     :digest_schedule, :digest_processed
                 )
-                """
-                ),
+                """),
                 {
                     "chat_id": -1001111111111,
                     "msg_id": 1,
@@ -598,15 +574,11 @@ class TestMarkAsProcessed:
 
         # Verify in database
         with sample_messages.begin() as con:
-            result = con.execute(
-                text(
-                    """
+            result = con.execute(text("""
                 SELECT COUNT(*) FROM messages
                 WHERE digest_schedule = 'hourly'
                   AND digest_processed = 1
-                """
-                )
-            ).scalar()
+                """)).scalar()
 
             # Should now have 3 processed hourly messages (2 new + 1 existing)
             assert result == 3
