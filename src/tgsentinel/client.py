@@ -130,8 +130,7 @@ def _migrate_session_schema(session_path: str) -> None:
             try:
                 with conn:
                     conn.execute("ALTER TABLE sessions RENAME TO sessions_tmp_v1")
-                    conn.execute(
-                        """
+                    conn.execute("""
                         CREATE TABLE sessions (
                             dc_id integer primary key,
                             server_address text,
@@ -139,15 +138,12 @@ def _migrate_session_schema(session_path: str) -> None:
                             auth_key blob,
                             takeout_id integer
                         )
-                        """
-                    )
-                    conn.execute(
-                        """
+                        """)
+                    conn.execute("""
                         INSERT INTO sessions (dc_id, server_address, port, auth_key, takeout_id)
                         SELECT dc_id, server_address, port, auth_key, takeout_id
                         FROM sessions_tmp_v1
-                        """
-                    )
+                        """)
                     conn.execute("DROP TABLE sessions_tmp_v1")
             except Exception as migrate_exc:
                 log.warning(

@@ -291,15 +291,13 @@ class BatchFeedbackProcessor:
         try:
             with self.engine.connect() as con:
                 con.execute(
-                    text(
-                        """
+                    text("""
                         INSERT INTO batch_history
                         (started_at, completed_at, profiles_processed,
                          profile_ids, elapsed_seconds, trigger_type, status)
                         VALUES (:started_at, :completed_at, :profiles_processed,
                                 :profile_ids, :elapsed_seconds, :trigger_type, :status)
-                        """
-                    ),
+                        """),
                     {
                         "started_at": start_time.isoformat(),
                         "completed_at": datetime.now().isoformat(),
