@@ -50,14 +50,10 @@ class TestPhase1DatabaseSchema:
         engine = init_db("sqlite:///:memory:")
 
         with engine.connect() as conn:
-            result = conn.execute(
-                text(
-                    """
+            result = conn.execute(text("""
                     SELECT name FROM sqlite_master
                     WHERE type='index' AND tbl_name='profile_adjustments'
-                """
-                )
-            )
+                """))
             indexes = [row[0] for row in result.fetchall()]
 
             # Check our custom indexes exist
@@ -81,9 +77,7 @@ class TestPhase1DatabaseSchema:
 
         with engine.begin() as conn:
             # Insert test adjustment
-            conn.execute(
-                text(
-                    """
+            conn.execute(text("""
                     INSERT INTO profile_adjustments(
                         profile_id, profile_type, adjustment_type,
                         old_value, new_value, adjustment_reason,
@@ -93,20 +87,14 @@ class TestPhase1DatabaseSchema:
                         0.45, 0.55, 'negative_feedback',
                         3, -123, 456
                     )
-                """
-                )
-            )
+                """))
 
         with engine.connect() as conn:
-            result = conn.execute(
-                text(
-                    """
+            result = conn.execute(text("""
                     SELECT profile_id, old_value, new_value, feedback_count
                     FROM profile_adjustments
                     WHERE profile_id = '3000'
-                """
-                )
-            )
+                """))
             row = result.fetchone()
 
         assert row is not None
@@ -121,25 +109,17 @@ class TestPhase1DatabaseSchema:
 
         with engine.begin() as conn:
             # Insert feedback with semantic_score
-            conn.execute(
-                text(
-                    """
+            conn.execute(text("""
                     INSERT INTO feedback(chat_id, msg_id, label, semantic_score)
                     VALUES(-123, 456, 0, 0.52)
-                """
-                )
-            )
+                """))
 
         with engine.connect() as conn:
-            result = conn.execute(
-                text(
-                    """
+            result = conn.execute(text("""
                     SELECT chat_id, msg_id, label, semantic_score
                     FROM feedback
                     WHERE chat_id = -123 AND msg_id = 456
-                """
-                )
-            )
+                """))
             row = result.fetchone()
 
         assert row is not None

@@ -1036,8 +1036,7 @@ def create_api_app() -> Flask:
                 )
 
             # Query all messages with semantic scores (we'll filter in Python)
-            query = text(
-                """
+            query = text("""
                 SELECT
                     chat_id,
                     msg_id,
@@ -1055,8 +1054,7 @@ def create_api_app() -> Flask:
                 WHERE trigger_annotations IS NOT NULL
                   AND trigger_annotations != ''
                 ORDER BY created_at DESC
-                """
-            )
+                """)
 
             with _engine.connect() as conn:
                 result = conn.execute(query)
@@ -1489,8 +1487,7 @@ def create_api_app() -> Flask:
 
             with _engine.begin() as con:
                 result = con.execute(
-                    text(
-                        """
+                    text("""
                         SELECT date(created_at) as digest_date,
                                COUNT(*) as items,
                                ROUND(AVG(score), 2) as avg_score
@@ -1499,8 +1496,7 @@ def create_api_app() -> Flask:
                         GROUP BY date(created_at)
                         ORDER BY digest_date DESC
                         LIMIT :limit
-                    """
-                    ),
+                    """),
                     {"limit": limit},
                 )
                 rows = result.fetchall()
@@ -2996,40 +2992,34 @@ def create_api_app() -> Flask:
             with _engine.begin() as con:
                 # Messages ingested in the last N hours
                 messages_result = con.execute(
-                    text(
-                        """
+                    text("""
                         SELECT COUNT(*) as count
                         FROM messages
                         WHERE datetime(created_at) >= datetime(:cutoff)
-                    """
-                    ),
+                    """),
                     {"cutoff": cutoff},
                 )
                 messages_ingested = messages_result.scalar() or 0
 
                 # Alerts sent (flagged for alerts or interest feed)
                 alerts_result = con.execute(
-                    text(
-                        """
+                    text("""
                         SELECT COUNT(*) as count
                         FROM messages
                         WHERE (flagged_for_alerts_feed = 1 OR flagged_for_interest_feed = 1)
                           AND datetime(created_at) >= datetime(:cutoff)
-                    """
-                    ),
+                    """),
                     {"cutoff": cutoff},
                 )
                 alerts_sent = alerts_result.scalar() or 0
 
                 # Average importance (score)
                 avg_result = con.execute(
-                    text(
-                        """
+                    text("""
                         SELECT AVG(score) as avg_score
                         FROM messages
                         WHERE datetime(created_at) >= datetime(:cutoff)
-                    """
-                    ),
+                    """),
                     {"cutoff": cutoff},
                 )
                 avg_importance = avg_result.scalar() or 0.0
@@ -3037,15 +3027,13 @@ def create_api_app() -> Flask:
                 # Feedback accuracy (if feedback table exists)
                 try:
                     feedback_result = con.execute(
-                        text(
-                            """
+                        text("""
                             SELECT
                                 SUM(CASE WHEN label = 1 THEN 1 ELSE 0 END) as positive,
                                 COUNT(*) as total
                             FROM feedback
                             WHERE datetime(created_at) >= datetime(:cutoff)
-                        """
-                        ),
+                        """),
                         {"cutoff": cutoff},
                     )
                     feedback_row = feedback_result.fetchone()
@@ -3054,15 +3042,13 @@ def create_api_app() -> Flask:
                     else:
                         # Fallback: use high-score alerts as proxy
                         high_score_result = con.execute(
-                            text(
-                                """
+                            text("""
                                 SELECT COUNT(*) as count
                                 FROM messages
                                 WHERE (flagged_for_alerts_feed = 1 OR flagged_for_interest_feed = 1)
                                   AND score >= 0.7
                                   AND datetime(created_at) >= datetime(:cutoff)
-                            """
-                            ),
+                            """),
                             {"cutoff": cutoff},
                         )
                         high_score_count = high_score_result.scalar() or 0
@@ -3074,15 +3060,13 @@ def create_api_app() -> Flask:
                 except Exception:
                     # Feedback table doesn't exist, use fallback
                     high_score_result = con.execute(
-                        text(
-                            """
+                        text("""
                             SELECT COUNT(*) as count
                             FROM messages
                             WHERE (flagged_for_alerts_feed = 1 OR flagged_for_interest_feed = 1)
                               AND score >= 0.7
                               AND datetime(created_at) >= datetime(:cutoff)
-                        """
-                        ),
+                        """),
                         {"cutoff": cutoff},
                     )
                     high_score_count = high_score_result.scalar() or 0
@@ -3383,16 +3367,14 @@ def create_api_app() -> Flask:
             with _engine.begin() as con:
                 # Fetch all triggers and aggregate in Python for accurate counts
                 result = con.execute(
-                    text(
-                        """
+                    text("""
                         SELECT triggers
                         FROM messages
                         WHERE flagged_for_alerts_feed = 1
                           AND triggers IS NOT NULL
                           AND triggers != ''
                           AND datetime(created_at) >= datetime(:cutoff)
-                    """
-                    ),
+                    """),
                     {"cutoff": cutoff},
                 )
 
@@ -3478,8 +3460,7 @@ def create_api_app() -> Flask:
 
             with _engine.begin() as con:
                 result = con.execute(
-                    text(
-                        """
+                    text("""
                         SELECT chat_title, COUNT(*) as alert_count
                         FROM messages
                         WHERE (flagged_for_alerts_feed = 1 OR flagged_for_interest_feed = 1)
@@ -3488,8 +3469,7 @@ def create_api_app() -> Flask:
                         GROUP BY chat_title
                         ORDER BY alert_count DESC
                         LIMIT 20
-                    """
-                    ),
+                    """),
                     {"cutoff": cutoff},
                 )
 
@@ -3559,8 +3539,7 @@ def create_api_app() -> Flask:
                 # Get time-bucketed metrics with dynamic interval
                 # Floor each timestamp to multiples of interval_seconds
                 result = con.execute(
-                    text(
-                        """
+                    text("""
                         SELECT
                             datetime(
                                 (CAST(strftime('%s', created_at) AS INTEGER) / :interval_seconds) * :interval_seconds,
@@ -3573,8 +3552,7 @@ def create_api_app() -> Flask:
                           AND datetime(created_at) >= datetime(:cutoff)
                         GROUP BY time_bucket
                         ORDER BY time_bucket ASC
-                    """
-                    ),
+                    """),
                     {"cutoff": cutoff, "interval_seconds": interval_seconds},
                 )
 
@@ -3705,16 +3683,14 @@ def create_api_app() -> Flask:
 
             with _engine.begin() as con:
                 con.execute(
-                    text(
-                        """
+                    text("""
                         INSERT INTO feedback(chat_id, msg_id, label, semantic_type, updated_at)
                         VALUES(:c, :m, :l, :t, CURRENT_TIMESTAMP)
                         ON CONFLICT(chat_id, msg_id) DO UPDATE
                             SET label=excluded.label,
                                 semantic_type=excluded.semantic_type,
                                 updated_at=CURRENT_TIMESTAMP
-                    """
-                    ),
+                    """),
                     {
                         "c": chat_id_int,
                         "m": msg_id_int,
@@ -3742,12 +3718,10 @@ def create_api_app() -> Flask:
                             deduplicated_profile_ids.append(pid)
 
                     con.execute(
-                        text(
-                            """
+                        text("""
                             INSERT INTO feedback_profiles(chat_id, msg_id, profile_id)
                             VALUES(:c, :m, :p)
-                            """
-                        ),
+                            """),
                         [
                             {"c": chat_id_int, "m": msg_id_int, "p": pid}
                             for pid in deduplicated_profile_ids
@@ -3974,13 +3948,11 @@ def create_api_app() -> Flask:
             # Query score from database
             with _engine.connect() as con:
                 result = con.execute(
-                    text(
-                        """
+                    text("""
                         SELECT score, semantic_scores_json
                         FROM messages
                         WHERE chat_id = :chat_id AND msg_id = :msg_id
-                    """
-                    ),
+                    """),
                     {"chat_id": chat_id, "msg_id": msg_id},
                 )
                 row = result.fetchone()
@@ -4067,13 +4039,11 @@ def create_api_app() -> Flask:
             # Get message text for sample
             with _engine.connect() as con:
                 result = con.execute(
-                    text(
-                        """
+                    text("""
                         SELECT message_text
                         FROM messages
                         WHERE chat_id = :chat_id AND msg_id = :msg_id
-                    """
-                    ),
+                    """),
                     {"chat_id": chat_id, "msg_id": msg_id},
                 )
                 row = result.fetchone()
@@ -4106,13 +4076,11 @@ def create_api_app() -> Flask:
             # Get message text for sample
             with _engine.connect() as con:
                 result = con.execute(
-                    text(
-                        """
+                    text("""
                         SELECT message_text
                         FROM messages
                         WHERE chat_id = :chat_id AND msg_id = :msg_id
-                    """
-                    ),
+                    """),
                     {"chat_id": chat_id, "msg_id": msg_id},
                 )
                 row = result.fetchone()
@@ -4405,9 +4373,7 @@ def create_api_app() -> Flask:
             try:
                 with _engine.connect() as con:
                     # Get interest profiles with feedback (profile_id >= 3000)
-                    interest_result = con.execute(
-                        text(
-                            """
+                    interest_result = con.execute(text("""
                             SELECT
                                 profile_id,
                                 COUNT(*) as total_feedback,
@@ -4416,16 +4382,12 @@ def create_api_app() -> Flask:
                             JOIN feedback_profiles fp ON f.chat_id = fp.chat_id AND f.msg_id = fp.msg_id
                             WHERE CAST(fp.profile_id AS INTEGER) >= 3000 AND CAST(fp.profile_id AS INTEGER) < 4000
                             GROUP BY profile_id
-                        """
-                        )
-                    ).fetchall()
+                        """)).fetchall()
 
                     breakdown["interest_profiles_count"] = len(interest_result)
 
                     # Get alert profiles with feedback (profile_id >= 1000 and < 2000)
-                    alert_result = con.execute(
-                        text(
-                            """
+                    alert_result = con.execute(text("""
                             SELECT
                                 profile_id,
                                 COUNT(*) as total_feedback,
@@ -4434,9 +4396,7 @@ def create_api_app() -> Flask:
                             JOIN feedback_profiles fp ON f.chat_id = fp.chat_id AND f.msg_id = fp.msg_id
                             WHERE CAST(fp.profile_id AS INTEGER) >= 1000 AND CAST(fp.profile_id AS INTEGER) < 2000
                             GROUP BY profile_id
-                        """
-                        )
-                    ).fetchall()
+                        """)).fetchall()
 
                     breakdown["alert_profiles_count"] = len(alert_result)
 
@@ -4451,15 +4411,11 @@ def create_api_app() -> Flask:
                         )
 
                     # Count pending samples for interest profiles
-                    pending_samples_result = con.execute(
-                        text(
-                            """
+                    pending_samples_result = con.execute(text("""
                             SELECT COUNT(DISTINCT profile_id) as pending_count
                             FROM profile_sample_additions
                             WHERE profile_type = 'interest' AND sample_status = 'pending'
-                        """
-                        )
-                    ).fetchone()
+                        """)).fetchone()
 
                     if pending_samples_result and pending_samples_result.pending_count:
                         breakdown["interest_pending_samples"] = (
@@ -4467,18 +4423,14 @@ def create_api_app() -> Flask:
                         )
 
                     # Get adjustment history counts (profiles that have been adjusted)
-                    adjustment_history = con.execute(
-                        text(
-                            """
+                    adjustment_history = con.execute(text("""
                             SELECT
                                 profile_id,
                                 profile_type,
                                 SUM(new_value - old_value) as cumulative_delta
                             FROM profile_adjustments
                             GROUP BY profile_id, profile_type
-                        """
-                        )
-                    ).fetchall()
+                        """)).fetchall()
 
                     for row in adjustment_history:
                         if row.profile_type == "interest":
@@ -4765,8 +4717,7 @@ def create_api_app() -> Flask:
 
             with _engine.connect() as con:
                 result = con.execute(
-                    text(
-                        """
+                    text("""
                         SELECT
                             id,
                             started_at,
@@ -4779,8 +4730,7 @@ def create_api_app() -> Flask:
                         FROM batch_history
                         ORDER BY started_at DESC
                         LIMIT :limit
-                        """
-                    ),
+                        """),
                     {"limit": limit},
                 ).fetchall()
 
@@ -6009,16 +5959,14 @@ def create_api_app() -> Flask:
 
             cutoff = datetime.now(timezone.utc) - timedelta(hours=hours_back)
             cutoff_str = format_db_timestamp(cutoff)  # Format for SQLite comparison
-            query = text(
-                """
+            query = text("""
                 SELECT msg_id, chat_id, chat_title, sender_name, message_text,
                        score, created_at, sender_id
                 FROM messages
                 WHERE created_at >= :cutoff
                 ORDER BY created_at DESC
                 LIMIT :limit
-                """
-            )
+                """)
 
             with _engine.connect() as conn:
                 result = conn.execute(

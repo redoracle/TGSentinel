@@ -25,8 +25,7 @@ def temp_profiles_config():
 
         # Create profiles.yml
         profiles_yml = config_dir / "profiles.yml"
-        profiles_yml.write_text(
-            """
+        profiles_yml.write_text("""
 profiles:
   security:
     name: "Security Alerts"
@@ -50,13 +49,11 @@ profiles:
       - release
     scoring_weights:
       release: 1.0
-"""
-        )
+""")
 
         # Create tgsentinel.yml
         config_yml = config_dir / "tgsentinel.yml"
-        config_yml.write_text(
-            """
+        config_yml.write_text("""
 channels:
   - id: -1001234567890
     name: "Test Security Channel"
@@ -82,8 +79,7 @@ telegram:
 alerts:
   mode: "dm"
   min_score: 0.7
-"""
-        )
+""")
 
         yield config_dir
 

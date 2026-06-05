@@ -237,12 +237,10 @@ class TestSendDigest:
             old_date = dt.datetime.now(dt.UTC) - dt.timedelta(hours=48)
             old_date_str = old_date.strftime("%Y-%m-%d %H:%M:%S")
             con.execute(
-                text(
-                    """
+                text("""
                     INSERT INTO messages(chat_id, msg_id, content_hash, score, flagged_for_interest_feed, created_at)
                     VALUES(:c, :m, :h, :s, 1, :t)
-                """
-                ),
+                """),
                 {"c": -100123, "m": 999, "h": "old_hash", "s": 5.0, "t": old_date_str},
             )
 

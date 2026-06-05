@@ -119,7 +119,9 @@ try:
 except Exception:
     # Fallback: define a shim that raises ImportError if used incorrectly
     def _validate_config_payload(payload):
-        raise ImportError("validate_config_payload is not available in this environment")
+        raise ImportError(
+            "validate_config_payload is not available in this environment"
+        )
 
 
 # Redis cache function wrappers (keep module-level signatures)
