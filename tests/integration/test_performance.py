@@ -30,9 +30,9 @@ if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
 
-from ui.utils.validators import (
+from ui.utils.validators import (  # noqa: E402
     validate_config_payload as _validate_config_payload,
-)  # noqa: E402
+)
 
 pytestmark = pytest.mark.integration
 
