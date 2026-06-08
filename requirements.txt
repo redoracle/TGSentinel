@@ -276,7 +276,7 @@ requests==2.32.5
     #   docker
     #   huggingface-hub
     #   transformers
-rich==14.2.0
+rich==15.0.0
     # via -r requirements.in
 rsa==4.9.1
     # via
