@@ -203,7 +203,11 @@ packaging==25.0
     #   limits
     #   pytest
     #   transformers
+<<<<<<< HEAD
 pillow==12.2.0
+=======
+pillow==12.0.0
+>>>>>>> origin/main
     # via -r requirements.in
 pluggy==1.6.0
     # via

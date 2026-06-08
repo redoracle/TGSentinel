@@ -122,34 +122,14 @@ _normalise_tags = normalize_tags  # Note: British spelling in original
 _fallback_username = fallback_username
 _fallback_avatar = fallback_avatar
 
-# Compatibility wrapper expected by some tests and callers
-# Provide a single, backward-compatible _validate_config_payload that prefers
-# the dedicated validators module (imported lazily) but falls back to the
-# module-level utils.validate_config_payload when available. This keeps the
-# module import safe in environments where optional validator dependencies are
-# missing while preserving the original API for tests and callers.
-
-
-def _validate_config_payload(payload: Dict[str, Any]) -> None:
-    """Validate a config payload by delegating to the most-appropriate validator.
-
-    Resolution order:
-    1. Prefer .utils.validators.validate_config_payload (imported lazily at call time).
-    2. Fallback to the already-imported `validate_config_payload` from utils if present.
-    3. Raise ImportError if no validator is available.
-    """
-    # Try the validators module first (may require optional deps).
-    try:
-        from .utils.validators import validate_config_payload as _real_validator
-    except Exception:
-        # Fall back to the module-level utils.validate_config_payload if it exists
-        try:
-            return validate_config_payload(payload)  # type: ignore[name-defined]
-        except Exception as exc:
-            raise ImportError(
-                "validate_config_payload is not available in this environment"
-            ) from exc
-    return _real_validator(payload)
+# Compatibility wrapper — prefer validators module, fallback to shim
+try:
+    from .utils.validators import validate_config_payload as _validate_config_payload
+except Exception:
+    def _validate_config_payload(payload):
+        raise ImportError(
+            "validate_config_payload is not available in this environment"
+        )
 
 
 # Redis cache function wrappers (keep module-level signatures)
