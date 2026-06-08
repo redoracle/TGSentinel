@@ -196,7 +196,7 @@ ordered-set==4.1.0
     # via
     #   -r requirements.in
     #   flask-limiter
-packaging==25.0
+packaging==26.2
     # via
     #   -r requirements.in
     #   huggingface-hub
