@@ -209,7 +209,7 @@ pluggy==1.6.0
     # via
     #   -r requirements.in
     #   pytest
-prometheus-client==0.23.1
+prometheus-client==0.25.0
     # via -r requirements.in
 propcache==0.4.1
     # via
