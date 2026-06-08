@@ -117,7 +117,7 @@ joblib==1.5.3
     # via
     #   -r requirements.in
     #   scikit-learn
-limits==5.6.0
+limits==5.8.0
     # via
     #   -r requirements.in
     #   flask-limiter
