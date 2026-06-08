@@ -270,7 +270,7 @@ regex==2025.11.3
     # via
     #   -r requirements.in
     #   transformers
-requests==2.32.5
+requests==2.34.2
     # via
     #   -r requirements.in
     #   docker
