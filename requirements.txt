@@ -225,7 +225,7 @@ pyasn1==0.6.1
     # via
     #   -r requirements.in
     #   rsa
-pycparser==2.23
+pycparser==3.0
     # via
     #   -r requirements.in
     #   cffi
