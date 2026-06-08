@@ -203,7 +203,7 @@ packaging==25.0
     #   limits
     #   pytest
     #   transformers
-pillow==12.0.0
+pillow==12.2.0
     # via -r requirements.in
 pluggy==1.6.0
     # via
