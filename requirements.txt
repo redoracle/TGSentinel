@@ -344,7 +344,7 @@ tqdm==4.70.0
     #   huggingface-hub
     #   sentence-transformers
     #   transformers
-transformers==4.57.3
+transformers==4.57.6
     # via
     #   -r requirements.in
     #   sentence-transformers
