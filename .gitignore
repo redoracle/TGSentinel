@@ -32,6 +32,9 @@ config/*.yml
 .vscode/
 docs/ignore
 
+# Claude Code local config (skills, settings, etc.)
+.claude/
+
 # OS junk
 .DS_Store
 Thumbs.db
