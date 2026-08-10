@@ -75,3 +75,22 @@ updates:
       - "redoracle"
     assignees:
       - "redoracle"
+
+  # npm devDependencies (semantic-release tooling)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "npm"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    reviewers:
+      - "redoracle"
+    assignees:
+      - "redoracle"
