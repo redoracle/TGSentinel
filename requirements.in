@@ -51,7 +51,7 @@ python-engineio==4.13.4
 python-socketio==5.16.4
 PyYAML==6.0.3
 rapidfuzz==3.14.5
-redis==7.1.0
+redis==8.1.0
 regex==2026.7.19
 requests==2.34.2
 rich==15.0.0
