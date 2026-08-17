@@ -365,7 +365,7 @@ typing-extensions==4.16.0
     #   sqlalchemy
     #   torch
     #   typing-inspection
-typing-inspection==0.4.3
+typing-inspection==0.4.4
     # via
     #   -r requirements.in
     #   pydantic
