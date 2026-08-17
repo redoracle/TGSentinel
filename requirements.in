@@ -62,7 +62,7 @@ scipy==1.18.0
 sentence-transformers==5.7.0
 setuptools==84.0.0
 simple-websocket==1.1.0
-SQLAlchemy==2.0.51
+SQLAlchemy==2.0.52
 sympy==1.14.0
 Telethon==1.44.0
 TgCrypto==1.2.5
