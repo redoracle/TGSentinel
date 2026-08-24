@@ -20,7 +20,7 @@ fsspec==2026.7.0
 h11==0.16.0
 hf-xet==1.6.0
 huggingface-hub==0.36.2  # pinned to satisfy transformers<1.0 constraint
-idna==3.18
+idna==3.19
 iniconfig==2.3.0
 itsdangerous==2.2.0
 Jinja2==3.1.6
