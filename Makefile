@@ -84,7 +84,7 @@ install-dev: ## Install development dependencies
 	@printf "$(CYAN)📦 Installing development dependencies...$(RESET)\n"
 	$(call ensure_venv)
 	@$(PIP) install -r requirements.txt && \
-		$(PIP) install black isort flake8 mypy pytest pytest-cov pytest-asyncio ruff
+		$(PIP) install black isort==8.0.0 flake8 mypy pytest pytest-cov pytest-asyncio ruff
 	@printf "$(GREEN)✅ Development dependencies installed!$(RESET)\n"
 
 .PHONY: upgrade
