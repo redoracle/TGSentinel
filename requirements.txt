@@ -263,7 +263,7 @@ pytest-asyncio==1.4.0
     # via -r requirements.in
 pytest-mock==3.15.1
     # via -r requirements.in
-python-engineio==4.13.5
+python-engineio==4.14.0
     # via
     #   -r requirements.in
     #   python-socketio
