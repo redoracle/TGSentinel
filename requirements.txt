@@ -304,7 +304,7 @@ scikit-learn==1.9.0
     # via
     #   -r requirements.in
     #   sentence-transformers
-scipy==1.18.0
+scipy==1.18.1
     # via
     #   -r requirements.in
     #   scikit-learn
