@@ -276,7 +276,7 @@ pyyaml==6.0.3
     #   -r requirements.in
     #   huggingface-hub
     #   transformers
-rapidfuzz==3.14.5
+rapidfuzz==3.14.6
     # via -r requirements.in
 redis==8.1.0
     # via -r requirements.in
