@@ -24,7 +24,7 @@ idna==3.19
 iniconfig==2.3.0
 itsdangerous==2.2.0
 Jinja2==3.1.6
-joblib==1.5.3
+joblib==1.6.0
 limits==5.8.0
 markdown-it-py==4.2.0
 MarkupSafe==3.0.3
