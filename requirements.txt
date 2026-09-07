@@ -380,7 +380,7 @@ werkzeug==3.1.8
     #   flask
     #   flask-cors
     #   flask-socketio
-wrapt==2.3.0
+wrapt==2.4.0
     # via
     #   -r requirements.in
     #   deprecated
