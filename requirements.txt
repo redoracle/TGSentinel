@@ -302,7 +302,7 @@ safetensors==0.8.0
     # via
     #   -r requirements.in
     #   transformers
-scikit-learn==1.9.0
+scikit-learn==1.9.1
     # via
     #   -r requirements.in
     #   sentence-transformers
