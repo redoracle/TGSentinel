@@ -160,7 +160,7 @@ networkx==3.6.1
     # via
     #   -r requirements.in
     #   torch
-numpy==2.5.2
+numpy==2.5.3
     # via
     #   -r requirements.in
     #   scikit-learn
