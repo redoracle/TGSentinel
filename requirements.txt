@@ -323,7 +323,7 @@ sympy==1.14.0
     # via
     #   -r requirements.in
     #   torch
-telethon==1.44.0
+telethon==1.45.0
     # via -r requirements.in
 tgcrypto==1.2.5
     # via -r requirements.in
