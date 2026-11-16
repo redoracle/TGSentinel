@@ -2,7 +2,7 @@ ARG APP_VERSION=1.0.6
 ARG BUILD_DATE
 ARG GIT_COMMIT
 
-FROM python:3.14-slim AS metadata
+FROM python:3.15-slim AS metadata
 ARG APP_VERSION
 ARG BUILD_DATE
 ARG GIT_COMMIT
@@ -19,7 +19,7 @@ RUN build_date="${BUILD_DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" && \
 {"app_version":"${APP_VERSION}","build_date":"${build_date}","git_commit":"${git_commit}"}
 EOF
 
-FROM python:3.14-slim
+FROM python:3.15-slim
 ARG APP_VERSION
 ARG BUILD_DATE
 ARG GIT_COMMIT
