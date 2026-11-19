@@ -48,7 +48,7 @@ cloudpickle==3.1.2
     # via joblib
 cryptg==0.6.0
     # via -r requirements.in
-cryptography==50.0.0
+cryptography==50.0.1
     # via -r requirements.in
 cuda-bindings==13.3.1
     # via torch
