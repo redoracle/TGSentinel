@@ -6,7 +6,7 @@
   "license": "MIT",
   "devDependencies": {
     "@semantic-release/exec": "^7.1.0",
-    "conventional-changelog-conventionalcommits": "^10.2.1",
-    "semantic-release": "^25.0.9"
+    "conventional-changelog-conventionalcommits": "9.3.1",
+    "semantic-release": "^26.0.1"
   }
 }
