@@ -46,7 +46,7 @@ click==8.5.0
     #   flask-socketio
 cloudpickle==3.1.2
     # via joblib
-cryptg==0.6.0
+cryptg==0.6.1
     # via -r requirements.in
 cryptography==50.0.2
     # via -r requirements.in
